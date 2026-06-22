@@ -200,9 +200,9 @@ router.get('/employee/:userId/monthly', ADMIN_HR, async (req, res, next) => {
     // Get shift for this employee to determine late threshold
     const shift = await prisma.employee_shifts.findFirst({
       where: { user_id: userId },
-      include: { shift: { select: { start_time: true, grace_period_min: true } } },
+      include: { shift: { select: { start_time: true, grace_period_mins: true } } },
     });
-    const grace = shift?.shift?.grace_period_min || 15;
+    const grace = shift?.shift?.grace_period_mins || 15;
     const shift_start_parts = (shift?.shift?.start_time || '09:00').split(':');
     const shift_start_mins = +shift_start_parts[0] * 60 + (+shift_start_parts[1] || 0);
     const grace_end_mins = shift_start_mins + grace;

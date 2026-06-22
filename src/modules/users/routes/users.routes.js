@@ -17,9 +17,10 @@ router.get('/roles', ADMIN, async (_req, res, next) => {
 });
 
 router.get('/me/activity', get_my_activity);
+router.get('/me',          (req, res, next) => { req.params.id = req.user.id; return get_user_by_id(req, res, next); });
 router.patch('/me',        update_my_profile);
 router.get('/',            ADMIN_HR, can('erp.users.view'),   get_users);
-router.get('/:id',         authenticate);  // any auth user can view profile
+router.get('/:id',         get_user_by_id);
 router.post('/',           ADMIN, can('erp.users.create'),    create_user_ctrl);
 router.put('/:id',         ADMIN, can('erp.users.edit'),      update_user_ctrl);
 router.delete('/:id',      ADMIN, can('erp.users.delete'),    delete_user_ctrl);
