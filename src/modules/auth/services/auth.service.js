@@ -1,3 +1,4 @@
+import { send_otp_email, send_invite_email } from '../../email/email.service.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
@@ -44,9 +45,11 @@ function generate_access_token(payload) {
 }
 
 function generate_refresh_token(payload) {
-  const refresh_token = jwt.sign(payload, env_config.jwt_refresh_secret, {
-    expiresIn: env_config.jwt_refresh_expires_in,
-  });
+  const refresh_token = jwt.sign(
+    { ...payload, jti: crypto.randomBytes(16).toString('hex') },
+    env_config.jwt_refresh_secret,
+    { expiresIn: env_config.jwt_refresh_expires_in },
+  );
   const decoded = jwt.decode(refresh_token);
   return { refresh_token, expires_at: new Date(decoded.exp * 1000) };
 }

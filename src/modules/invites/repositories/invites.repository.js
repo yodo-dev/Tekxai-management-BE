@@ -7,6 +7,7 @@ const INVITE_INCLUDE = {
 };
 
 export async function find_invites({ search, status, page = 1, limit = 20 } = {}) {
+  page = +page || 1; limit = +limit || 20;
   const skip = (page - 1) * limit;
   const where = {};
   if (status) where.status = status;

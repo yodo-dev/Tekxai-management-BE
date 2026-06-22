@@ -1,0 +1,12 @@
+import { Router } from 'express';
+import { authenticate } from '../../../shared/middleware/authenticate.js';
+import { end_session, get_productivity, list_screenshots, start_session, update_productivity, upload_screenshot } from '../controllers/monitoring.controller.js';
+const router = Router();
+router.use(authenticate);
+router.post('/session/start', start_session);
+router.post('/session/:id/end', end_session);
+router.post('/screenshot', upload_screenshot);
+router.get('/screenshots', list_screenshots);
+router.post('/productivity', update_productivity);
+router.get('/productivity', get_productivity);
+export default router;

@@ -1,6 +1,8 @@
 import prisma from '../../../shared/database/client.js';
 
 export async function get_notifications(user_id, { page = 1, limit = 20 } = {}) {
+  page = +page || 1;
+  limit = +limit || 20;
   const skip = (page - 1) * limit;
   const [total, records] = await Promise.all([
     prisma.notifications.count({ where: { user_id } }),

@@ -10,8 +10,12 @@ const USER_SELECT = {
   department: true,
   position: true,
   designation: true,
+  business_unit: true,
+  supervisor_id: true,
+  supervisor: { select: { id: true, first_name: true, last_name: true } },
   status: true,
   is_active: true,
+  hire_date: true,
   created_at: true,
   updated_at: true,
   roles: { include: { role: { select: { id: true, name: true } } } },
@@ -30,6 +34,10 @@ function normalize_user(user) {
     department: user.department,
     position: user.position,
     designation: user.designation,
+    business_unit: user.business_unit || 'ERP',
+    supervisor_id: user.supervisor_id,
+    supervisor: user.supervisor,
+    hire_date: user.hire_date,
     status: user.status,
     is_active: user.is_active,
     created_at: user.created_at,
@@ -41,6 +49,7 @@ function normalize_user(user) {
 }
 
 export async function find_users({ search, page = 1, limit = 20, role } = {}) {
+  page = +page || 1; limit = +limit || 20;
   const skip = (page - 1) * limit;
   const where = { deleted_at: null };
 
@@ -49,7 +58,7 @@ export async function find_users({ search, page = 1, limit = 20, role } = {}) {
       { first_name: { contains: search, mode: 'insensitive' } },
       { last_name:  { contains: search, mode: 'insensitive' } },
       { email:      { contains: search, mode: 'insensitive' } },
-      { department: { contains: search, mode: 'insensitive' } },
+      { department: { name: { contains: search, mode: 'insensitive' } } },
     ];
   }
 
@@ -85,7 +94,7 @@ export async function find_user_by_id(id) {
   return user ? normalize_user(user) : null;
 }
 
-export async function create_user({ email, password_hash, first_name, last_name, phone, department, position, designation, role_id, avatar }) {
+export async function create_user({ email, password_hash, first_name, last_name, phone, department_id, division_id, position, designation, role_id, avatar, business_unit, supervisor_id, hire_date, employee_id }) {
   return prisma.$transaction(async (tx) => {
     const user = await tx.users.create({
       data: {
@@ -94,10 +103,15 @@ export async function create_user({ email, password_hash, first_name, last_name,
         first_name,
         last_name,
         phone,
-        department,
+        ...(department_id ? { department_id } : {}),
+        ...(division_id   ? { division_id }   : {}),
+        ...(supervisor_id  ? { supervisor_id }  : {}),
+        ...(employee_id    ? { employee_id }    : {}),
+        ...(hire_date      ? { hire_date: new Date(hire_date) } : {}),
         position,
         designation,
         avatar,
+        business_unit: business_unit || 'ERP',
         status: 'ACTIVE',
       },
     });

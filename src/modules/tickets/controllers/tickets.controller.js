@@ -1,4 +1,4 @@
-import { create_ticket, get_ticket, list_tickets, update_ticket_status } from '../services/tickets.service.js';
+import { create_ticket, get_ticket, list_tickets, update_ticket_status, add_ticket_attachment, get_ticket_stats } from '../services/tickets.service.js';
 
 const is_admin = (req) => req.user.roles.some((r) => ['ADMIN', 'SUPER_ADMIN', 'HR'].includes(r));
 
@@ -34,5 +34,18 @@ export async function update_ticket_ctrl(req, res, next) {
   try {
     const t = await update_ticket_status(req.params.id, req.body);
     return res.json({ success: true, payload: t });
+  } catch (e) { return next(e); }
+}
+
+export async function add_attachment_ctrl(req, res, next) {
+  try {
+    const att = await add_ticket_attachment(req.params.id, req.user.id, is_admin(req), req.body);
+    return res.status(201).json({ success: true, payload: att });
+  } catch (e) { return next(e); }
+}
+
+export async function stats_ctrl(_req, res, next) {
+  try {
+    return res.json({ success: true, payload: await get_ticket_stats() });
   } catch (e) { return next(e); }
 }

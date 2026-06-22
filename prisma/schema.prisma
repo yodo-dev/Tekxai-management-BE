@@ -25,6 +25,8 @@ model users {
   status        String    @default("ACTIVE")
   is_active     Boolean   @default(true)
   hire_date     DateTime?
+  business_unit String?   @default("ERP")
+  supervisor_id String?
   created_at    DateTime  @default(now())
   updated_at    DateTime  @updatedAt
   deleted_at    DateTime?
@@ -35,6 +37,8 @@ model users {
   settings                 user_settings?
   department               departments?                  @relation(fields: [department_id], references: [id], onDelete: SetNull)
   division                 divisions?                    @relation(fields: [division_id],   references: [id], onDelete: SetNull)
+  supervisor               users?                        @relation("user_supervisor", fields: [supervisor_id], references: [id], onDelete: SetNull)
+  subordinates             users[]                       @relation("user_supervisor")
   team_memberships         team_members[]
   managed_teams            teams[]                       @relation("team_manager")
   owned_projects           projects[]                    @relation("project_owner")
@@ -43,6 +47,7 @@ model users {
   timesheet_entries        timesheet_entries[]
   time_off_requests        time_off_requests[]
   timesheet_edit_requests  timesheet_edit_requests[]
+  user_permissions         user_permissions[]
   invites_sent             invites[]                     @relation("invite_sender")
   redeemed_invite          invites?                      @relation("invite_redeemed_by")
   starred_items            starred_items[]
@@ -50,14 +55,52 @@ model users {
   support_tickets          support_tickets[]
   marketing_deals          marketing_deals[]
   salary_builders          salary_builders[]
+  upwork_bids              upwork_bids[]
+  linkedin_leads           linkedin_leads[]
+  email_leads              email_leads[]
+  linkedin_activity        linkedin_activity[]
+  deposits_created         deposits[]
+  marketing_targets        marketing_targets[]
   asset_assignments        asset_assignments[]
   daily_reports            daily_progress_reports[]
   performance_scores       employee_performance_scores[]
   performance_reviews      performance_reviews[]
+  assigned_tasks           tasks[]                       @relation("task_assignee")
+  employee_shifts          employee_shifts[]
+  attendance_violations    attendance_violations[]
+  leave_balances           leave_balances[]
+  job_description          job_descriptions?
+  activity_logs            activity_logs[]
+  screenshot_sessions      screenshot_sessions[]
+  screenshots              screenshots[]
+  productivity_sessions    productivity_sessions[]
+  file_uploads             file_uploads[]
+  onboarding_tasks         onboarding_tasks[]
+  contracts                contracts[]
+  policy_acknowledgements  policy_acknowledgements[]
+  employee_profile         employee_profiles?
+  employee_documents       employee_documents[]
+  uploaded_documents       employee_documents[]          @relation("doc_uploader")
+  requisitions_raised      requisitions[]                @relation("req_requester")
+  requisition_approvals    requisition_approvals[]       @relation("req_approver")
+  crm_handoffs_assigned    crm_handoffs[]                @relation("handoff_assignee")
+  crm_handoffs_created     crm_handoffs[]                @relation("handoff_creator")
+  crm_invoices_created     crm_invoices[]                @relation("invoice_creator")
+  project_discussions      project_discussions[]
+  channel_memberships      channel_members[]
+  messages                 messages[]
+  education_records        education_records[]
+  employment_history       employment_history[]
+  salary_increments        salary_increments[]
+  increments_approved      salary_increments[]   @relation("increment_approver")
+  overtime_requests        overtime_requests[]
+  overtime_approved        overtime_requests[]   @relation("overtime_approver")
 
   @@index([department_id])
   @@index([division_id])
   @@index([status])
+  @@index([supervisor_id])
+  @@index([business_unit])
 }
 
 model roles {
@@ -82,6 +125,43 @@ model user_roles {
 
   @@id([user_id, role_id])
   @@index([role_id])
+}
+
+// Role-based permission keys: "{workspace}.{module}.{action}"
+// e.g. "crm.pipeline.view", "erp.projects.create", "hr.salary.approve"
+// Super Admin always bypasses permission checks.
+// If no row exists for a role+permission, default is DENY for non-admin roles.
+model role_permissions {
+  id          String   @id @default(cuid())
+  role_name   String   // must match ROLE_NAMES constant
+  permission  String   // dot-notation key
+  granted     Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@unique([role_name, permission])
+  @@index([role_name])
+  @@index([permission])
+}
+
+// User-level permission overrides — take precedence over role_permissions.
+// granted=true → explicit grant even if role denies.
+// granted=false → explicit deny even if role allows.
+model user_permissions {
+  id         String   @id @default(cuid())
+  user_id    String
+  permission String
+  granted    Boolean  // true = override grant, false = override deny
+  note       String?  // optional reason / expiry note
+  granted_by String?  // user_id of the admin who set this
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, permission])
+  @@index([user_id])
+  @@index([permission])
 }
 
 model auth_refresh_tokens {
@@ -129,10 +209,11 @@ model departments {
   updated_at  DateTime  @updatedAt
   deleted_at  DateTime?
 
-  divisions divisions[]
-  users     users[]
-  teams     teams[]
-  assets    assets[]
+  divisions    divisions[]
+  users        users[]
+  teams        teams[]
+  assets       assets[]
+  requisitions requisitions[] @relation("dept_requisitions")
 }
 
 model divisions {
@@ -224,10 +305,12 @@ model projects {
   owner       users?           @relation("project_owner",  fields: [owner_id],  references: [id], onDelete: SetNull)
   team_leader users?           @relation("project_leader", fields: [leader_id], references: [id], onDelete: SetNull)
   team        teams?           @relation(fields: [team_id], references: [id], onDelete: SetNull)
-  members     project_members[]
-  tasks       tasks[]
-  milestones  milestones[]
-  starred_by  starred_items[]
+  members      project_members[]
+  tasks        tasks[]
+  milestones   milestones[]
+  starred_by   starred_items[]
+  discussions  project_discussions[]
+  crm_handoffs crm_handoffs[]
 
   @@index([owner_id])
   @@index([status])
@@ -249,22 +332,27 @@ model project_members {
 }
 
 model tasks {
-  id          String    @id @default(cuid())
-  project_id  String
-  title       String
-  description String?
-  status      String    @default("TODO")
-  priority    String    @default("MEDIUM")
-  assigned_to String?
-  due_date    DateTime?
-  created_at  DateTime  @default(now())
-  updated_at  DateTime  @updatedAt
-  deleted_at  DateTime?
+  id           String    @id @default(cuid())
+  project_id   String
+  milestone_id String?
+  title        String
+  description  String?
+  status       String    @default("TODO")
+  priority     String    @default("MEDIUM")
+  assigned_to  String?
+  due_date     DateTime?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+  deleted_at   DateTime?
 
-  project projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  project   projects    @relation(fields: [project_id],   references: [id], onDelete: Cascade)
+  milestone milestones? @relation(fields: [milestone_id], references: [id], onDelete: SetNull)
+  assignee  users?      @relation("task_assignee", fields: [assigned_to], references: [id], onDelete: SetNull)
 
   @@index([project_id])
+  @@index([milestone_id])
   @@index([status])
+  @@index([assigned_to])
 }
 
 model milestones {
@@ -278,6 +366,7 @@ model milestones {
   updated_at  DateTime  @updatedAt
 
   project projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  tasks   tasks[]
 
   @@index([project_id])
 }
@@ -303,16 +392,19 @@ model starred_items {
 // ─── Timesheets ───────────────────────────────────────────────────────────────
 
 model timesheet_entries {
-  id           String    @id @default(cuid())
-  user_id      String
-  check_in     DateTime
-  check_out    DateTime?
-  duration_sec Int       @default(0)
-  status       String    @default("IN_PROGRESS")
-  note         String?
-  created_at   DateTime  @default(now())
-  updated_at   DateTime  @updatedAt
-  deleted_at   DateTime?
+  id              String    @id @default(cuid())
+  user_id         String
+  check_in        DateTime
+  check_out       DateTime?
+  duration_sec    Int       @default(0)
+  status          String    @default("IN_PROGRESS")
+  note            String?
+  checkout_reason String?   // MANUAL | LOGOUT | IDLE_TIMEOUT | ADMIN
+  checkout_source String?   // WEB | SYSTEM | ADMIN_PORTAL
+  is_wfh          Boolean?  @default(false)
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+  deleted_at      DateTime?
 
   user          users                     @relation(fields: [user_id], references: [id], onDelete: Cascade)
   edit_requests timesheet_edit_requests[]
@@ -353,12 +445,14 @@ model time_off_policies {
   updated_at   DateTime @updatedAt
 
   requests time_off_requests[]
+  leave_balances leave_balances[]
 }
 
 model time_off_requests {
   id              String    @id @default(cuid())
   user_id         String
   policy_id       String
+  leave_type      String?   // ANNUAL | MARRIAGE | UMRAH | MATERNITY | PATERNITY | SICK | UNPAID | OTHER
   start_date      DateTime
   end_date        DateTime
   days            Int       @default(1)
@@ -367,6 +461,11 @@ model time_off_requests {
   manager_comment String?
   reviewed_by     String?
   reviewed_at     DateTime?
+  // policy flags (computed at create/review time)
+  is_monday_start Boolean?  @default(false)
+  is_friday_end   Boolean?  @default(false)
+  is_sandwich     Boolean?  @default(false)
+  effective_days  Int?      // after Mon/Fri/sandwich multipliers
   created_at      DateTime  @default(now())
   updated_at      DateTime  @updatedAt
 
@@ -375,6 +474,7 @@ model time_off_requests {
 
   @@index([user_id])
   @@index([status])
+  @@index([start_date])
 }
 
 // ─── Invites ─────────────────────────────────────────────────────────────────
@@ -705,4 +805,992 @@ model monthly_bonus_records {
   @@index([user_id])
   @@index([period])
   @@index([approval_status])
+}
+
+// ─── Shift & Attendance Rules ─────────────────────────────────────────────────
+
+model shift_schedules {
+  id                  String   @id @default(cuid())
+  name                String
+  start_time          String   // "09:00" 24h format
+  end_time            String   // "18:00"
+  grace_period_mins   Int      @default(15)
+  work_days           String   @default("1,2,3,4,5") // comma-separated day numbers (1=Mon)
+  is_default          Boolean  @default(false)
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  employee_shifts employee_shifts[]
+}
+
+model employee_shifts {
+  id          String   @id @default(cuid())
+  user_id     String
+  shift_id    String
+  start_date  DateTime
+  end_date    DateTime?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  user  users            @relation(fields: [user_id],  references: [id], onDelete: Cascade)
+  shift shift_schedules  @relation(fields: [shift_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([shift_id])
+}
+
+model attendance_violations {
+  id            String   @id @default(cuid())
+  user_id       String
+  entry_id      String?
+  date          DateTime
+  violation_type String  // LATE, ABSENT, EARLY_LEAVE, MISSING
+  late_mins     Int      @default(0)
+  remarks       String?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  user  users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([date])
+  @@index([violation_type])
+}
+
+// ─── Leave Balances ────────────────────────────────────────────────────────────
+
+model leave_balances {
+  id            String   @id @default(cuid())
+  user_id       String
+  policy_id     String
+  year          Int
+  total_days    Int      @default(0)
+  used_days     Float    @default(0)
+  pending_days  Float    @default(0)
+  remaining_days Float   @default(0)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  user   users             @relation(fields: [user_id],   references: [id], onDelete: Cascade)
+  policy time_off_policies @relation(fields: [policy_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, policy_id, year])
+  @@index([user_id])
+  @@index([policy_id])
+}
+
+// ─── Employee Job Descriptions ────────────────────────────────────────────────
+
+model job_descriptions {
+  id               String   @id @default(cuid())
+  user_id          String   @unique
+  title            String
+  department_id    String?
+  division_id      String?
+  reporting_to_id  String?
+  employment_type  String   @default("FULL_TIME") // FULL_TIME, PART_TIME, CONTRACT
+  responsibilities String?  // markdown text
+  qualifications   String?
+  kpi_targets      Json     @default("[]")
+  is_active        Boolean  @default(true)
+  effective_date   DateTime?
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([department_id])
+}
+
+// ─── Activity Logs ────────────────────────────────────────────────────────────
+
+model activity_logs {
+  id          String   @id @default(cuid())
+  user_id     String
+  action      String   // LOGIN, LOGOUT, CREATE, UPDATE, DELETE, VIEW
+  entity_type String?  // project, task, user, etc.
+  entity_id   String?
+  description String?
+  ip_address  String?
+  user_agent  String?
+  created_at  DateTime @default(now())
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([action])
+  @@index([created_at])
+}
+
+// ─── Shift Management ─────────────────────────────────────────────────────────
+
+model shifts {
+  id               String   @id @default(cuid())
+  name             String
+  start_time       String
+  end_time         String
+  grace_period_min Int      @default(15)
+  is_default       Boolean  @default(false)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+}
+
+// ─── Late Coming & Attendance Violations ──────────────────────────────────────
+
+// ─── Leave Balances ────────────────────────────────────────────────────────────
+
+// ─── Employee Job Descriptions ────────────────────────────────────────────────
+
+// ─── Activity Logs ────────────────────────────────────────────────────────────
+
+// ─── Team Members (direct relation for management) ───────────────────────────
+
+// team_members already exists — we add management via teams module endpoints
+
+
+// ─── Screenshot Monitoring (Phase 3) ─────────────────────────────────────────
+
+model screenshot_sessions {
+  id            String    @id @default(cuid())
+  user_id       String
+  started_at    DateTime  @default(now())
+  ended_at      DateTime?
+  status        String    @default("ACTIVE")
+  agent_version String?
+  os_platform   String?
+  created_at    DateTime  @default(now())
+
+  user        users         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  screenshots screenshots[]
+
+  @@index([user_id])
+}
+
+model screenshots {
+  id            String   @id @default(cuid())
+  session_id    String
+  user_id       String
+  file_key      String
+  file_url      String?
+  width         Int?
+  height        Int?
+  monitor_index Int      @default(0)
+  captured_at   DateTime @default(now())
+  created_at    DateTime @default(now())
+
+  session screenshot_sessions @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  user    users               @relation(fields: [user_id],   references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([session_id])
+  @@index([captured_at])
+}
+
+model productivity_sessions {
+  id                 String   @id @default(cuid())
+  user_id            String
+  date               DateTime @db.Date
+  active_seconds     Int      @default(0)
+  idle_seconds       Int      @default(0)
+  mouse_events       Int      @default(0)
+  keyboard_events    Int      @default(0)
+  productivity_score Float    @default(0)
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, date])
+  @@index([user_id])
+}
+
+// ─── File Storage (Phase 4) ───────────────────────────────────────────────────
+
+model file_uploads {
+  id          String   @id @default(cuid())
+  user_id     String
+  entity_type String?
+  entity_id   String?
+  file_key    String   @unique
+  file_name   String
+  file_size   Int      @default(0)
+  mime_type   String
+  bucket      String   @default("tekxai-erp")
+  is_public   Boolean  @default(false)
+  created_at  DateTime @default(now())
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([entity_type, entity_id])
+}
+
+// ─── Email Logs (Phase 5) ─────────────────────────────────────────────────────
+
+model email_logs {
+  id       String   @id @default(cuid())
+  to_email String
+  subject  String
+  template String?
+  status   String   @default("SENT")
+  error    String?
+  sent_at  DateTime @default(now())
+
+  @@index([to_email])
+  @@index([sent_at])
+}
+
+// ─── Onboarding (Phase 6) ─────────────────────────────────────────────────────
+
+model candidates {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  first_name       String
+  last_name        String
+  phone            String?
+  position         String?
+  department_id    String?
+  status           String    @default("INVITED")
+  invited_by       String?
+  invite_token     String?   @unique
+  invite_expires_at DateTime?
+  offer_id         String?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  offers offers[]
+}
+
+model offers {
+  id              String    @id @default(cuid())
+  candidate_id    String
+  position        String
+  department_id   String?
+  salary          Float     @default(0)
+  start_date      DateTime?
+  employment_type String    @default("FULL_TIME")
+  letter_content  String?
+  status          String    @default("DRAFT")
+  sent_at         DateTime?
+  accepted_at     DateTime?
+  rejected_at     DateTime?
+  rejection_reason String?
+  created_by      String?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  candidate candidates @relation(fields: [candidate_id], references: [id], onDelete: Cascade)
+
+  @@index([candidate_id])
+}
+
+model onboarding_tasks {
+  id           String    @id @default(cuid())
+  user_id      String
+  title        String
+  description  String?
+  category     String    @default("GENERAL")
+  is_completed Boolean   @default(false)
+  completed_at DateTime?
+  due_date     DateTime?
+  assigned_by  String?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+}
+
+// ─── Contracts (Phase 7) ──────────────────────────────────────────────────────
+
+model contract_templates {
+  id           String   @id @default(cuid())
+  name         String
+  type         String   @default("EMPLOYMENT")
+  content      String
+  placeholders Json     @default("[]")
+  is_active    Boolean  @default(true)
+  created_by   String?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  contracts contracts[]
+}
+
+model contracts {
+  id              String    @id @default(cuid())
+  user_id         String
+  template_id     String?
+  type            String    @default("EMPLOYMENT")
+  title           String
+  content         String
+  file_key        String?
+  status          String    @default("DRAFT")
+  valid_from      DateTime?
+  valid_until     DateTime?
+  signed_at       DateTime?
+  signature_data  String?
+  created_by      String?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  user     users               @relation(fields: [user_id],     references: [id], onDelete: Cascade)
+  template contract_templates? @relation(fields: [template_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+}
+
+// ─── Company Policies (Phase 8) ───────────────────────────────────────────────
+
+model company_policies {
+  id           String    @id @default(cuid())
+  title        String
+  category     String    @default("GENERAL")
+  content      String
+  version      String    @default("1.0")
+  is_mandatory Boolean   @default(true)
+  is_published Boolean   @default(false)
+  published_at DateTime?
+  created_by   String?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  acknowledgements policy_acknowledgements[]
+}
+
+model policy_acknowledgements {
+  id              String   @id @default(cuid())
+  user_id         String
+  policy_id       String
+  acknowledged_at DateTime @default(now())
+  ip_address      String?
+
+  user   users            @relation(fields: [user_id],  references: [id], onDelete: Cascade)
+  policy company_policies @relation(fields: [policy_id],references: [id], onDelete: Cascade)
+
+  @@unique([user_id, policy_id])
+  @@index([user_id])
+}
+
+// ─── Client CRM (Phase 10) ────────────────────────────────────────────────────
+
+model client_accounts {
+  id             String   @id @default(cuid())
+  name           String
+  email          String?
+  phone          String?
+  company        String?
+  status         String   @default("ACTIVE")
+  invite_token   String?  @unique
+  portal_enabled Boolean  @default(false)
+  created_by     String?
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  project_access client_project_access[]
+  invoices       crm_invoices[]
+}
+
+model client_project_access {
+  id           String   @id @default(cuid())
+  client_id    String
+  project_id   String
+  access_level String   @default("VIEWER")
+  granted_at   DateTime @default(now())
+
+  client client_accounts @relation(fields: [client_id], references: [id], onDelete: Cascade)
+
+  @@unique([client_id, project_id])
+}
+
+// ─── Project Discussions (Phase 11) ──────────────────────────────────────────
+
+model project_discussions {
+  id         String   @id @default(cuid())
+  project_id String
+  user_id    String
+  content    String
+  parent_id  String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  project projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  user    users    @relation(fields: [user_id],    references: [id], onDelete: Cascade)
+
+  @@index([project_id])
+}
+
+// ─── Internal Chat (Phase 12) ─────────────────────────────────────────────────
+
+model channels {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  type        String   @default("PUBLIC")
+  entity_type String?
+  entity_id   String?
+  created_by  String?
+  is_archived Boolean  @default(false)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  members   channel_members[]
+  messages  messages[]
+}
+
+model channel_members {
+  id          String    @id @default(cuid())
+  channel_id  String
+  user_id     String
+  role        String    @default("MEMBER")
+  joined_at   DateTime  @default(now())
+  last_read_at DateTime?
+
+  channel channels @relation(fields: [channel_id], references: [id], onDelete: Cascade)
+  user    users    @relation(fields: [user_id],    references: [id], onDelete: Cascade)
+
+  @@unique([channel_id, user_id])
+}
+
+model messages {
+  id         String    @id @default(cuid())
+  channel_id String
+  user_id    String
+  content    String
+  parent_id  String?
+  file_key   String?
+  is_edited  Boolean   @default(false)
+  edited_at  DateTime?
+  deleted_at DateTime?
+  created_at DateTime  @default(now())
+
+  channel   channels           @relation(fields: [channel_id], references: [id], onDelete: Cascade)
+  user      users              @relation(fields: [user_id],    references: [id], onDelete: Cascade)
+  reactions message_reactions[]
+
+  @@index([channel_id])
+  @@index([user_id])
+  @@index([created_at])
+}
+
+model message_reactions {
+  id         String   @id @default(cuid())
+  message_id String
+  user_id    String
+  emoji      String
+  created_at DateTime @default(now())
+
+  message messages @relation(fields: [message_id], references: [id], onDelete: Cascade)
+
+  @@unique([message_id, user_id, emoji])
+}
+
+// ─── Marketing — Lead Tracking ────────────────────────────────────────────────
+
+model upwork_bids {
+  id              String    @id @default(cuid())
+  user_id         String
+  date            DateTime  @default(now())
+  job_title       String
+  job_link        String?
+  type            String    @default("fixed")
+  rate            Float     @default(0)
+  status          String    @default("Submitted")
+  pipeline_stage  String    @default("NEW")
+  client_name     String?
+  contract_amount Float?
+  notes           String?
+  is_hot          Boolean   @default(false)
+  lose_reasons    String[]
+  lose_notes      String?
+  email_1         String?
+  email_1_status  String    @default("pending")
+  email_2         String?
+  email_2_status  String    @default("pending")
+  email_3         String?
+  email_3_status  String    @default("pending")
+  phone_1         String?
+  phone_1_status  String    @default("pending")
+  phone_2         String?
+  phone_2_status  String    @default("pending")
+  phone_3         String?
+  phone_3_status  String    @default("pending")
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([status])
+  @@index([date])
+}
+
+model linkedin_leads {
+  id              String    @id @default(cuid())
+  user_id         String
+  date            DateTime  @default(now())
+  full_name       String
+  job_title       String?
+  linkedin_url    String?
+  bio             String?
+  client_name     String?
+  invite_note     String?
+  status          String    @default("Connected")
+  pipeline_stage  String    @default("NEW")
+  contract_amount Float?
+  is_hot          Boolean   @default(false)
+  lose_reasons    String[]
+  lose_notes      String?
+  email           String?
+  email_1_status  String    @default("pending")
+  email_2         String?
+  email_2_status  String    @default("pending")
+  email_3         String?
+  email_3_status  String    @default("pending")
+  phone_1         String?
+  phone_1_status  String    @default("pending")
+  phone_2         String?
+  phone_2_status  String    @default("pending")
+  phone_3         String?
+  phone_3_status  String    @default("pending")
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([status])
+  @@index([date])
+}
+
+model email_leads {
+  id               String    @id @default(cuid())
+  user_id          String
+  full_name        String
+  email            String?
+  email_1_status   String    @default("pending")
+  email_2          String?
+  email_2_status   String    @default("pending")
+  email_3          String?
+  email_3_status   String    @default("pending")
+  job_title        String?
+  company_name     String?
+  company_website  String?
+  linkedin_profile String?
+  linkedin_company String?
+  phone            String?
+  phone_1          String?
+  phone_1_status   String    @default("pending")
+  phone_2          String?
+  phone_2_status   String    @default("pending")
+  phone_3          String?
+  phone_3_status   String    @default("pending")
+  country          String?
+  bio              String?
+  funding          String?
+  status           String    @default("New")
+  pipeline_stage   String    @default("NEW")
+  contract_amount  Float?
+  is_hot           Boolean   @default(false)
+  lose_reasons     String[]
+  lose_notes       String?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([status])
+}
+
+model linkedin_activity {
+  id            String   @id @default(cuid())
+  user_id       String
+  date          DateTime @default(now())
+  activity_type String
+  topic         String?
+  summary       String?
+  notes         String?
+  post_url      String?
+  created_at    DateTime @default(now())
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([date])
+}
+
+model lead_activities {
+  id          String   @id @default(cuid())
+  lead_id     String
+  lead_source String
+  author_id   String
+  author_name String
+  content     String
+  created_at  DateTime @default(now())
+
+  @@index([lead_id])
+  @@index([author_id])
+}
+
+// ─── Marketing — Sales / Deposits / Targets ───────────────────────────────────
+
+model deposits {
+  id              String   @id @default(cuid())
+  project_name    String
+  client_name     String
+  milestone_no    String?
+  milestone_name  String?
+  amount          Float    @default(0)
+  deposit_date    DateTime @default(now())
+  source          String   @default("Upwork")
+  is_new_client   Boolean  @default(false)
+  notes           String?
+  created_by      String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  creator users? @relation(fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@index([deposit_date])
+  @@index([created_by])
+}
+
+model deposit_targets {
+  id            String   @id @default(cuid())
+  month         Int
+  year          Int
+  target_amount Float    @default(0)
+  updated_at    DateTime @updatedAt
+
+  @@unique([month, year])
+}
+
+model marketing_targets {
+  id                           String   @id @default(cuid())
+  user_id                      String?
+  team_type                    String?
+  upwork_daily                 Int      @default(10)
+  email_daily                  Int      @default(50)
+  linkedin_daily               Int      @default(20)
+  linkedin_connections_daily   Int      @default(15)
+  linkedin_posts_daily         Int      @default(1)
+  linkedin_interactions_daily  Int      @default(5)
+  monthly_sales_target         Float    @default(40000)
+  updated_at                   DateTime @updatedAt
+
+  user users? @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, team_type])
+  @@index([user_id])
+}
+
+// ─── Employee Extended HR Profile ─────────────────────────────────────────────
+
+model employee_profiles {
+  id                         String    @id @default(cuid())
+  user_id                    String    @unique
+  profile_status             String?   @default("ACTIVE")  // DRAFT | ACTIVE
+  // ── Personal ──────────────────────────────────────────────────────────
+  personal_email             String?
+  cnic                       String?
+  dob                        DateTime?
+  gender                     String?
+  marital_status             String?
+  father_name                String?
+  alternate_phone            String?
+  nationality                String?
+  religion                   String?
+  blood_group                String?
+  current_address            String?
+  permanent_address          String?
+  emergency_contact_name     String?
+  emergency_contact_relation String?
+  emergency_contact_phone    String?
+  // ── Employment ────────────────────────────────────────────────────────
+  employment_type            String?   @default("FULL_TIME")
+  employment_status          String?   @default("ACTIVE")  // ACTIVE | INACTIVE | PROBATION | ON_LEAVE | TERMINATED
+  grade                      String?
+  work_mode                  String?   @default("ONSITE")
+  probation_start            DateTime?
+  probation_end              DateTime?
+  probation_status           String?
+  confirmation_date          DateTime?
+  resignation_date           DateTime?
+  termination_date           DateTime?
+  notice_period_days         Int?
+  // ── Work Info ─────────────────────────────────────────────────────────
+  work_location              String?
+  office_branch              String?
+  floor_area                 String?
+  working_days               Json?     // ["MON","TUE","WED","THU","FRI"]
+  weekend                    String?
+  work_start                 String?   // "09:00"
+  work_end                   String?   // "18:00"
+  lunch_break_min            Int?
+  work_extension             String?
+  work_phone                 String?
+  is_remote                  Boolean?  @default(false)
+  office_location            String?
+  // ── Compensation ──────────────────────────────────────────────────────
+  salary_currency            String?   @default("PKR")
+  base_salary                Float?
+  gross_salary               Float?
+  effective_salary_date      DateTime?
+  pay_frequency              String?   @default("MONTHLY")  // MONTHLY | BI_MONTHLY | WEEKLY
+  // ── General ───────────────────────────────────────────────────────────
+  notes                      String?
+  created_at                 DateTime  @default(now())
+  updated_at                 DateTime  @updatedAt
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+// ─── Employee Documents ────────────────────────────────────────────────────────
+
+model employee_documents {
+  id            String   @id @default(cuid())
+  user_id       String
+  document_type String   @default("OTHER")
+  title         String
+  file_key      String?
+  file_url      String?
+  notes         String?
+  uploaded_by   String?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  user     users  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  uploader users? @relation("doc_uploader", fields: [uploaded_by], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([uploaded_by])
+}
+
+// ─── Requisitions ──────────────────────────────────────────────────────────────
+
+model requisitions {
+  id                String    @id @default(cuid())
+  requester_id      String
+  department_id     String?
+  title             String
+  category          String    @default("OTHER")
+  description       String?
+  quantity          Int       @default(1)
+  estimated_cost    Float?
+  actual_cost       Float?
+  currency          String?   @default("PKR")
+  vendor_name       String?
+  purchase_notes    String?
+  purchase_date     DateTime?
+  invoice_reference String?
+  priority          String    @default("MEDIUM")
+  vendor_suggestion String?
+  attachment_url    String?
+  needed_by         DateTime?
+  delivery_location String?
+  convert_to_asset  Boolean   @default(false)
+  linked_asset_id   String?
+  status            String    @default("DRAFT")
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  requester  users                  @relation("req_requester", fields: [requester_id], references: [id])
+  department departments?           @relation("dept_requisitions", fields: [department_id], references: [id], onDelete: SetNull)
+  approvals  requisition_approvals[]
+
+  @@index([requester_id])
+  @@index([department_id])
+  @@index([status])
+}
+
+model requisition_approvals {
+  id             String   @id @default(cuid())
+  requisition_id String
+  approver_id    String
+  action         String
+  comment        String?
+  stage          String?
+  created_at     DateTime @default(now())
+
+  requisition requisitions @relation(fields: [requisition_id], references: [id], onDelete: Cascade)
+  approver    users        @relation("req_approver", fields: [approver_id], references: [id])
+
+  @@index([requisition_id])
+}
+
+// ─── CRM – Pipeline, Handoffs, Invoices ──────────────────────────────────────
+
+model crm_handoffs {
+  id              String    @id @default(cuid())
+  lead_source     String
+  lead_id         String
+  lead_title      String
+  client_name     String?
+  contact_email   String?
+  contact_phone   String?
+  deal_value      Float?
+  currency        String    @default("USD")
+  contract_id     String?
+  notes           String?
+  assigned_to_id  String?
+  status          String    @default("PENDING")
+  project_id      String?
+  created_by      String?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  assigned_to users?    @relation("handoff_assignee", fields: [assigned_to_id], references: [id], onDelete: SetNull)
+  creator     users?    @relation("handoff_creator",  fields: [created_by],     references: [id], onDelete: SetNull)
+  project     projects? @relation(fields: [project_id], references: [id],      onDelete: SetNull)
+
+  @@index([status])
+  @@index([lead_source])
+  @@index([assigned_to_id])
+}
+
+model crm_invoices {
+  id               String    @id @default(cuid())
+  invoice_number   String    @unique
+  client_account_id String?
+  lead_source      String?
+  lead_id          String?
+  title            String
+  amount           Float     @default(0)
+  currency         String    @default("USD")
+  status           String    @default("DRAFT")
+  due_date         DateTime?
+  paid_at          DateTime?
+  file_url         String?
+  notes            String?
+  created_by       String?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  client_account client_accounts? @relation(fields: [client_account_id], references: [id], onDelete: SetNull)
+  creator        users?           @relation("invoice_creator", fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([client_account_id])
+}
+
+// ─── Education Records ────────────────────────────────────────────────────────
+
+model education_records {
+  id                 String    @id @default(cuid())
+  user_id            String
+  qualification      String    // MATRIC | INTERMEDIATE | BACHELOR | MASTER | PHD | OTHER
+  field_of_study     String?
+  institute          String?
+  passing_year       Int?
+  cgpa               Float?
+  cgpa_out_of        Float?
+  division_class     String?
+  percentage         Float?
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+}
+
+// ─── Employment History ───────────────────────────────────────────────────────
+
+model employment_history {
+  id           String    @id @default(cuid())
+  user_id      String
+  company_name String
+  designation  String?
+  from_date    DateTime?
+  to_date      DateTime?
+  is_current   Boolean   @default(false)
+  notes        String?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+}
+
+// ─── Salary Increments ────────────────────────────────────────────────────────
+
+model salary_increments {
+  id                           String    @id @default(cuid())
+  user_id                      String
+  review_year                  Int
+  review_period                String    // e.g. "2025-01 to 2025-12"
+  effective_date               DateTime?
+  previous_salary              Float
+  mandatory_pct                Float     @default(5)
+  performance_pct              Float     @default(0)
+  regularity_pct               Float     @default(0)
+  punctuality_pct              Float     @default(0)
+  total_pct                    Float     @default(0)
+  increment_amount             Float?
+  new_salary                   Float?
+  status                       String    @default("DRAFT")  // DRAFT | PENDING | APPROVED | REJECTED
+  approved_by                  String?
+  approved_at                  DateTime?
+  notes                        String?
+  // Snapshot of metrics used for calculation
+  leave_count_snapshot         Int?
+  latecoming_count_snapshot    Int?
+  performance_score_snapshot   Float?
+  regularity_eligible          Boolean   @default(true)
+  punctuality_eligible         Boolean   @default(true)
+  regularity_exclusion_reason  String?
+  punctuality_exclusion_reason String?
+  created_by                   String?
+  created_at                   DateTime  @default(now())
+  updated_at                   DateTime  @updatedAt
+
+  user     users  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  approver users? @relation("increment_approver", fields: [approved_by], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([review_year])
+  @@index([status])
+}
+
+// ─── Overtime Requests ────────────────────────────────────────────────────────
+
+model overtime_requests {
+  id                  String    @id @default(cuid())
+  user_id             String
+  date                DateTime  // date of overtime work
+  start_time          String?   // "18:00"
+  end_time            String?   // "21:30"
+  duration_minutes    Int       @default(0)
+  reason              String
+  notes               String?
+  status              String    @default("PENDING")  // PENDING | APPROVED | REJECTED | CANCELLED
+  submitted_same_day  Boolean   @default(true)
+  is_late_submission  Boolean   @default(false)
+  approver_id         String?
+  approved_at         DateTime?
+  rejected_at         DateTime?
+  approval_comment    String?
+  team_id             String?
+  department_id       String?
+  eligible_for_overtime Boolean @default(true)
+  eligibility_reason  String?
+  hourly_rate_snapshot Float?
+  overtime_multiplier Float?    @default(1.5)
+  approved_minutes    Int?
+  approved_amount     Float?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+
+  user     users  @relation(fields: [user_id],   references: [id], onDelete: Cascade)
+  approver users? @relation("overtime_approver", fields: [approver_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([status])
+  @@index([date])
+  @@index([department_id])
+  @@index([team_id])
 }

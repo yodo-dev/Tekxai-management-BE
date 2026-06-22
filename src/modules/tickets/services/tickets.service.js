@@ -9,7 +9,18 @@ async function next_ticket_number() {
   return `TKT-${num + 1}`;
 }
 
+const USER_SELECT = { id: true, first_name: true, last_name: true, email: true, avatar: true };
+
+async function get_attachments_for(entity_id) {
+  return prisma.file_uploads.findMany({
+    where: { entity_type: 'ticket', entity_id },
+    select: { id: true, file_name: true, file_key: true, mime_type: true, file_size: true, created_at: true },
+    orderBy: { created_at: 'asc' },
+  });
+}
+
 export async function list_tickets({ user_id, is_admin = false, status, priority, page = 1, limit = 20 } = {}) {
+  page = +page || 1; limit = +limit || 20;
   const skip = (page - 1) * limit;
   const where = {};
   if (!is_admin) where.user_id = user_id;
@@ -19,11 +30,9 @@ export async function list_tickets({ user_id, is_admin = false, status, priority
   const [total, records] = await Promise.all([
     prisma.support_tickets.count({ where }),
     prisma.support_tickets.findMany({
-      where,
-      skip,
-      take: limit,
+      where, skip, take: limit,
       orderBy: { created_at: 'desc' },
-      include: { user: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true } } },
+      include: { user: { select: USER_SELECT } },
     }),
   ]);
 
@@ -31,13 +40,27 @@ export async function list_tickets({ user_id, is_admin = false, status, priority
 }
 
 export async function get_ticket(id, user_id, is_admin) {
-  const t = await prisma.support_tickets.findUnique({
-    where: { id },
-    include: { user: { select: { id: true, first_name: true, last_name: true, email: true } } },
-  });
+  const t = await prisma.support_tickets.findUnique({ where: { id }, include: { user: { select: USER_SELECT } } });
   if (!t) throw app_error('Ticket not found', 404);
   if (!is_admin && t.user_id !== user_id) throw app_error('Forbidden', 403);
-  return normalize_ticket(t);
+  const attachments = await get_attachments_for(id);
+  return normalize_ticket(t, attachments);
+}
+
+export async function add_ticket_attachment(ticket_id, user_id, is_admin, { file_key, file_name, file_size, mime_type }) {
+  const t = await prisma.support_tickets.findUnique({ where: { id: ticket_id } });
+  if (!t) throw app_error('Ticket not found', 404);
+  if (!is_admin && t.user_id !== user_id) throw app_error('Forbidden', 403);
+  return prisma.file_uploads.create({
+    data: { user_id, entity_type: 'ticket', entity_id: ticket_id, file_key, file_name, file_size: file_size || 0, mime_type, is_public: false },
+  });
+}
+
+export async function get_ticket_stats() {
+  const rows = await prisma.support_tickets.groupBy({ by: ['status'], _count: { id: true } });
+  const by_status = {};
+  for (const r of rows) by_status[r.status] = r._count.id;
+  return { by_status, total: Object.values(by_status).reduce((s, v) => s + v, 0) };
 }
 
 export async function create_ticket({ user_id, subject, description, recipient_role, recipient_label, recipient_name, priority }) {
@@ -56,7 +79,7 @@ export async function update_ticket_status(id, { status, resolution_note }) {
   return prisma.support_tickets.update({ where: { id }, data });
 }
 
-function normalize_ticket(t) {
+function normalize_ticket(t, attachments = []) {
   return {
     id: t.id,
     ticketNumber: t.ticket_number,
@@ -74,5 +97,6 @@ function normalize_ticket(t) {
     createdBy: t.user ? `${t.user.first_name} ${t.user.last_name}` : 'Unknown',
     createdByEmail: t.user?.email || '',
     user: t.user,
+    attachments,
   };
 }

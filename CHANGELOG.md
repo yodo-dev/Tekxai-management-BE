@@ -1,91 +1,45 @@
 # Changelog
 
-All notable changes to Tekxai ERP are documented here.
+## [3.0.0] — 2026-06-18 (Phase 1-3 Complete)
 
-## [2.0.0] — 2026-06-16
+### Phase 1 — Critical Bug Fixes
+- FIX: TimeTrackerCard now calls POST /timesheet/clock-in and POST /timesheet/clock-out (was fully mocked)
+- FIX: duration_sec auto-calculated on clock-out (was always stored as 0)
+- FIX: NotificationDropdown now reads from real API (replaced hardcoded mockNotifications array)
+- FIX: ProjectDetailPage milestones now load from GET /project/:id/milestones (replaced mockMilestones)
+- FIX: AddTaskModal now calls POST /project/:id/tasks (removed explicit 'Mock' toast)
+- FIX: CreateMilestoneModal now calls POST /project/:id/milestones (removed explicit 'Mock' toast)
+- FIX: Bonus engine reads from bonus_configurations DB table with hardcoded fallback
+- FIX: Estimator division filter now passed to API query
+- FIX: Departments division add uses apiRequest instead of raw fetch + hardcoded localStorage key
+- FIX: Chat module replaced with Phase 4 placeholder (removed 100% hardcoded fake data)
 
-### Added — Backend
+### Phase 2 — Partial Features Completed
+- COMPLETE: Attendance clock-in/clock-out wired end-to-end to /timesheet/clock-in, /clock-out, /today
+- COMPLETE: Employee profile edit via PATCH /user/me
+- COMPLETE: Employee settings page with real profile + password change forms
+- COMPLETE: NotificationDropdown reads real notifications with unread count badge
+- COMPLETE: ProjectDetailPage fully connected to milestones and tasks APIs
+- COMPLETE: Team member management: POST/DELETE /team/:id/members
 
-**Schema & Database**
-- Complete Prisma schema with 35+ production tables
-- Departments & Divisions (org hierarchy)
-- Projects, Tasks, Milestones
-- Timesheet system (entries, edit requests, time-off policies/requests)
-- Invites with token-based registration
-- Notifications
-- Support Tickets
-- Marketing Deals + Salary Builders
-- Asset Management (categories, locations, vendors, assignments, maintenance, disposals)
-- Performance Management (daily reports, scores, bonus engine)
-- User Settings
+### Phase 3 — New Features Implemented
+- NEW: POST /timesheet/clock-in, POST /timesheet/clock-out, GET /timesheet/today
+- NEW: Shifts module: GET/POST /attendance/shifts, POST /attendance/shifts/assign
+- NEW: Late coming detection: /attendance/violations (auto-computed on clock-in)
+- NEW: Grace period per shift (configurable, stored in shifts.grace_period_min)
+- NEW: Leave balances: GET /leave-balance/my, GET /leave-balance/:userId
+- NEW: Job Descriptions: GET/PUT /job-description/my, GET/PUT /job-description/:userId
+- NEW: Activity Logs: GET /activity-log, GET /activity-log/my
+- NEW: Tasks CRUD: GET/POST /project/:id/tasks, PUT/DELETE /project/:id/tasks/:taskId
+- NEW: Milestones CRUD: GET/POST /project/:id/milestones, PUT/DELETE /project/:id/milestones/:id
+- NEW: Admin Attendance page (shifts, violations, grace period config)
+- NEW: Admin Job Descriptions page (per-employee JD management)
 
-**Authentication**
-- `GET /auth/me` — authenticated user profile
-- `POST /auth/forgot` — OTP-based password reset
-- `POST /auth/verify/:id` — OTP verification
-- `POST /auth/reset/:id` — password reset
-- `GET /auth/resendOTP/:id` — OTP resend
-- JWT authenticate middleware
-- RBAC authorize middleware
-
-**New Roles Seeded**
-- `EMPLOYEE`, `HR`, `MARKETING`, `DIVISION_MANAGER` (in addition to existing SUPER_ADMIN, ADMIN)
-
-**New Modules**
-- Users, Teams, Departments, Projects, Timesheets, Invites, Settings, Starred, Notifications, Tickets, Marketing, Assets, Performance
-
-**Seeder**
-- 5 departments, 14 divisions (including all EST-* codes)
-- 4 time-off policies
-- Asset categories, locations
-- Bonus configurations (5 tiers, PKR-denominated)
-
-### Added — Frontend
-
-**New Pages**
-- `/admin/assets` — Asset Management with full CRUD, assign/return/maintenance
-- `/admin/performance` — Performance with daily reports, scoring, bonus approval
-- `/employee/daily-report` — Daily progress report submission
-- `/403` — Forbidden access page
-
-**New Services**
-- `notificationService.ts`
-- `assetService.ts`
-- `performanceService.ts`
-- `departmentService.ts`
-
-**Sidebar Updates**
-- Admin: Asset Management, Performance links added
-- Employee: Daily Report link added
-
-### Fixed
-
-- **BUG-001** Token key mismatch (`accessToken` vs `access_token`)
-- **BUG-002** Refresh token key mismatch (`refreshToken` vs `refresh_token`)
-- **BUG-003** Post-login redirect — `role_name` now in user response
-- **BUG-004** EMPLOYEE role missing — all 6 roles now exist
-- **BUG-006** Admin dashboard called wrong endpoint (`packing-list/summary`)
-- **BUG-007** Hardcoded LAN IP `192.168.0.231:3022` as fallback
-- **BUG-017** AcceptInvite form missing Formik `validate` prop
-
-### Changed
-
-- `employeeService.ts` — all mock data replaced with real API calls
-- `ticketService.ts` — localStorage implementation replaced with backend API
-- `adminService.ts` — correct dashboard stats endpoint
-- `marketingService.ts` — real API hooks for deals and salary data
-- `notifications/index.tsx` — connected to real notification API
-- `admin/dashboard/index.tsx` — real stats from projects + timesheet
-- `constants/roles.ts` — all 6 roles, fixed `EMPLOYEE` spelling
-- `routes/router.tsx` — role guards fixed, new pages added, `/403` route added
-- `ProtectedRoute.tsx` — redirects to `/403` instead of silent logout
-- `app.js` — CORS credentials enabled, body size limit increased to 10mb
-
----
-
-## [1.0.0] — 2026-06-07 (Original)
-
-- Initial project with auth-only backend (login, refresh, logout)
-- Frontend with mock data throughout
-- Basic UI screens (admin, employee, marketing portals)
-- Chat UI (mock data, no backend)
+### Database Changes
+- NEW: shifts (id, name, start_time, end_time, grace_period_min, is_default)
+- NEW: employee_shifts (user_id, shift_id, effective)
+- NEW: attendance_violations (user_id, date, expected_check_in, late_minutes, violation_type)
+- NEW: leave_balances (user_id, policy_id, year, allocated, used, pending, remaining)
+- NEW: job_descriptions (user_id, title, summary, responsibilities, qualifications, kpi_targets)
+- NEW: activity_logs (user_id, action, entity, entity_id, ip_address)
+- Total models: 48 (was 36)

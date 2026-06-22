@@ -1,0 +1,11 @@
+import { Router } from 'express';
+import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { get_my_jd, get_user_jd, upsert_jd_ctrl } from '../controllers/jd.controller.js';
+const router = Router();
+router.use(authenticate);
+const M = authorize('ADMIN','SUPER_ADMIN','HR','DIVISION_MANAGER');
+router.get('/my', get_my_jd);
+router.put('/my', upsert_jd_ctrl);
+router.get('/:userId', M, get_user_jd);
+router.put('/:userId', M, upsert_jd_ctrl);
+export default router;

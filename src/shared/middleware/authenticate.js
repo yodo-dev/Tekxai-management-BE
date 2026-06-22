@@ -30,3 +30,25 @@ export function authorize(...allowed_roles) {
     return next();
   };
 }
+
+/**
+ * Permission-key middleware for DB-driven granular access control.
+ * Usage: router.get('/resource', authenticate, can('crm.pipeline.view'), handler)
+ *
+ * Super Admin always passes.
+ * For all other roles, checks the role_permissions table.
+ */
+export function can(permission) {
+  return async (req, res, next) => {
+    if (!req.user) return next(app_error('Authentication required', 401));
+    if (req.user.roles.includes('SUPER_ADMIN')) return next();
+    try {
+      const { check_permission } = await import('../../modules/permissions/services/permissions.service.js');
+      const granted = await check_permission(req.user.roles, permission, req.user.id);
+      if (!granted) return next(app_error(`Permission denied: ${permission}`, 403));
+      return next();
+    } catch (err) {
+      return next(err);
+    }
+  };
+}

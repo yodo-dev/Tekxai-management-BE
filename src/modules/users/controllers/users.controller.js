@@ -40,3 +40,24 @@ export async function delete_user_ctrl(req, res, next) {
     return res.json({ success: true, message: 'User deleted' });
   } catch (e) { return next(e); }
 }
+
+// PATCH /user/me — employee updates own profile
+export async function update_my_profile(req, res, next) {
+  try {
+    const allowed_fields = ['first_name', 'last_name', 'phone', 'designation', 'position'];
+    const data = {};
+    for (const f of allowed_fields) {
+      if (req.body[f] !== undefined) data[f] = req.body[f];
+    }
+    const user = await update_existing_user(req.user.id, data);
+    return res.json({ success: true, message: 'Profile updated', payload: user });
+  } catch (e) { return next(e); }
+}
+
+// GET /user/me/activity — employee activity summary
+export async function get_my_activity(req, res, next) {
+  try {
+    const user = await get_user(req.user.id);
+    return res.json({ success: true, payload: user });
+  } catch (e) { return next(e); }
+}

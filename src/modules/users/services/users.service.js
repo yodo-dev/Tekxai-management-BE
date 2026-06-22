@@ -23,12 +23,42 @@ export async function create_new_user(body) {
   if (existing) throw app_error('Email already in use', 409);
 
   const password_hash = await bcrypt.hash(body.password || Math.random().toString(36), 12);
-  return create_user({ ...body, password_hash });
+  const { team_id, ...rest } = body;
+  const user = await create_user({ ...rest, password_hash });
+
+  // Assign to team if provided
+  if (team_id) {
+    const team = await prisma.teams.findUnique({ where: { id: team_id } });
+    if (team) {
+      const existing_membership = await prisma.team_members.findFirst({ where: { user_id: user.id, team_id } });
+      if (!existing_membership) {
+        await prisma.team_members.create({ data: { user_id: user.id, team_id, role: 'MEMBER' } });
+      }
+    }
+  }
+
+  return user;
 }
 
 export async function update_existing_user(id, body) {
   await get_user(id); // throws 404 if not found
-  return update_user(id, body);
+  const { team_id, ...rest } = body;
+  const user = await update_user(id, rest);
+
+  // Update team membership if team_id provided
+  if (team_id !== undefined) {
+    // Remove from all current teams first
+    await prisma.team_members.deleteMany({ where: { user_id: id } });
+    // Add to new team if set
+    if (team_id) {
+      const team = await prisma.teams.findUnique({ where: { id: team_id } });
+      if (team) {
+        await prisma.team_members.create({ data: { user_id: id, team_id, role: 'MEMBER' } });
+      }
+    }
+  }
+
+  return user;
 }
 
 export async function delete_user(id) {

@@ -13,6 +13,7 @@ const ASSET_INCLUDE = {
 };
 
 export async function find_assets({ search, status, category_id, department_id, location_id, page = 1, limit = 20 } = {}) {
+  page = +page || 1; limit = +limit || 20;
   const skip = (page - 1) * limit;
   const where = { deleted_at: null };
   if (status) where.status = status;

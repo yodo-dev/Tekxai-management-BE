@@ -9,6 +9,7 @@ const TEAM_INCLUDE = {
 };
 
 export async function find_teams({ search, page = 1, limit = 50, type } = {}) {
+  page = +page || 1; limit = +limit || 50;
   const skip = (page - 1) * limit;
   const where = { deleted_at: null };
 

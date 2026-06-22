@@ -3,6 +3,7 @@ import prisma from '../../../shared/database/client.js';
 function app_error(m, c = 400) { const e = new Error(m); e.status_code = c; return e; }
 
 export async function list_deals({ team_label, salesperson_id, page = 1, limit = 20 } = {}) {
+  page = +page || 1; limit = +limit || 20;
   const skip = (page - 1) * limit;
   const where = {};
   if (team_label) where.team_label = team_label;
@@ -50,6 +51,7 @@ export async function publish_salary(user_id, period) {
 }
 
 export async function list_salary_history({ user_id, team_label, page = 1, limit = 20 } = {}) {
+  page = +page || 1; limit = +limit || 20;
   const skip = (page - 1) * limit;
   const where = { status: 'published' };
   if (user_id) where.user_id = user_id;

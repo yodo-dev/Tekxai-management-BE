@@ -5,6 +5,7 @@ function app_error(m, c = 400) { const e = new Error(m); e.status_code = c; retu
 // ── Daily Progress Reports ───────────────────────────────────────────────────
 
 export async function list_daily_reports({ user_id, is_admin = false, date, page = 1, limit = 20 } = {}) {
+  page = +page || 1; limit = +limit || 20;
   const skip = (page - 1) * limit;
   const where = {};
   if (!is_admin) where.user_id = user_id;
@@ -43,26 +44,44 @@ export async function update_daily_report(id, user_id, data, is_admin) {
 
 // ── Performance Scores ───────────────────────────────────────────────────────
 
-const BONUS_CONFIG = [
-  { min: 95, max: 100, level: 'Outstanding',         bonus: 20000 },
-  { min: 85, max: 94,  level: 'Excellent',            bonus: 15000 },
-  { min: 75, max: 84,  level: 'Good',                 bonus: 10000 },
-  { min: 50, max: 74,  level: 'Average',              bonus: 5000  },
-  { min: 0,  max: 49,  level: 'Needs Improvement',   bonus: 0     },
-];
-
-function get_bonus_config(score) {
-  return BONUS_CONFIG.find((b) => score >= b.min && score <= b.max) || BONUS_CONFIG[BONUS_CONFIG.length - 1];
+async function get_bonus_config_from_db(score) {
+  const configs = await prisma.bonus_configurations.findMany({
+    where: { is_active: true }, orderBy: { min_score: 'desc' },
+  });
+  if (configs.length > 0) {
+    const match = configs.find((c) => score >= c.min_score && score <= c.max_score);
+    const cfg = match || configs[configs.length - 1];
+    return { level: cfg.level_name, bonus: cfg.bonus_amount };
+  }
+  const FALLBACK = [
+    { min: 95, max: 100, level: 'Outstanding',       bonus: 20000 },
+    { min: 85, max: 94,  level: 'Excellent',          bonus: 15000 },
+    { min: 75, max: 84,  level: 'Good',               bonus: 10000 },
+    { min: 50, max: 74,  level: 'Average',            bonus: 5000  },
+    { min: 0,  max: 49,  level: 'Needs Improvement', bonus: 0     },
+  ];
+  return FALLBACK.find((b) => score >= b.min && score <= b.max) || FALLBACK[FALLBACK.length - 1];
 }
 
-export async function list_scores({ user_id, period, is_admin = false } = {}) {
+export async function list_scores({ user_id, period, score_type, division_id, is_admin = false } = {}) {
   const where = {};
   if (!is_admin) where.user_id = user_id;
-  if (period) where.period = period;
+  if (period)     where.period     = period;
+  if (score_type) where.score_type = score_type;
+  if (division_id) {
+    where.user = { division_id };
+  }
 
   return prisma.employee_performance_scores.findMany({
     where,
-    include: { user: { select: { id: true, first_name: true, last_name: true, avatar: true } } },
+    include: {
+      user: {
+        select: {
+          id: true, first_name: true, last_name: true, avatar: true,
+          division: { select: { id: true, name: true } },
+        },
+      },
+    },
     orderBy: { created_at: 'desc' },
   });
 }
@@ -91,7 +110,7 @@ export async function calculate_bonus(user_id, period) {
   const score = await prisma.employee_performance_scores.findFirst({ where: { user_id, period } });
   if (!score) throw app_error('Performance score not found for this period', 404);
 
-  const config = get_bonus_config(score.total_score);
+  const config = await get_bonus_config_from_db(score.total_score);
 
   return prisma.monthly_bonus_records.upsert({
     where: { user_id_period: { user_id, period } },
@@ -113,6 +132,7 @@ export async function calculate_bonus(user_id, period) {
 }
 
 export async function list_bonus_records({ user_id, period, status, is_admin = false, page = 1, limit = 20 } = {}) {
+  page = +page || 1; limit = +limit || 20;
   const skip = (page - 1) * limit;
   const where = {};
   if (!is_admin) where.user_id = user_id;

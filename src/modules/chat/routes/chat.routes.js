@@ -1,0 +1,14 @@
+import { Router } from 'express';
+import { authenticate } from '../../../shared/middleware/authenticate.js';
+import { add_reaction, create_channel, delete_message, get_messages, join_channel, list_channels, remove_reaction, send_message } from '../controllers/chat.controller.js';
+const router = Router();
+router.use(authenticate);
+router.get('/channels', list_channels);
+router.post('/channels', create_channel);
+router.post('/channels/:id/join', join_channel);
+router.get('/channels/:id/messages', get_messages);
+router.post('/channels/:id/messages', send_message);
+router.delete('/channels/:id/messages/:msgId', delete_message);
+router.post('/channels/:id/messages/:msgId/reactions', add_reaction);
+router.delete('/channels/:id/messages/:msgId/reactions', remove_reaction);
+export default router;

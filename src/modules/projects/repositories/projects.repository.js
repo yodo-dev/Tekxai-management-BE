@@ -31,6 +31,7 @@ function normalize_project(p, user_id = null) {
 }
 
 export async function find_projects({ search, page = 1, limit = 20, status, user_id } = {}) {
+  page = +page || 1; limit = +limit || 20;
   const skip = (page - 1) * limit;
   const where = { deleted_at: null };
 
@@ -80,7 +81,12 @@ export async function find_project_by_id(id, user_id = null) {
 export async function create_project({ title, description, start_date, end_date, total_hours, owner_id, leader_id, member_ids = [] }) {
   return prisma.$transaction(async (tx) => {
     const project = await tx.projects.create({
-      data: { title, description, start_date, end_date, total_hours: total_hours || 0, owner_id, leader_id },
+      data: {
+        title, description,
+        start_date: start_date ? new Date(start_date) : undefined,
+        end_date:   end_date   ? new Date(end_date)   : undefined,
+        total_hours: total_hours || 0, owner_id, leader_id,
+      },
     });
 
     if (member_ids.length > 0) {
@@ -101,8 +107,8 @@ export async function update_project(id, { title, description, status, progress,
     if (description !== undefined) data.description = description;
     if (status !== undefined) data.status = status;
     if (progress !== undefined) data.progress = progress;
-    if (start_date !== undefined) data.start_date = start_date;
-    if (end_date !== undefined) data.end_date = end_date;
+    if (start_date !== undefined) data.start_date = start_date ? new Date(start_date) : null;
+    if (end_date !== undefined)   data.end_date   = end_date   ? new Date(end_date)   : null;
     if (total_hours !== undefined) data.total_hours = total_hours;
     if (owner_id !== undefined) data.owner_id = owner_id;
     if (leader_id !== undefined) data.leader_id = leader_id;

@@ -103,17 +103,17 @@ async function upsert_user(prisma, { email, password, firstName, lastName, roleN
     });
   }
 
-  await prisma.user_roles.upsert({
+  const existing_role = await prisma.user_roles.findUnique({
     where: { user_id_role_id: { user_id: user.id, role_id: role.id } },
-    update: {},
-    create: { user_id: user.id, role_id: role.id },
   });
+  if (!existing_role) {
+    await prisma.user_roles.create({ data: { user_id: user.id, role_id: role.id } });
+  }
 
-  await prisma.user_settings.upsert({
-    where: { user_id: user.id },
-    update: {},
-    create: { user_id: user.id },
-  });
+  const existing_settings = await prisma.user_settings.findUnique({ where: { user_id: user.id } });
+  if (!existing_settings) {
+    await prisma.user_settings.create({ data: { user_id: user.id } });
+  }
 
   console.log(`[seed] Ensured ${roleName}: ${email}`);
   return user;
@@ -188,35 +188,68 @@ export async function seedAdmin(prisma) {
   await upsert_roles(prisma);
   const dept_ids = await upsert_departments(prisma);
 
+  // The canonical demo password used for all role demo users
+  const DEMO_PASSWORD = process.env.SEED_SUPER_ADMIN_PASSWORD || 'SuperAdmin@123';
+
+  // Super Admin
   await upsert_user(prisma, {
-    email: process.env.SEED_SUPER_ADMIN_EMAIL,
-    password: process.env.SEED_SUPER_ADMIN_PASSWORD,
+    email: process.env.SEED_SUPER_ADMIN_EMAIL || 'superadmin@tekxai.com',
+    password: DEMO_PASSWORD,
     firstName: process.env.SEED_SUPER_ADMIN_FIRST_NAME || 'Super',
     lastName: process.env.SEED_SUPER_ADMIN_LAST_NAME || 'Admin',
     roleName: ROLE_NAMES.SUPER_ADMIN,
     department_id: dept_ids['OPS'],
   });
 
+  // Admin
   await upsert_user(prisma, {
-    email: process.env.SEED_ADMIN_EMAIL,
-    password: process.env.SEED_ADMIN_PASSWORD,
+    email: process.env.SEED_ADMIN_EMAIL || 'admin@tekxai.com',
+    password: DEMO_PASSWORD,
     firstName: process.env.SEED_ADMIN_FIRST_NAME || 'System',
     lastName: process.env.SEED_ADMIN_LAST_NAME || 'Admin',
     roleName: ROLE_NAMES.ADMIN,
     department_id: dept_ids['OPS'],
   });
 
-  // Seed optional demo employee if provided
-  if (process.env.SEED_EMPLOYEE_EMAIL) {
-    await upsert_user(prisma, {
-      email: process.env.SEED_EMPLOYEE_EMAIL,
-      password: process.env.SEED_EMPLOYEE_PASSWORD || 'Employee@123',
-      firstName: process.env.SEED_EMPLOYEE_FIRST_NAME || 'Demo',
-      lastName: process.env.SEED_EMPLOYEE_LAST_NAME || 'Employee',
-      roleName: ROLE_NAMES.EMPLOYEE,
-      department_id: dept_ids['ENG'],
-    });
-  }
+  // HR role demo user
+  await upsert_user(prisma, {
+    email: 'hr@tekxai.com',
+    password: DEMO_PASSWORD,
+    firstName: 'HR',
+    lastName: 'Manager',
+    roleName: ROLE_NAMES.HR,
+    department_id: dept_ids['HR'],
+  });
+
+  // Division Manager demo user
+  await upsert_user(prisma, {
+    email: 'divmanager@tekxai.com',
+    password: DEMO_PASSWORD,
+    firstName: 'Division',
+    lastName: 'Manager',
+    roleName: ROLE_NAMES.DIVISION_MANAGER,
+    department_id: dept_ids['ENG'],
+  });
+
+  // Marketing role demo user
+  await upsert_user(prisma, {
+    email: 'marketing@tekxai.com',
+    password: DEMO_PASSWORD,
+    firstName: 'Marketing',
+    lastName: 'Lead',
+    roleName: ROLE_NAMES.MARKETING,
+    department_id: dept_ids['MKT'],
+  });
+
+  // Employee demo user
+  await upsert_user(prisma, {
+    email: process.env.SEED_EMPLOYEE_EMAIL || 'employee@tekxai.com',
+    password: DEMO_PASSWORD,
+    firstName: process.env.SEED_EMPLOYEE_FIRST_NAME || 'Demo',
+    lastName: process.env.SEED_EMPLOYEE_LAST_NAME || 'Employee',
+    roleName: ROLE_NAMES.EMPLOYEE,
+    department_id: dept_ids['ENG'],
+  });
 
   await seed_time_off_policies(prisma);
   await seed_asset_categories(prisma);

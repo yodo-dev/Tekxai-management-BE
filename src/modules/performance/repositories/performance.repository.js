@@ -1,6 +1,7 @@
 import prisma from '../../../shared/database/client.js';
 
 export async function find_daily_reports({ user_id, is_admin, date, page = 1, limit = 20 }) {
+  page = +page || 1; limit = +limit || 20;
   const skip = (page - 1) * limit;
   const where = {};
   if (!is_admin) where.user_id = user_id;
@@ -52,6 +53,7 @@ export async function upsert_score_db(data) {
 }
 
 export async function find_bonus_records({ user_id, period, status, is_admin, page = 1, limit = 20 }) {
+  page = +page || 1; limit = +limit || 20;
   const skip = (page - 1) * limit;
   const where = {};
   if (!is_admin) where.user_id = user_id;

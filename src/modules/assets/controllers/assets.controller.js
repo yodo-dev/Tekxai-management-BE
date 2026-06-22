@@ -73,3 +73,15 @@ export async function get_vendors(req, res, next) {
   try { return res.json({ success: true, payload: await list_vendors() }); }
   catch (e) { return next(e); }
 }
+
+// GET /asset/maintenance/all — all maintenance logs (admin view)
+export async function list_all_maintenance_ctrl(req, res, next) {
+  try {
+    const prisma_client = (await import('../../../shared/database/client.js')).default;
+    const logs = await prisma_client.asset_maintenance_logs.findMany({
+      orderBy: { maintenance_date: 'desc' },
+      include: { asset: { select: { id: true, name: true, asset_tag: true } } },
+    });
+    return res.json({ success: true, payload: { records: logs, total: logs.length } });
+  } catch (err) { next(err); }
+}
