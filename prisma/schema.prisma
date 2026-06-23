@@ -95,6 +95,9 @@ model users {
   increments_approved      salary_increments[]   @relation("increment_approver")
   overtime_requests        overtime_requests[]
   overtime_approved        overtime_requests[]   @relation("overtime_approver")
+  expense_account           expense_accounts?
+  expense_transactions      expense_transactions[] @relation("expense_txn_user")
+  created_expense_txns      expense_transactions[] @relation("expense_txn_creator")
 
   @@index([department_id])
   @@index([division_id])
@@ -1793,4 +1796,57 @@ model overtime_requests {
   @@index([date])
   @@index([department_id])
   @@index([team_id])
+}
+
+// ─── Expense Management ───────────────────────────────────────────────────────
+
+model expense_accounts {
+  id              String   @id @default(cuid())
+  user_id         String   @unique
+  opening_balance Float    @default(0)
+  is_enabled      Boolean  @default(true)
+  notes           String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  user         users                  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  transactions expense_transactions[]
+}
+
+model expense_categories {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+
+  transactions expense_transactions[]
+}
+
+model expense_transactions {
+  id                 String   @id @default(cuid())
+  expense_account_id String
+  user_id            String
+  transaction_type   String   // 'income' | 'expense'
+  date               DateTime
+  title              String
+  total_amount       Float
+  ce_amount          Float    @default(0)
+  tekxai_amount      Float    @default(0)
+  category_id        String?
+  paid_to            String?
+  notes              String?
+  attachment_url     String?
+  created_by         String?
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  expense_account expense_accounts    @relation(fields: [expense_account_id], references: [id], onDelete: Cascade)
+  user            users               @relation("expense_txn_user",    fields: [user_id],    references: [id])
+  category        expense_categories? @relation(fields: [category_id], references: [id])
+  creator         users?              @relation("expense_txn_creator", fields: [created_by], references: [id])
+
+  @@index([expense_account_id])
+  @@index([user_id])
+  @@index([date])
 }

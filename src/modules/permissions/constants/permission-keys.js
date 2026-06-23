@@ -67,6 +67,11 @@ export const PERMISSION_DEFINITIONS = [
   { key: 'erp.attendance.edit',         label: 'Attendance – Edit',         workspace: 'erp', module: 'attendance',       action: 'edit'   },
   { key: 'erp.estimator.view',          label: 'Estimator – View',          workspace: 'erp', module: 'estimator',        action: 'view'   },
   { key: 'erp.permissions.manage',      label: 'Permissions Management',    workspace: 'erp', module: 'permissions',      action: 'manage' },
+  { key: 'erp.expenses.view',           label: 'Expenses – View',           workspace: 'erp', module: 'expenses',          action: 'view'   },
+  { key: 'erp.expenses.create',         label: 'Expenses – Create',         workspace: 'erp', module: 'expenses',          action: 'create' },
+  { key: 'erp.expenses.edit',           label: 'Expenses – Edit',           workspace: 'erp', module: 'expenses',          action: 'edit'   },
+  { key: 'erp.expenses.delete',         label: 'Expenses – Delete',         workspace: 'erp', module: 'expenses',          action: 'delete' },
+  { key: 'erp.expenses.manage',         label: 'Expenses – Manage',         workspace: 'erp', module: 'expenses',          action: 'manage' },
 
   // ── CRM Workspace access ──────────────────────────────────────────────────
   { key: 'crm.workspace.access',        label: 'CRM Workspace Access',      workspace: 'crm', module: 'workspace',        action: 'access' },
@@ -155,6 +160,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'erp.requisitions.view', 'erp.requisitions.create', 'erp.requisitions.approve',
     'erp.attendance.view', 'erp.attendance.edit',
     'erp.estimator.view',
+    'erp.expenses.view', 'erp.expenses.create', 'erp.expenses.edit', 'erp.expenses.delete', 'erp.expenses.manage',
     'hr.workspace.access', 'hr.dashboard.view',
     'hr.employees.view', 'hr.employees.create', 'hr.employees.edit',
     'hr.departments.view', 'hr.departments.edit',

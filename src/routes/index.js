@@ -37,6 +37,7 @@ import employment_hist_routes  from '../modules/employment-history/routes/employ
 import increments_routes       from '../modules/increments/routes/increments.routes.js';
 import overtime_routes         from '../modules/overtime/routes/overtime.routes.js';
 import hr_reports_routes       from '../modules/hr-reports/hr-reports.routes.js';
+import expenses_routes         from '../modules/expenses/routes/expenses.routes.js';
 
 const router = Router();
 
@@ -101,5 +102,8 @@ router.use('/overtime',          overtime_routes);
 
 // HR Reports
 router.use('/hr-report',         hr_reports_routes);
+
+// Expense Management
+router.use('/expenses',          expenses_routes);
 
 export default router;

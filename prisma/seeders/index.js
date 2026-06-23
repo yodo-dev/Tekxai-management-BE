@@ -2,6 +2,7 @@ import { seedAdmin as seed_admin } from './admin.seeder.js';
 import { seed_sample_data } from './sample.seeder.js';
 import { seed_permissions } from './permissions.seeder.js';
 import seed_demo from './demo.seeder.js';
+import seed_expenses from './expenses.seeder.js';
 import prisma from '../../src/shared/database/client.js';
 
 async function main() {
@@ -10,6 +11,7 @@ async function main() {
   await seed_sample_data(prisma);
   await seed_permissions(prisma);
   await seed_demo(prisma);
+  await seed_expenses(prisma);
   console.log('[seed] Complete.');
 }
 
