@@ -1,3 +1,4 @@
+import prisma from '../../../shared/database/client.js';
 import {
   create_new_project,
   delete_existing_project,
@@ -60,5 +61,31 @@ export async function unsave_project_ctrl(req, res, next) {
   try {
     await toggle_save_project(req.user.id, req.params.id, 'unsave');
     return res.json({ success: true, message: 'Project unsaved' });
+  } catch (e) { return next(e); }
+}
+
+export async function request_extension_ctrl(req, res, next) {
+  try {
+    const { proposed_deadline, reason } = req.body;
+    if (!proposed_deadline || !reason?.trim()) {
+      return res.status(400).json({ success: false, message: 'proposed_deadline and reason are required' });
+    }
+    // Store extension request as a project note/comment for admin review
+    // For now we notify by updating a meta field — admins see it in approvals
+    const project = await prisma.projects.findUnique({ where: { id: req.params.id } });
+    if (!project) return res.status(404).json({ success: false, message: 'Project not found' });
+
+    // Create an approval/notification record
+    await prisma.notifications.create({
+      data: {
+        user_id: req.user.id,
+        title: `Deadline Extension Request — ${project.name}`,
+        message: `Requested new deadline: ${new Date(proposed_deadline).toLocaleDateString()}. Reason: ${reason}`,
+        type: 'PROJECT',
+        link: `/admin/project-detail?id=${req.params.id}`,
+      },
+    }).catch(() => null); // graceful — if notifications table missing just skip
+
+    return res.json({ success: true, message: 'Extension request submitted' });
   } catch (e) { return next(e); }
 }

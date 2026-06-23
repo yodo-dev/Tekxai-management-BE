@@ -9,6 +9,7 @@ import {
   save_project_ctrl,
   unsave_project_ctrl,
   update_project_ctrl,
+  request_extension_ctrl,
 } from '../controllers/projects.controller.js';
 
 const router = Router();
@@ -22,7 +23,8 @@ router.get('/:id',   get_project_by_id);
 router.post('/',     ADMIN, create_project_ctrl);
 router.put('/:id',   ADMIN,   update_project_ctrl);
 router.delete('/:id',ADMIN, delete_project_ctrl);
-router.post('/:id/save',   save_project_ctrl);
-router.delete('/:id/save', unsave_project_ctrl);
+router.post('/:id/save',      save_project_ctrl);
+router.delete('/:id/save',    unsave_project_ctrl);
+router.post('/:id/extension', request_extension_ctrl);
 
 export default router;
