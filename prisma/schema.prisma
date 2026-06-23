@@ -594,12 +594,16 @@ model salary_builders {
 // ─── Asset Management ─────────────────────────────────────────────────────────
 
 model asset_categories {
-  id          String   @id @default(cuid())
-  name        String
-  code        String   @unique
-  description String?
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
+  id            String   @id @default(cuid())
+  name          String   @unique
+  code          String   @unique
+  description   String?
+  is_device     Boolean  @default(false)
+  is_assignable Boolean  @default(true)
+  is_active     Boolean  @default(true)
+  sort_order    Int      @default(0)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
 
   assets assets[]
 }
@@ -642,6 +646,12 @@ model assets {
   purchase_cost   Float?
   warranty_expiry DateTime?
   notes           String?
+  condition       String?
+  processor       String?
+  ram             String?
+  storage         String?
+  storage_type    String?
+  generation      String?
   created_at      DateTime  @default(now())
   updated_at      DateTime  @updatedAt
   deleted_at      DateTime?

@@ -138,17 +138,31 @@ async function seed_time_off_policies(prisma) {
 
 async function seed_asset_categories(prisma) {
   const categories = [
-    { name: 'Infrastructure', code: 'INFRA' },
-    { name: 'Furniture', code: 'FURN' },
-    { name: 'IT Equipment', code: 'IT' },
-    { name: 'Other', code: 'OTHER' },
+    { name: 'Laptop',                 code: 'LAPTOP',      is_device: true,  is_assignable: true,  sort_order: 1  },
+    { name: 'Desktop',                code: 'DESKTOP',     is_device: true,  is_assignable: true,  sort_order: 2  },
+    { name: 'Monitor',                code: 'MONITOR',     is_device: true,  is_assignable: true,  sort_order: 3  },
+    { name: 'Keyboard',               code: 'KEYBOARD',    is_device: false, is_assignable: true,  sort_order: 4  },
+    { name: 'Mouse',                  code: 'MOUSE',       is_device: false, is_assignable: true,  sort_order: 5  },
+    { name: 'Headphones / Headset',   code: 'HEADPHONES',  is_device: false, is_assignable: true,  sort_order: 6  },
+    { name: 'Mobile Phone',           code: 'MOBILE',      is_device: true,  is_assignable: true,  sort_order: 7  },
+    { name: 'Tablet',                 code: 'TABLET',      is_device: true,  is_assignable: true,  sort_order: 8  },
+    { name: 'Printer',                code: 'PRINTER',     is_device: true,  is_assignable: false, sort_order: 9  },
+    { name: 'UPS',                    code: 'UPS',         is_device: false, is_assignable: false, sort_order: 10 },
+    { name: 'Router / Networking',    code: 'ROUTER',      is_device: true,  is_assignable: false, sort_order: 11 },
+    { name: 'Hard Disk / SSD',        code: 'STORAGE',     is_device: true,  is_assignable: true,  sort_order: 12 },
+    { name: 'Camera / CCTV',          code: 'CAMERA',      is_device: true,  is_assignable: false, sort_order: 13 },
+    { name: 'Office Chair',           code: 'CHAIR',       is_device: false, is_assignable: true,  sort_order: 14 },
+    { name: 'Office Table / Desk',    code: 'DESK',        is_device: false, is_assignable: true,  sort_order: 15 },
+    { name: 'Generator / Electrical', code: 'GENERATOR',   is_device: false, is_assignable: false, sort_order: 16 },
+    { name: 'Misc Equipment',         code: 'MISC',        is_device: false, is_assignable: false, sort_order: 17 },
+    { name: 'Other',                  code: 'OTHER',       is_device: false, is_assignable: false, sort_order: 99 },
   ];
 
   for (const cat of categories) {
     await prisma.asset_categories.upsert({
       where: { code: cat.code },
-      update: { name: cat.name },
-      create: cat,
+      update: { name: cat.name, is_device: cat.is_device, is_assignable: cat.is_assignable, sort_order: cat.sort_order, is_active: true },
+      create: { ...cat, is_active: true },
     });
   }
 

@@ -998,6 +998,131 @@ async function seed_marketing_data(prisma, user_map) {
   console.log('[demo] Marketing deals & deposits seeded');
 }
 
+// ─── 15. Demo Assets ──────────────────────────────────────────────────────────
+
+async function seed_demo_assets(prisma, user_map) {
+  // Helper: find category by code
+  const cat = async (code) => {
+    const c = await prisma.asset_categories.findUnique({ where: { code } });
+    if (!c) { console.warn(`[demo] Category ${code} not found`); }
+    return c;
+  };
+
+  const laptop_cat    = await cat('LAPTOP');
+  const monitor_cat   = await cat('MONITOR');
+  const printer_cat   = await cat('PRINTER');
+  const chair_cat     = await cat('CHAIR');
+  const ups_cat       = await cat('UPS');
+  const router_cat    = await cat('ROUTER');
+
+  if (!laptop_cat) {
+    console.warn('[demo] Asset categories not seeded yet — skipping demo assets');
+    return;
+  }
+
+  const zia   = user_map['zia@tekxai.ca'];
+  const saad  = user_map['saad@tekxai.ca'];
+
+  // Auto-generate asset_tag helper
+  const next_tag = async () => {
+    const count = await prisma.assets.count();
+    return `AST-${String(count + 1001).padStart(4, '0')}`;
+  };
+
+  const assets_data = [
+    {
+      name: 'MacBook Pro 14"', brand: 'Apple', model: 'MacBook Pro 14 M1',
+      serial_number: 'C02GMBP1DEMO1', category_id: laptop_cat?.id,
+      processor: 'Apple M1 Pro', ram: '16GB', storage: '512GB', storage_type: 'SSD', generation: 'M1 2021',
+      condition: 'GOOD', status: 'ASSIGNED', assign_to: zia,
+    },
+    {
+      name: 'Dell XPS 15', brand: 'Dell', model: 'XPS 15 9530',
+      serial_number: 'DXPS15001DEMO', category_id: laptop_cat?.id,
+      processor: 'Intel Core i7-13700H', ram: '32GB', storage: '1TB', storage_type: 'NVMe', generation: '13th Gen',
+      condition: 'GOOD', status: 'ASSIGNED', assign_to: saad,
+    },
+    {
+      name: 'Lenovo ThinkPad E15', brand: 'Lenovo', model: 'ThinkPad E15 Gen 4',
+      serial_number: 'LEN-TP-E15-003', category_id: laptop_cat?.id,
+      processor: 'Intel Core i5-1235U', ram: '8GB', storage: '256GB', storage_type: 'SSD', generation: '12th Gen',
+      condition: 'FAIR', status: 'AVAILABLE', assign_to: null,
+    },
+    {
+      name: 'Dell 24" Monitor', brand: 'Dell', model: 'P2422H',
+      serial_number: 'DEL-MON-001', category_id: monitor_cat?.id,
+      condition: 'GOOD', status: 'ASSIGNED', assign_to: zia,
+    },
+    {
+      name: 'HP LaserJet Pro', brand: 'HP', model: 'LaserJet Pro M404n',
+      serial_number: 'HP-LJ-001', category_id: printer_cat?.id,
+      condition: 'GOOD', status: 'AVAILABLE', assign_to: null,
+    },
+    {
+      name: 'Office Chair — Ergonomic', brand: 'Green Soul',
+      category_id: chair_cat?.id,
+      condition: 'GOOD', status: 'AVAILABLE', assign_to: null,
+    },
+    {
+      name: 'UPS APC 1500VA', brand: 'APC', model: 'BR1500G',
+      category_id: ups_cat?.id,
+      condition: 'GOOD', status: 'AVAILABLE', assign_to: null,
+    },
+    {
+      name: 'TP-Link Router AC1750', brand: 'TP-Link', model: 'Archer A7',
+      serial_number: 'TPL-R-001', category_id: router_cat?.id,
+      condition: 'GOOD', status: 'AVAILABLE', assign_to: null,
+    },
+  ];
+
+  for (const a of assets_data) {
+    if (!a.category_id) continue;
+    const { assign_to, ...asset_fields } = a;
+
+    // Upsert by serial_number if present, otherwise by name+category
+    let existing = null;
+    if (asset_fields.serial_number) {
+      existing = await prisma.assets.findFirst({ where: { serial_number: asset_fields.serial_number } });
+    } else {
+      existing = await prisma.assets.findFirst({ where: { name: asset_fields.name, category_id: asset_fields.category_id } });
+    }
+
+    let asset;
+    if (!existing) {
+      const tag = await next_tag();
+      asset = await prisma.assets.create({
+        data: { ...asset_fields, asset_tag: tag },
+      });
+    } else {
+      asset = existing;
+      // Update status if asset exists
+      await prisma.assets.update({ where: { id: asset.id }, data: { status: asset_fields.status } });
+    }
+
+    // Assign if needed
+    if (assign_to && asset_fields.status === 'ASSIGNED') {
+      const active_assignment = await prisma.asset_assignments.findFirst({
+        where: { asset_id: asset.id, is_active: true },
+      });
+      if (!active_assignment) {
+        await prisma.asset_assignments.create({
+          data: {
+            asset_id: asset.id,
+            user_id: assign_to.id,
+            assigned_at: new Date(),
+            is_active: true,
+          },
+        });
+        await prisma.assets.update({ where: { id: asset.id }, data: { status: 'ASSIGNED' } });
+      }
+    }
+
+    console.log(`[demo] Asset seeded: ${asset_fields.name}`);
+  }
+
+  console.log('[demo] Demo assets seeded');
+}
+
 // ─── Main Export ──────────────────────────────────────────────────────────────
 
 export default async function seed_demo(prisma) {
@@ -1073,6 +1198,10 @@ export default async function seed_demo(prisma) {
   // 13. Marketing data
   try { await seed_marketing_data(prisma, user_map); }
   catch (e) { console.error('[demo] Marketing data failed:', e.message); }
+
+  // 14. Demo Assets
+  try { await seed_demo_assets(prisma, user_map); }
+  catch (e) { console.error('[demo] Demo assets failed:', e.message); }
 
   console.log('[demo] Demo seeder complete.');
 }

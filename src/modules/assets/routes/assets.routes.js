@@ -5,6 +5,7 @@ import {
   list_all_maintenance_ctrl,
   assign_asset_ctrl,
   create_asset_ctrl,
+  create_category_ctrl,
   delete_asset_ctrl,
   get_asset_ctrl,
   get_assets,
@@ -20,6 +21,7 @@ router.use(authenticate);
 const HR = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
 
 router.get('/categories',       get_categories);
+router.post('/categories',      HR, create_category_ctrl);
 router.get('/locations',        get_locations);
 router.get('/vendors',          get_vendors);
 router.get('/',                 get_assets);

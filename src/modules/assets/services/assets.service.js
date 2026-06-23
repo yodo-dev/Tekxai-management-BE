@@ -45,12 +45,27 @@ export async function get_asset(id) {
 }
 
 export async function create_asset(data) {
-  // Auto-generate asset tag if not provided
-  if (!data.asset_tag) {
+  const { user_id, assigned_at, ...assetData } = data;
+  if (!assetData.asset_tag) {
     const count = await prisma.assets.count();
-    data.asset_tag = `AST-${String(count + 1001).padStart(4, '0')}`;
+    assetData.asset_tag = `AST-${String(count + 1001).padStart(4, '0')}`;
   }
-  return prisma.assets.create({ data, include: ASSET_INCLUDE });
+  if (user_id) {
+    assetData.status = 'ASSIGNED';
+    return prisma.$transaction(async (tx) => {
+      const asset = await tx.assets.create({ data: assetData, include: ASSET_INCLUDE });
+      await tx.asset_assignments.create({
+        data: {
+          asset_id: asset.id,
+          user_id,
+          assigned_at: assigned_at ? new Date(assigned_at) : new Date(),
+          is_active: true,
+        },
+      });
+      return tx.assets.findFirst({ where: { id: asset.id }, include: ASSET_INCLUDE });
+    });
+  }
+  return prisma.assets.create({ data: assetData, include: ASSET_INCLUDE });
 }
 
 export async function update_asset(id, data) {
@@ -96,7 +111,19 @@ export async function add_maintenance(asset_id, data) {
 }
 
 export async function list_categories() {
-  return prisma.asset_categories.findMany({ orderBy: { name: 'asc' } });
+  return prisma.asset_categories.findMany({
+    where: { is_active: true },
+    orderBy: [{ sort_order: 'asc' }, { name: 'asc' }],
+  });
+}
+
+export async function create_category({ name, description, is_device = false, is_assignable = true }) {
+  const code = name.toUpperCase().replace(/[^A-Z0-9]/g, '_').replace(/_+/g, '_').slice(0, 20);
+  return prisma.asset_categories.upsert({
+    where: { code },
+    update: { name, description, is_device, is_assignable, is_active: true },
+    create: { name, code, description, is_device, is_assignable, is_active: true, sort_order: 50 },
+  });
 }
 
 export async function list_locations() {

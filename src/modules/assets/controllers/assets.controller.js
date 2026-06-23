@@ -2,6 +2,7 @@ import {
   add_maintenance,
   assign_asset,
   create_asset,
+  create_category,
   delete_asset,
   get_asset,
   list_assets,
@@ -62,6 +63,13 @@ export async function add_maintenance_ctrl(req, res, next) {
 export async function get_categories(req, res, next) {
   try { return res.json({ success: true, payload: await list_categories() }); }
   catch (e) { return next(e); }
+}
+
+export async function create_category_ctrl(req, res, next) {
+  try {
+    const cat = await create_category(req.body);
+    return res.status(201).json({ success: true, payload: cat });
+  } catch (e) { return next(e); }
 }
 
 export async function get_locations(req, res, next) {
