@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate, authorize, can } from '../../../shared/middleware/authenticate.js';
+import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
 import {
   add_maintenance_ctrl,
   list_all_maintenance_ctrl,
@@ -23,13 +23,13 @@ router.get('/categories',       get_categories);
 router.get('/locations',        get_locations);
 router.get('/vendors',          get_vendors);
 router.get('/',                 get_assets);
-router.post('/',                HR, can('erp.assets.create'),   create_asset_ctrl);
+router.post('/',                HR,   create_asset_ctrl);
 router.get('/:id',              get_asset_ctrl);
-router.put('/:id',              HR, can('erp.assets.edit'),     update_asset_ctrl);
-router.delete('/:id',           HR, can('erp.assets.delete'),   delete_asset_ctrl);
-router.post('/:id/assign',      HR, can('hr.assets.manage'),    assign_asset_ctrl);
-router.post('/:id/return',      HR, can('hr.assets.manage'),    return_asset_ctrl);
+router.put('/:id',              HR,     update_asset_ctrl);
+router.delete('/:id',           HR,   delete_asset_ctrl);
+router.post('/:id/assign',      HR,    assign_asset_ctrl);
+router.post('/:id/return',      HR,    return_asset_ctrl);
 router.get('/maintenance/all',  list_all_maintenance_ctrl);
-router.post('/:id/maintenance', HR, can('erp.assets.edit'),     add_maintenance_ctrl);
+router.post('/:id/maintenance', HR,     add_maintenance_ctrl);
 
 export default router;
