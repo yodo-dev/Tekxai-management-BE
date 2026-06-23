@@ -45,11 +45,23 @@ export async function get_account(req, res, next) {
   try {
     const { userId } = req.params;
     const { from, to, type } = req.query;
-    const account = await prisma.expense_accounts.findUnique({
+    // Auto-create account for any valid user so Super Admin can add transactions immediately
+    const userRecord = await prisma.users.findUnique({
+      where: { id: userId },
+      select: { id: true, first_name: true, last_name: true, designation: true, avatar: true },
+    });
+    if (!userRecord) return fail(res, 'User not found', 404);
+
+    let account = await prisma.expense_accounts.findUnique({
       where: { user_id: userId },
       include: { user: { select: { id: true, first_name: true, last_name: true, designation: true, avatar: true } } },
     });
-    if (!account) return fail(res, 'Account not found', 404);
+    if (!account) {
+      account = await prisma.expense_accounts.create({
+        data: { user_id: userId, opening_balance: 0, is_enabled: true },
+        include: { user: { select: { id: true, first_name: true, last_name: true, designation: true, avatar: true } } },
+      });
+    }
     const where = { expense_account_id: account.id };
     if (type) where.transaction_type = type;
     if (from || to) where.date = {};
@@ -84,8 +96,8 @@ export async function update_account(req, res, next) {
 export async function list_transactions(req, res, next) {
   try {
     const { userId } = req.params;
-    const account = await prisma.expense_accounts.findUnique({ where: { user_id: userId } });
-    if (!account) return fail(res, 'Account not found', 404);
+    let account = await prisma.expense_accounts.findUnique({ where: { user_id: userId } });
+    if (!account) account = await prisma.expense_accounts.create({ data: { user_id: userId } });
     const txns = await prisma.expense_transactions.findMany({
       where: { expense_account_id: account.id },
       include: TX_INCLUDE,
