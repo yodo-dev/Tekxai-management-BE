@@ -7,12 +7,14 @@ const BUCKET = process.env.S3_BUCKET || 'tekxai-erp';
 const REGION = process.env.S3_REGION || 'us-east-1';
 const ENDPOINT = process.env.S3_ENDPOINT || null; // For R2: https://accountid.r2.cloudflarestorage.com
 
+const IS_ACCELERATE = ENDPOINT?.includes('s3-accelerate');
+
 async function get_s3_client() {
   if (!process.env.AWS_ACCESS_KEY_ID) return null;
   const { S3Client } = await import('@aws-sdk/client-s3');
   return new S3Client({
     region: REGION,
-    endpoint: ENDPOINT || undefined,
+    ...(IS_ACCELERATE ? { useAccelerateEndpoint: true } : { endpoint: ENDPOINT || undefined }),
     credentials: {
       accessKeyId: process.env.AWS_ACCESS_KEY_ID,
       secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -55,7 +57,8 @@ export async function delete_file(key) {
 
 /** Build a public URL for a key */
 export function get_public_url(key) {
-  if (ENDPOINT) return `${ENDPOINT}/${BUCKET}/${key}`;
+  // S3 Accelerate endpoint — strip trailing slash, append key
+  if (ENDPOINT) return `${ENDPOINT.replace(/\/$/, '')}/${key}`;
   return `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
 }
 
