@@ -42,7 +42,8 @@ export async function create_new_user(body) {
 
 export async function update_existing_user(id, body) {
   await get_user(id); // throws 404 if not found
-  const { team_id, ...rest } = body;
+  const { team_id, password, ...rest } = body;
+  if (password) rest.password_hash = await bcrypt.hash(password, 12);
   const user = await update_user(id, rest);
 
   // Update team membership if team_id provided
