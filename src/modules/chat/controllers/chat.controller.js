@@ -291,7 +291,7 @@ export async function get_messages(req,res,next){
       take:+limit,
       include:{
         user:{select:{id:true,first_name:true,last_name:true,avatar:true}},
-        reactions:{include:{user:{select:{id:true,first_name:true}}}},
+        reactions:{select:{id:true,user_id:true,emoji:true,created_at:true}},
         _count:{select:{replies:true}},
       },
     });
@@ -375,7 +375,7 @@ export async function get_thread(req,res,next){
       where:{id:msgId},
       include:{
         user:{select:{id:true,first_name:true,last_name:true,avatar:true}},
-        reactions:{include:{user:{select:{id:true,first_name:true}}}},
+        reactions:{select:{id:true,user_id:true,emoji:true,created_at:true}},
         _count:{select:{replies:true}},
       },
     });
@@ -392,7 +392,7 @@ export async function get_thread(req,res,next){
       orderBy:{created_at:'asc'},
       include:{
         user:{select:{id:true,first_name:true,last_name:true,avatar:true}},
-        reactions:{include:{user:{select:{id:true,first_name:true}}}},
+        reactions:{select:{id:true,user_id:true,emoji:true,created_at:true}},
       },
     });
 
