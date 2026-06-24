@@ -23,7 +23,8 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
   try {
     const {
       q, division_id, department_id, team_id, status, employment_status,
-      hire_from, page = 1, limit = 20, business_unit
+      hire_from, page = 1, limit = 20, business_unit,
+      sort_by = 'hire_date', sort_dir = 'desc',
     } = req.query;
 
     const take = Math.min(+limit || 20, 100);
@@ -49,9 +50,14 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
       ];
     }
 
+    const SORTABLE = { name: 'first_name', hire_date: 'hire_date', designation: 'designation', email: 'email', status: 'status' };
+    const orderField = SORTABLE[sort_by] || 'hire_date';
+    const orderDir   = sort_dir === 'asc' ? 'asc' : 'desc';
+    const orderBy    = [{ [orderField]: orderDir }, { last_name: orderDir }];
+
     const [total, records] = await Promise.all([
       prisma.users.count({ where }),
-      prisma.users.findMany({ where, select: USER_SELECT, orderBy: { hire_date: 'desc' }, skip, take }),
+      prisma.users.findMany({ where, select: USER_SELECT, orderBy, skip, take }),
     ]);
 
     const baseWhere = { deleted_at: null, ...(business_unit ? { business_unit } : {}) };
