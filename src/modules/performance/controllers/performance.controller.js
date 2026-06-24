@@ -47,7 +47,9 @@ export async function get_score_for_employee(req, res, next) {
 
 export async function post_score(req, res, next) {
   try {
-    return res.json({ success: true, payload: await upsert_score(req.body) });
+    const data = { ...req.body };
+    if (!data.user_id && data.employee_id) data.user_id = data.employee_id;
+    return res.json({ success: true, payload: await upsert_score(data) });
   } catch (e) { return next(e); }
 }
 
