@@ -58,3 +58,12 @@ export function get_public_url(key) {
   if (ENDPOINT) return `${ENDPOINT}/${BUCKET}/${key}`;
   return `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
 }
+
+/** Upload a buffer directly to S3, returns public URL */
+export async function upload_buffer(key, buffer, mime_type) {
+  const s3 = await get_s3_client();
+  if (!s3) return null; // caller handles fallback
+  const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+  await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: buffer, ContentType: mime_type }));
+  return get_public_url(key);
+}

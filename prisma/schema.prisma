@@ -1894,3 +1894,11 @@ model financial_reports {
   @@index([created_by])
   @@index([period_from])
 }
+
+// ─── System Settings ──────────────────────────────────────────────────────────
+model system_settings {
+  key        String   @id
+  value      String
+  updated_by String?
+  updated_at DateTime @updatedAt
+}

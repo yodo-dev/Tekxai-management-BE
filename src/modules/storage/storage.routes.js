@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '../../shared/middleware/authenticate.js';
 import prisma from '../../shared/database/client.js';
-import { get_presigned_upload_url, get_presigned_download_url, delete_file } from './storage.service.js';
+import { get_presigned_upload_url, get_presigned_download_url, delete_file, upload_buffer, get_public_url } from './storage.service.js';
 import { randomBytes } from 'crypto';
 import multer from 'multer';
 import path from 'path';
@@ -12,14 +12,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOAD_DIR = path.join(__dirname, '../../../../uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-const disk_storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${Date.now()}_${randomBytes(8).toString('hex')}${ext}`);
-  },
-});
-const upload = multer({ storage: disk_storage, limits: { fileSize: 20 * 1024 * 1024 } });
+// Memory storage — buffer passed to S3; falls back to disk if no S3
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 function gen_key(entity_type, user_id, file_name) {
   const ext = file_name.split('.').pop() || 'bin';
@@ -31,13 +25,23 @@ const router = Router();
 router.use(authenticate);
 const MANAGER = authorize('ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
 
-// POST /storage/upload — direct multer upload (no S3 required)
+// POST /storage/upload — upload to S3; falls back to local disk if S3 not configured
 router.post('/upload', upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, message: 'No file provided' });
-    const host = `${req.protocol}://${req.get('host')}`;
-    const file_url = `${host}/uploads/${req.file.filename}`;
-    return res.json({ success: true, payload: { file_url, file_name: req.file.originalname, file_size: req.file.size, mime_type: req.file.mimetype } });
+    const ext  = path.extname(req.file.originalname);
+    const key  = `uploads/${req.user.id}/${Date.now()}_${randomBytes(8).toString('hex')}${ext}`;
+
+    let file_url = await upload_buffer(key, req.file.buffer, req.file.mimetype);
+
+    if (!file_url) {
+      // S3 not configured — save to local disk
+      const filename = path.basename(key);
+      fs.writeFileSync(path.join(UPLOAD_DIR, filename), req.file.buffer);
+      file_url = `${req.protocol}://${req.get('host')}/uploads/${filename}`;
+    }
+
+    return res.json({ success: true, payload: { file_url, file_key: key, file_name: req.file.originalname, file_size: req.file.size, mime_type: req.file.mimetype } });
   } catch (e) { next(e); }
 });
 
