@@ -34,11 +34,11 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
     if (business_unit) where.business_unit = business_unit;
     if (division_id)   where.division_id = division_id;
     if (department_id) where.department_id = department_id;
-    if (status)        where.status = status;
+    if (status)        where.status = { equals: status, mode: 'insensitive' };
     if (hire_from)     where.hire_date = { gte: new Date(hire_from) };
     if (team_id)       where.team_memberships = { some: { team_id } };
     if (employment_status) {
-      where.employee_profile = { employment_status };
+      where.employee_profile = { employment_status: { equals: employment_status, mode: 'insensitive' } };
     }
     if (q) {
       where.OR = [
@@ -66,8 +66,12 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
       where: baseWhere,
       _count: { id: true },
     });
+    // Normalize to uppercase so 'Active' and 'ACTIVE' are merged
     const stat_map = {};
-    for (const s of stats) stat_map[s.status] = s._count.id;
+    for (const s of stats) {
+      const key = (s.status || '').toUpperCase();
+      stat_map[key] = (stat_map[key] || 0) + s._count.id;
+    }
 
     const on_leave = await prisma.time_off_requests.count({
       where: { status: 'APPROVED', start_date: { lte: new Date() }, end_date: { gte: new Date() } },
@@ -79,11 +83,11 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
     });
 
     const permanent = await prisma.users.count({
-      where: { ...baseWhere, employee_profile: { employment_status: 'PERMANENT' } },
+      where: { ...baseWhere, employee_profile: { employment_status: { equals: 'PERMANENT', mode: 'insensitive' } } },
     });
 
     const probation = await prisma.users.count({
-      where: { ...baseWhere, employee_profile: { employment_status: 'PROBATION' } },
+      where: { ...baseWhere, employee_profile: { employment_status: { equals: 'PROBATION', mode: 'insensitive' } } },
     });
 
     const normalized = records.map(u => ({
