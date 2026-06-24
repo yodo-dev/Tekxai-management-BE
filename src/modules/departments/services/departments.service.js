@@ -20,12 +20,16 @@ export async function get_department(id) {
 }
 
 export async function create_department(data) {
-  return prisma.departments.create({ data, include: DEPT_INCLUDE });
+  const { head_user_id, ...rest } = data;
+  if (head_user_id) rest.manager_id = head_user_id;
+  return prisma.departments.create({ data: rest, include: DEPT_INCLUDE });
 }
 
 export async function update_department(id, data) {
   await get_department(id);
-  return prisma.departments.update({ where: { id }, data, include: DEPT_INCLUDE });
+  const { head_user_id, ...rest } = data;
+  if (head_user_id) rest.manager_id = head_user_id;
+  return prisma.departments.update({ where: { id }, data: rest, include: DEPT_INCLUDE });
 }
 
 export async function delete_department(id) {
