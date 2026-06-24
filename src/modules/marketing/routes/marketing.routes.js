@@ -17,7 +17,7 @@ import { get_targets, upsert_target_ctrl, get_my_report } from '../controllers/t
 
 const router = Router();
 router.use(authenticate);
-const MKT  = authorize('ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+const MKT   = authorize('ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
 const ADMIN = authorize('ADMIN', 'SUPER_ADMIN');
 
 // ── Won Deals + Salary ─────────────────────────────────────────────────────
@@ -29,33 +29,33 @@ router.post('/salary-builder/:user_id/:period/publish', ADMIN, publish_salary_ct
 router.get('/salary-history',  MKT, get_salary_history);
 
 // ── Won Deals ──────────────────────────────────────────────────────────────
-router.get('/won-deals', get_won_deals);
+router.get('/won-deals', MKT, get_won_deals);
 
 // ── Upwork Bids ───────────────────────────────────────────────────────────
-router.get('/upwork',   get_upwork_bids);
-router.post('/upwork', post_upwork_bid);
-router.put('/upwork/:id',   put_upwork_bid);
-router.delete('/upwork/:id', del_upwork_bid);
+router.get('/upwork',         MKT, get_upwork_bids);
+router.post('/upwork',        MKT, post_upwork_bid);
+router.put('/upwork/:id',     MKT, put_upwork_bid);
+router.delete('/upwork/:id',  MKT, del_upwork_bid);
 
 // ── LinkedIn Leads ─────────────────────────────────────────────────────────
-router.get('/linkedin',   get_linkedin_leads);
-router.post('/linkedin', post_linkedin_lead);
-router.put('/linkedin/:id',   put_linkedin_lead);
-router.delete('/linkedin/:id', del_linkedin_lead);
+router.get('/linkedin',           MKT, get_linkedin_leads);
+router.post('/linkedin',          MKT, post_linkedin_lead);
+router.put('/linkedin/:id',       MKT, put_linkedin_lead);
+router.delete('/linkedin/:id',    MKT, del_linkedin_lead);
 
 // ── Email Leads ────────────────────────────────────────────────────────────
-router.get('/email-leads',   get_email_leads);
-router.post('/email-leads', post_email_lead);
-router.put('/email-leads/:id',   put_email_lead);
-router.delete('/email-leads/:id', del_email_lead);
+router.get('/email-leads',        MKT, get_email_leads);
+router.post('/email-leads',       MKT, post_email_lead);
+router.put('/email-leads/:id',    MKT, put_email_lead);
+router.delete('/email-leads/:id', MKT, del_email_lead);
 
 // ── LinkedIn Activity ──────────────────────────────────────────────────────
-router.get('/linkedin-activity',  get_linkedin_activity);
-router.post('/linkedin-activity', post_linkedin_activity);
+router.get('/linkedin-activity',  MKT, get_linkedin_activity);
+router.post('/linkedin-activity', MKT, post_linkedin_activity);
 
 // ── Lead Activity Notes ────────────────────────────────────────────────────
-router.get('/lead-activities',  get_lead_activities);
-router.post('/lead-activities', post_lead_activity);
+router.get('/lead-activities',    MKT, get_lead_activities);
+router.post('/lead-activities',   MKT, post_lead_activity);
 
 // ── Deposits ───────────────────────────────────────────────────────────────
 router.get('/deposits',    MKT,   get_deposits);

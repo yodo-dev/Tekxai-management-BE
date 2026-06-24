@@ -7,7 +7,8 @@ import {
   list_won_deals,
 } from '../services/leads.service.js';
 
-const isAdmin = (req) => ['ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR'].includes(req.user?.role_name);
+// Managers can see all users' records; regular MARKETING employees only see their own
+const isAdmin = (req) => req.user?.roles?.some(r => ['ADMIN', 'SUPER_ADMIN'].includes(r));
 
 // ── Upwork ─────────────────────────────────────────────────────────────────
 export const get_upwork_bids = async (req, res, next) => {
