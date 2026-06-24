@@ -31,7 +31,9 @@
     "express-rate-limit": "^8.5.2",
     "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.3",
-    "pg": "^8.22.0"
+    "multer": "^2.2.0",
+    "pg": "^8.22.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "prisma": "^7.8.0"

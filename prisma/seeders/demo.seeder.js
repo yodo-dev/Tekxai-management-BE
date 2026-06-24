@@ -1125,6 +1125,53 @@ async function seed_demo_assets(prisma, user_map) {
 
 // ─── Main Export ──────────────────────────────────────────────────────────────
 
+async function seed_demo_monitoring(prisma, user_map) {
+  const emails = ['muneeb-saleem@tekxai.ca', 'hafiz-azeem@tekxai.ca', 'sharjeel-khalid@tekxai.ca'];
+  const demo_users = emails.map(e => user_map[e]).filter(Boolean).slice(0, 3);
+  if (demo_users.length === 0) { console.warn('[demo] No users found for monitoring seed'); return; }
+
+  const colors = ['4f46e5', '0891b2', '059669'];
+  const labels = ['Dashboard', 'Code+Editor', 'Figma+Design', 'Slack+Chat', 'Browser', 'Terminal'];
+
+  for (let ui = 0; ui < demo_users.length; ui++) {
+    const user_id = demo_users[ui];
+    // Create a session per user
+    const session = await prisma.screenshot_sessions.create({
+      data: { user_id, started_at: new Date(Date.now() - 7200000), ended_at: new Date(), status: 'ENDED', agent_version: '1.0.0', os_platform: 'Windows' },
+    });
+    // Create 6 screenshots per user
+    for (let i = 0; i < 6; i++) {
+      const label = labels[i % labels.length];
+      const color = colors[ui % colors.length];
+      await prisma.screenshots.create({
+        data: {
+          session_id: session.id,
+          user_id,
+          file_key: `screenshots/demo/user${ui+1}/ss_00${i+1}.jpg`,
+          file_url: `https://via.placeholder.com/1280x800/${color}/ffffff?text=${label}`,
+          monitor_index: i % 2,
+          captured_at: new Date(Date.now() - (6 - i) * 600000),
+          width: 1920,
+          height: 1080,
+        },
+      });
+    }
+    // Create productivity for last 5 days
+    for (let d = 0; d < 5; d++) {
+      const day = new Date(); day.setDate(day.getDate() - d); day.setHours(0,0,0,0);
+      const active = 18000 + Math.floor(Math.random() * 10800);
+      const idle = 28800 - active;
+      const score = Math.round((active / 28800) * 100);
+      await prisma.productivity_sessions.upsert({
+        where: { user_id_date: { user_id, date: day } },
+        update: { active_seconds: active, idle_seconds: idle, mouse_events: 2000 + d * 300, keyboard_events: 5000 + d * 500, productivity_score: score },
+        create: { user_id, date: day, active_seconds: active, idle_seconds: idle, mouse_events: 2000 + d * 300, keyboard_events: 5000 + d * 500, productivity_score: score },
+      });
+    }
+  }
+  console.log(`[demo] Monitoring seeded for ${demo_users.length} users.`);
+}
+
 export default async function seed_demo(prisma) {
   console.log('[demo] Starting demo data seeder…');
 
@@ -1202,6 +1249,10 @@ export default async function seed_demo(prisma) {
   // 14. Demo Assets
   try { await seed_demo_assets(prisma, user_map); }
   catch (e) { console.error('[demo] Demo assets failed:', e.message); }
+
+  // 15. Monitoring (Screenshots + Productivity)
+  try { await seed_demo_monitoring(prisma, user_map); }
+  catch (e) { console.error('[demo] Monitoring failed:', e.message); }
 
   console.log('[demo] Demo seeder complete.');
 }

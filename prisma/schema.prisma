@@ -98,6 +98,7 @@ model users {
   expense_account           expense_accounts?
   expense_transactions      expense_transactions[] @relation("expense_txn_user")
   created_expense_txns      expense_transactions[] @relation("expense_txn_creator")
+  financial_reports         financial_reports[]
 
   @@index([department_id])
   @@index([division_id])
@@ -735,6 +736,8 @@ model daily_progress_reports {
   completion_percentage Int       @default(0)
   blockers              String?
   tomorrow_plan         String?
+  hours_worked          Decimal?  @db.Decimal(4, 1)
+  code_deployed         Boolean?
   manager_remarks       String?
   status                String    @default("SUBMITTED")
   reviewed_by           String?
@@ -1274,6 +1277,10 @@ model messages {
   content    String
   parent_id  String?
   file_key   String?
+  file_url   String?
+  file_name  String?
+  file_size  Int?
+  mime_type  String?
   is_edited  Boolean   @default(false)
   edited_at  DateTime?
   deleted_at DateTime?
@@ -1282,6 +1289,8 @@ model messages {
   channel   channels           @relation(fields: [channel_id], references: [id], onDelete: Cascade)
   user      users              @relation(fields: [user_id],    references: [id], onDelete: Cascade)
   reactions message_reactions[]
+  parent    messages?          @relation("MessageThread", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies   messages[]         @relation("MessageThread")
 
   @@index([channel_id])
   @@index([user_id])
@@ -1859,4 +1868,29 @@ model expense_transactions {
   @@index([expense_account_id])
   @@index([user_id])
   @@index([date])
+}
+
+// ─── Financial Reports (Upwork Reporting Module) ──────────────────────────────
+
+model financial_reports {
+  id                  String   @id @default(cuid())
+  name                String
+  period_from         DateTime
+  period_to           DateTime
+  uploaded_file_name  String?
+  raw_transactions    Json?
+  upwork_totals       Json?
+  manual_adjustments  Json?
+  salary_snapshot     Decimal? @db.Decimal(12, 2)
+  expense_snapshot    Decimal? @db.Decimal(12, 2)
+  final_result        Decimal? @db.Decimal(12, 2)
+  status              String   @default("DRAFT")
+  created_by          String
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  creator users @relation(fields: [created_by], references: [id])
+
+  @@index([created_by])
+  @@index([period_from])
 }

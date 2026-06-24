@@ -38,6 +38,7 @@ import increments_routes       from '../modules/increments/routes/increments.rou
 import overtime_routes         from '../modules/overtime/routes/overtime.routes.js';
 import hr_reports_routes       from '../modules/hr-reports/hr-reports.routes.js';
 import expenses_routes         from '../modules/expenses/routes/expenses.routes.js';
+import reporting_routes        from '../modules/reporting/routes/reporting.routes.js';
 
 const router = Router();
 
@@ -105,5 +106,8 @@ router.use('/hr-report',         hr_reports_routes);
 
 // Expense Management
 router.use('/expenses',          expenses_routes);
+
+// Financial Reporting (Super Admin only)
+router.use('/reporting',         reporting_routes);
 
 export default router;
