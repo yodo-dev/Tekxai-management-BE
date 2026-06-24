@@ -187,6 +187,11 @@ export async function forgot_password(email) {
     console.log(`[DEV] OTP for ${email}: ${code}  (user_id: ${user.id})`);
   }
 
+  // Send OTP email (fire-and-forget — don't fail the request if email fails)
+  send_otp_email(email, code, 'password reset').catch(err =>
+    console.error('[EMAIL] Failed to send OTP email:', err.message)
+  );
+
   return { message: AUTH_MESSAGES.OTP_SENT, _dev_user_id: env_config.env !== 'production' ? user.id : undefined };
 }
 

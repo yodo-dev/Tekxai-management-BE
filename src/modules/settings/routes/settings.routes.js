@@ -4,6 +4,15 @@ import { get_my_settings, update_password, update_prefs } from '../controllers/s
 import prisma from '../../../shared/database/client.js';
 
 const router = Router();
+
+// GET /settings/system/public — unauthenticated (must be before authenticate middleware)
+router.get('/system/public', async (req, res, next) => {
+  try {
+    const row = await prisma.system_settings.findUnique({ where: { key: 'screenshot_interval_minutes' } });
+    return res.json({ success: true, payload: { screenshot_interval_minutes: row?.value || '10' } });
+  } catch (e) { next(e); }
+});
+
 router.use(authenticate);
 router.get('/me', get_my_settings);
 router.patch('/preferences', update_prefs);
@@ -34,14 +43,6 @@ router.put('/system', SA, async (req, res, next) => {
       })
     ));
     return res.json({ success: true, message: 'Settings saved' });
-  } catch (e) { next(e); }
-});
-
-// GET /settings/system/public — unauthenticated subset (screenshot interval for desktop agent)
-router.get('/system/public', async (req, res, next) => {
-  try {
-    const row = await prisma.system_settings.findUnique({ where: { key: 'screenshot_interval_minutes' } });
-    return res.json({ success: true, payload: { screenshot_interval_minutes: row?.value || '10' } });
   } catch (e) { next(e); }
 });
 

@@ -44,8 +44,15 @@ export async function get_asset(id) {
   return a;
 }
 
+function parse_dates(d) {
+  if (d.purchase_date)   d.purchase_date   = new Date(d.purchase_date);
+  if (d.warranty_expiry) d.warranty_expiry = new Date(d.warranty_expiry);
+  return d;
+}
+
 export async function create_asset(data) {
   const { user_id, assigned_at, ...assetData } = data;
+  parse_dates(assetData);
   if (!assetData.asset_tag) {
     const count = await prisma.assets.count();
     assetData.asset_tag = `AST-${String(count + 1001).padStart(4, '0')}`;
@@ -70,6 +77,7 @@ export async function create_asset(data) {
 
 export async function update_asset(id, data) {
   await get_asset(id);
+  parse_dates(data);
   return prisma.assets.update({ where: { id }, data, include: ASSET_INCLUDE });
 }
 

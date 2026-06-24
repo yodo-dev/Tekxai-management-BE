@@ -53,6 +53,7 @@ model users {
   starred_items            starred_items[]
   notifications            notifications[]
   support_tickets          support_tickets[]
+  ticket_replies           ticket_replies[]
   marketing_deals          marketing_deals[]
   salary_builders          salary_builders[]
   upwork_bids              upwork_bids[]
@@ -545,10 +546,25 @@ model support_tickets {
   created_at      DateTime  @default(now())
   updated_at      DateTime  @updatedAt
 
-  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user    users            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  replies ticket_replies[]
 
   @@index([user_id])
   @@index([status])
+}
+
+model ticket_replies {
+  id             String   @id @default(cuid())
+  ticket_id      String
+  user_id        String
+  message        String
+  is_admin_reply Boolean  @default(false)
+  created_at     DateTime @default(now())
+
+  ticket support_tickets @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  user   users           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([ticket_id])
 }
 
 // ─── Marketing ───────────────────────────────────────────────────────────────

@@ -27,7 +27,9 @@ async function get_transporter() {
   return transporter;
 }
 
-const FROM = process.env.SMTP_FROM || 'Tekxai ERP <noreply@tekxai.com>';
+// FROM must match the authenticated SMTP user (server rejects mismatched domains)
+const FROM_NAME = process.env.FROM_NAME || 'Tekxai ERP';
+const FROM = process.env.SMTP_FROM || `"${FROM_NAME}" <${process.env.SMTP_USER || 'noreply@tekxai.com'}>`;
 
 async function send_email({ to, subject, html, text }) {
   const t = await get_transporter();

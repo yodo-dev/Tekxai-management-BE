@@ -11,6 +11,14 @@ async function next_ticket_number() {
 
 const USER_SELECT = { id: true, first_name: true, last_name: true, email: true, avatar: true };
 
+async function get_replies_for(ticket_id) {
+  return prisma.ticket_replies.findMany({
+    where: { ticket_id },
+    include: { user: { select: USER_SELECT } },
+    orderBy: { created_at: 'asc' },
+  });
+}
+
 async function get_attachments_for(entity_id) {
   return prisma.file_uploads.findMany({
     where: { entity_type: 'ticket', entity_id },
@@ -43,8 +51,27 @@ export async function get_ticket(id, user_id, is_admin) {
   const t = await prisma.support_tickets.findUnique({ where: { id }, include: { user: { select: USER_SELECT } } });
   if (!t) throw app_error('Ticket not found', 404);
   if (!is_admin && t.user_id !== user_id) throw app_error('Forbidden', 403);
-  const attachments = await get_attachments_for(id);
-  return normalize_ticket(t, attachments);
+  const [attachments, replies] = await Promise.all([get_attachments_for(id), get_replies_for(id)]);
+  return normalize_ticket(t, attachments, replies);
+}
+
+export async function add_ticket_reply(ticket_id, user_id, is_admin, { message }) {
+  const t = await prisma.support_tickets.findUnique({ where: { id: ticket_id } });
+  if (!t) throw app_error('Ticket not found', 404);
+  if (!is_admin && t.user_id !== user_id) throw app_error('Forbidden', 403);
+  if (!message?.trim()) throw app_error('Message is required');
+
+  const reply = await prisma.ticket_replies.create({
+    data: { ticket_id, user_id, message: message.trim(), is_admin_reply: is_admin },
+    include: { user: { select: USER_SELECT } },
+  });
+
+  // Auto move to in_progress when admin replies on pending ticket
+  if (is_admin && t.status === 'pending') {
+    await prisma.support_tickets.update({ where: { id: ticket_id }, data: { status: 'in_progress' } });
+  }
+
+  return reply;
 }
 
 export async function add_ticket_attachment(ticket_id, user_id, is_admin, { file_key, file_name, file_size, mime_type }) {
@@ -79,7 +106,7 @@ export async function update_ticket_status(id, { status, resolution_note }) {
   return prisma.support_tickets.update({ where: { id }, data });
 }
 
-function normalize_ticket(t, attachments = []) {
+function normalize_ticket(t, attachments = [], replies = []) {
   return {
     id: t.id,
     ticketNumber: t.ticket_number,
@@ -98,5 +125,6 @@ function normalize_ticket(t, attachments = []) {
     createdByEmail: t.user?.email || '',
     user: t.user,
     attachments,
+    replies,
   };
 }
