@@ -128,7 +128,8 @@ export async function create_user({ email, password_hash, first_name, last_name,
 }
 
 export async function update_user(id, data) {
-  const { role_id, ...rest } = data;
+  // Strip fields that are not direct columns on the users table
+  const { role_id, password, role, ...rest } = data;
 
   await prisma.users.update({
     where: { id },
