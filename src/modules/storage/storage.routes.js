@@ -3,6 +3,23 @@ import { authenticate, authorize } from '../../shared/middleware/authenticate.js
 import prisma from '../../shared/database/client.js';
 import { get_presigned_upload_url, get_presigned_download_url, delete_file } from './storage.service.js';
 import { randomBytes } from 'crypto';
+import multer from 'multer';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const UPLOAD_DIR = path.join(__dirname, '../../../../uploads');
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const disk_storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `${Date.now()}_${randomBytes(8).toString('hex')}${ext}`);
+  },
+});
+const upload = multer({ storage: disk_storage, limits: { fileSize: 20 * 1024 * 1024 } });
 
 function gen_key(entity_type, user_id, file_name) {
   const ext = file_name.split('.').pop() || 'bin';
@@ -13,6 +30,16 @@ function gen_key(entity_type, user_id, file_name) {
 const router = Router();
 router.use(authenticate);
 const MANAGER = authorize('ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
+
+// POST /storage/upload — direct multer upload (no S3 required)
+router.post('/upload', upload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'No file provided' });
+    const host = `${req.protocol}://${req.get('host')}`;
+    const file_url = `${host}/uploads/${req.file.filename}`;
+    return res.json({ success: true, payload: { file_url, file_name: req.file.originalname, file_size: req.file.size, mime_type: req.file.mimetype } });
+  } catch (e) { next(e); }
+});
 
 // POST /storage/presign — request presigned upload URL
 router.post('/presign', async (req, res, next) => {
