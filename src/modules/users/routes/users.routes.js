@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
-import { create_user_ctrl, delete_user_ctrl, get_user_by_id, get_users, update_my_profile, get_my_activity, update_user_ctrl } from '../controllers/users.controller.js';
+import { create_user_ctrl, delete_user_ctrl, bulk_delete_users_ctrl, get_user_by_id, get_users, update_my_profile, get_my_activity, update_user_ctrl } from '../controllers/users.controller.js';
 import prisma from '../../../shared/database/client.js';
 
 const router = Router();
@@ -24,5 +24,6 @@ router.get('/:id',         get_user_by_id);
 router.post('/',           ADMIN_HR, create_user_ctrl);
 router.put('/:id',         ADMIN_HR, update_user_ctrl);
 router.delete('/:id',      ADMIN, delete_user_ctrl);
+router.post('/bulk-delete', ADMIN, bulk_delete_users_ctrl);
 
 export default router;

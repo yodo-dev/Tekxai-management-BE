@@ -41,6 +41,17 @@ export async function delete_user_ctrl(req, res, next) {
   } catch (e) { return next(e); }
 }
 
+export async function bulk_delete_users_ctrl(req, res, next) {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'ids array required' });
+    }
+    await Promise.all(ids.map(id => delete_user(id)));
+    return res.json({ success: true, message: `${ids.length} user(s) deleted` });
+  } catch (e) { return next(e); }
+}
+
 // PATCH /user/me — employee updates own profile
 export async function update_my_profile(req, res, next) {
   try {
