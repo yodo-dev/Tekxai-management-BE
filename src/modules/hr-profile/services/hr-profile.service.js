@@ -65,9 +65,13 @@ export async function upsert_hr_profile(user_id, data) {
 }
 
 export async function get_full_employee_record(user_id) {
+  // Accept either a DB cuid or a human-readable employee_id (e.g. TXI-0046)
+  const id_filter = user_id.startsWith('TXI-') || /^[A-Z]+-\d+$/.test(user_id)
+    ? { employee_id: user_id }
+    : { id: user_id };
   const [user, profile, documents, contracts, onboarding_tasks, leave_balances, performance_scores, asset_assignments, policy_acknowledgements] = await Promise.all([
     prisma.users.findFirst({
-      where: { id: user_id, deleted_at: null },
+      where: { ...id_filter, deleted_at: null },
       select: {
         id: true, email: true, first_name: true, last_name: true, phone: true, avatar: true,
         department: true, division: true, position: true, designation: true, employee_id: true,
