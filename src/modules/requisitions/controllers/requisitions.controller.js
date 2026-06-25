@@ -9,7 +9,11 @@ import prisma from '../../../shared/database/client.js';
 export async function list_ctrl(req, res, next) {
   try {
     const { department_id, status, category, priority, page, limit, mine } = req.query;
-    const requester_id = mine === 'true' ? req.user.id : undefined;
+    const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN', 'HR'];
+    const role = req.user?.role_name || req.user?.role || '';
+    const isAdmin = ADMIN_ROLES.includes(role);
+    // Non-admins always see only their own; admins can pass ?mine=true to filter
+    const requester_id = (!isAdmin || mine === 'true') ? req.user.id : undefined;
     const result = await list_requisitions({ requester_id, department_id, status, category, priority, page, limit });
     return res.json({ success: true, payload: result });
   } catch (e) { return next(e); }

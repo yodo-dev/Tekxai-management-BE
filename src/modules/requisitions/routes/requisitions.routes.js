@@ -7,9 +7,9 @@ router.use(authenticate);
 
 const ADMIN_HR = authorize('SUPER_ADMIN', 'ADMIN', 'HR');
 
-router.get('/meta',                ADMIN_HR, get_meta_ctrl);
+router.get('/meta',                get_meta_ctrl);   // any authenticated user (needed for create form)
 router.get('/stats',               ADMIN_HR, stats_ctrl);
-router.get('/',                    ADMIN_HR,    list_ctrl);
+router.get('/',                    list_ctrl);        // scoped to own records for non-admin roles
 router.post('/',   create_ctrl);
 router.get('/:id',                 get_ctrl);
 router.put('/:id',                 update_ctrl);
