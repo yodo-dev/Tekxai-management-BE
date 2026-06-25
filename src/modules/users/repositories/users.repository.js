@@ -128,12 +128,16 @@ export async function create_user({ email, password_hash, first_name, last_name,
 }
 
 export async function update_user(id, data) {
-  // Strip fields that are not direct columns on the users table
-  const { role_id, password, role, ...rest } = data;
+  // Strip relation objects and non-column fields; map department_id correctly
+  const { role_id, password, role, department, division, supervisor, ...rest } = data;
+
+  // If department_id is a string ID use it; otherwise drop it (frontend may send name)
+  const update_data = { ...rest, updated_at: new Date() };
+  if (rest.department_id === null || rest.department_id === '') delete update_data.department_id;
 
   await prisma.users.update({
     where: { id },
-    data: { ...rest, updated_at: new Date() },
+    data: update_data,
   });
 
   if (role_id) {
