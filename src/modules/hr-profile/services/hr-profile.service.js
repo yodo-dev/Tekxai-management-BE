@@ -69,33 +69,36 @@ export async function get_full_employee_record(user_id) {
   const id_filter = user_id.startsWith('TXI-') || /^[A-Z]+-\d+$/.test(user_id)
     ? { employee_id: user_id }
     : { id: user_id };
-  const [user, profile, documents, contracts, onboarding_tasks, leave_balances, performance_scores, asset_assignments, policy_acknowledgements] = await Promise.all([
-    prisma.users.findFirst({
-      where: { ...id_filter, deleted_at: null },
-      select: {
-        id: true, email: true, first_name: true, last_name: true, phone: true, avatar: true,
-        department: true, division: true, position: true, designation: true, employee_id: true,
-        status: true, is_active: true, hire_date: true, created_at: true,
-        roles: { include: { role: { select: { id: true, name: true } } } },
-        team_memberships: { include: { team: { select: { id: true, name: true } } } },
-        job_description: true,
-      },
-    }),
-    prisma.employee_profiles.findUnique({ where: { user_id } }),
-    prisma.employee_documents.findMany({ where: { user_id }, orderBy: { created_at: 'desc' } }),
-    prisma.contracts.findMany({ where: { user_id }, orderBy: { created_at: 'desc' }, take: 10 }),
-    prisma.onboarding_tasks.findMany({ where: { user_id }, orderBy: { created_at: 'asc' } }),
-    prisma.leave_balances.findMany({ where: { user_id }, include: { policy: true } }),
-    prisma.employee_performance_scores.findMany({ where: { user_id }, orderBy: { created_at: 'desc' }, take: 5 }),
+  const user = await prisma.users.findFirst({
+    where: { ...id_filter, deleted_at: null },
+    select: {
+      id: true, email: true, first_name: true, last_name: true, phone: true, avatar: true,
+      department: true, division: true, position: true, designation: true, employee_id: true,
+      status: true, is_active: true, hire_date: true, created_at: true,
+      roles: { include: { role: { select: { id: true, name: true } } } },
+      team_memberships: { include: { team: { select: { id: true, name: true } } } },
+      job_description: true,
+    },
+  });
+
+  if (!user) return null;
+
+  const db_id = user.id;
+
+  const [profile, documents, contracts, onboarding_tasks, leave_balances, performance_scores, asset_assignments, policy_acknowledgements] = await Promise.all([
+    prisma.employee_profiles.findUnique({ where: { user_id: db_id } }),
+    prisma.employee_documents.findMany({ where: { user_id: db_id }, orderBy: { created_at: 'desc' } }),
+    prisma.contracts.findMany({ where: { user_id: db_id }, orderBy: { created_at: 'desc' }, take: 10 }),
+    prisma.onboarding_tasks.findMany({ where: { user_id: db_id }, orderBy: { created_at: 'asc' } }),
+    prisma.leave_balances.findMany({ where: { user_id: db_id }, include: { policy: true } }),
+    prisma.employee_performance_scores.findMany({ where: { user_id: db_id }, orderBy: { created_at: 'desc' }, take: 5 }),
     prisma.asset_assignments.findMany({
-      where: { user_id },
+      where: { user_id: db_id },
       include: { asset: { include: { category: true } } },
       orderBy: { assigned_at: 'desc' },
     }),
-    prisma.policy_acknowledgements.findMany({ where: { user_id }, include: { policy: { select: { id: true, title: true, category: true } } } }),
+    prisma.policy_acknowledgements.findMany({ where: { user_id: db_id }, include: { policy: { select: { id: true, title: true, category: true } } } }),
   ]);
-
-  if (!user) return null;
 
   return {
     user: {

@@ -9,7 +9,7 @@ router.use(authenticate);
 const ADMIN = authorize('ADMIN', 'SUPER_ADMIN');
 const ADMIN_HR = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
 
-router.get('/roles', ADMIN, async (_req, res, next) => {
+router.get('/roles', ADMIN_HR, async (_req, res, next) => {
   try {
     const roles = await prisma.roles.findMany({ orderBy: { level: 'desc' } });
     return res.json({ success: true, payload: roles });
