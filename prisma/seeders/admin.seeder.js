@@ -202,67 +202,26 @@ export async function seedAdmin(prisma) {
   await upsert_roles(prisma);
   const dept_ids = await upsert_departments(prisma);
 
-  // The canonical demo password used for all role demo users
-  const DEMO_PASSWORD = process.env.SEED_SUPER_ADMIN_PASSWORD || 'SuperAdmin@123';
+  const PASSWORD = process.env.SEED_SUPER_ADMIN_PASSWORD || 'SuperAdmin@123';
 
   // Super Admin
   await upsert_user(prisma, {
     email: process.env.SEED_SUPER_ADMIN_EMAIL || 'superadmin@tekxai.com',
-    password: DEMO_PASSWORD,
-    firstName: process.env.SEED_SUPER_ADMIN_FIRST_NAME || 'Super',
-    lastName: process.env.SEED_SUPER_ADMIN_LAST_NAME || 'Admin',
+    password: PASSWORD,
+    firstName: 'Super',
+    lastName: 'Admin',
     roleName: ROLE_NAMES.SUPER_ADMIN,
     department_id: dept_ids['OPS'],
   });
 
-  // Admin
-  await upsert_user(prisma, {
-    email: process.env.SEED_ADMIN_EMAIL || 'admin@tekxai.com',
-    password: DEMO_PASSWORD,
-    firstName: process.env.SEED_ADMIN_FIRST_NAME || 'System',
-    lastName: process.env.SEED_ADMIN_LAST_NAME || 'Admin',
-    roleName: ROLE_NAMES.ADMIN,
-    department_id: dept_ids['OPS'],
-  });
-
-  // HR role demo user
+  // HR
   await upsert_user(prisma, {
     email: 'hr@tekxai.com',
-    password: DEMO_PASSWORD,
+    password: PASSWORD,
     firstName: 'HR',
     lastName: 'Manager',
     roleName: ROLE_NAMES.HR,
     department_id: dept_ids['HR'],
-  });
-
-  // Division Manager demo user
-  await upsert_user(prisma, {
-    email: 'divmanager@tekxai.com',
-    password: DEMO_PASSWORD,
-    firstName: 'Division',
-    lastName: 'Manager',
-    roleName: ROLE_NAMES.DIVISION_MANAGER,
-    department_id: dept_ids['ENG'],
-  });
-
-  // Marketing role demo user
-  await upsert_user(prisma, {
-    email: 'marketing@tekxai.com',
-    password: DEMO_PASSWORD,
-    firstName: 'Marketing',
-    lastName: 'Lead',
-    roleName: ROLE_NAMES.MARKETING,
-    department_id: dept_ids['MKT'],
-  });
-
-  // Employee demo user
-  await upsert_user(prisma, {
-    email: process.env.SEED_EMPLOYEE_EMAIL || 'employee@tekxai.com',
-    password: DEMO_PASSWORD,
-    firstName: process.env.SEED_EMPLOYEE_FIRST_NAME || 'Demo',
-    lastName: process.env.SEED_EMPLOYEE_LAST_NAME || 'Employee',
-    roleName: ROLE_NAMES.EMPLOYEE,
-    department_id: dept_ids['ENG'],
   });
 
   await seed_time_off_policies(prisma);
