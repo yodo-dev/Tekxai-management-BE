@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import downloads_routes     from '../modules/downloads/routes/downloads.routes.js';
 import auth_routes          from '../modules/auth/routes/auth.routes.js';
 import users_routes         from '../modules/users/routes/users.routes.js';
 import teams_routes         from '../modules/teams/routes/teams.routes.js';
@@ -44,6 +45,9 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 
 const router = Router();
+
+// Desktop app
+router.use('/downloads',         downloads_routes);
 
 // Core ERP
 router.use('/auth',              auth_routes);

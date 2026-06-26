@@ -100,6 +100,7 @@ model users {
   expense_transactions      expense_transactions[] @relation("expense_txn_user")
   created_expense_txns      expense_transactions[] @relation("expense_txn_creator")
   financial_reports         financial_reports[]
+  download_events           download_events[]
 
   @@index([department_id])
   @@index([division_id])
@@ -1917,4 +1918,21 @@ model system_settings {
   value      String
   updated_by String?
   updated_at DateTime @updatedAt
+}
+
+// ─── Desktop App Download Analytics ──────────────────────────────────────────
+model download_events {
+  id         String   @id @default(cuid())
+  platform   String   // 'windows' | 'mac' | 'linux'
+  version    String?
+  user_id    String?
+  ip_address String?
+  user_agent String?
+  created_at DateTime @default(now())
+
+  user users? @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@index([platform])
+  @@index([user_id])
+  @@index([created_at])
 }
