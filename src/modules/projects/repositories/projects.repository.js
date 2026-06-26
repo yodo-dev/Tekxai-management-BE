@@ -30,10 +30,15 @@ function normalize_project(p, user_id = null) {
   };
 }
 
-export async function find_projects({ search, page = 1, limit = 20, status, user_id } = {}) {
+export async function find_projects({ search, page = 1, limit = 20, status, user_id, member_only = false } = {}) {
   page = +page || 1; limit = +limit || 20;
   const skip = (page - 1) * limit;
   const where = { deleted_at: null };
+
+  // Employees only see projects they are a member of
+  if (member_only && user_id) {
+    where.members = { some: { user_id } };
+  }
 
   if (search) {
     where.OR = [
