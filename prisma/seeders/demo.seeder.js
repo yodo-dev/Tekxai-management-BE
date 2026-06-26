@@ -166,6 +166,7 @@ async function seed_demo_employees(prisma, dept_map) {
           hire_date: hire_date || user.hire_date,
           status: 'ACTIVE',
           is_active: true,
+          deleted_at: null,
         },
       });
     }
@@ -1134,7 +1135,7 @@ async function seed_demo_monitoring(prisma, user_map) {
   const labels = ['Dashboard', 'Code+Editor', 'Figma+Design', 'Slack+Chat', 'Browser', 'Terminal'];
 
   for (let ui = 0; ui < demo_users.length; ui++) {
-    const user_id = demo_users[ui];
+    const user_id = demo_users[ui].id;
     // Create a session per user
     const session = await prisma.screenshot_sessions.create({
       data: { user_id, started_at: new Date(Date.now() - 7200000), ended_at: new Date(), status: 'ENDED', agent_version: '1.0.0', os_platform: 'Windows' },

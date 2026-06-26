@@ -88,7 +88,7 @@ async function upsert_user(prisma, { email, password, firstName, lastName, roleN
   if (existing) {
     user = await prisma.users.update({
       where: { email },
-      data: { first_name: firstName, last_name: lastName, is_active: true, department_id },
+      data: { first_name: firstName, last_name: lastName, is_active: true, status: 'ACTIVE', department_id, deleted_at: null },
     });
   } else {
     user = await prisma.users.create({
