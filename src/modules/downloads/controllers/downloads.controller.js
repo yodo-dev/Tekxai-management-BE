@@ -9,7 +9,7 @@ const METADATA_PATH = process.env.DOWNLOADS_DIR
   ? join(process.env.DOWNLOADS_DIR, 'latest', 'metadata.json')
   : '/home/ubuntu/downloads/latest/metadata.json';
 
-const BASE_URL = process.env.DOWNLOADS_BASE_URL || 'https://tekxai.services/downloads/latest';
+const BASE_URL = process.env.DOWNLOADS_BASE_URL || 'https://api.tekxai.services/downloads';
 
 function read_metadata() {
   try {
