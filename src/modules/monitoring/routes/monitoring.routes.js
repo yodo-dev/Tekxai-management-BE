@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../../shared/middleware/authenticate.js';
-import { end_session, get_productivity, list_screenshots, start_session, update_productivity, upload_screenshot } from '../controllers/monitoring.controller.js';
+import { end_session, get_productivity, list_screenshots, start_session, update_productivity, upload_screenshot, log_app_usage, get_app_usage } from '../controllers/monitoring.controller.js';
 const router = Router();
 router.use(authenticate);
 router.post('/session/start', start_session);
@@ -9,4 +9,6 @@ router.post('/screenshot', upload_screenshot);
 router.get('/screenshots', list_screenshots);
 router.post('/productivity', update_productivity);
 router.get('/productivity', get_productivity);
+router.post('/app-usage', log_app_usage);
+router.get('/app-usage', get_app_usage);
 export default router;

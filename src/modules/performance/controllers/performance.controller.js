@@ -10,6 +10,8 @@ import {
   update_daily_report,
   upsert_score,
 } from '../services/performance.service.js';
+import { send_performance_score_email } from '../../email/email.service.js';
+import prisma from '../../../shared/database/client.js';
 
 const is_admin = (req) => req.user.roles.some((r) => ['ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER'].includes(r));
 
@@ -49,7 +51,15 @@ export async function post_score(req, res, next) {
   try {
     const data = { ...req.body };
     if (!data.user_id && data.employee_id) data.user_id = data.employee_id;
-    return res.json({ success: true, payload: await upsert_score(data) });
+    const result = await upsert_score(data);
+    // Email the employee their performance score
+    if (data.user_id) {
+      const employee = await prisma.users.findUnique({ where: { id: data.user_id }, select: { email: true, first_name: true } });
+      if (employee?.email) {
+        send_performance_score_email(employee.email, employee.first_name || 'Employee', data.period || '', result.total_score).catch(() => {});
+      }
+    }
+    return res.json({ success: true, payload: result });
   } catch (e) { return next(e); }
 }
 

@@ -142,3 +142,40 @@ export async function send_offer_email(to, name, position, offer_url) {
     </div>`,
   });
 }
+
+export async function send_task_assigned_email(to, name, task_title, project_name) {
+  return send_email({
+    to,
+    subject: `New Task Assigned: ${task_title}`,
+    text: `Hi ${name},\n\nYou have been assigned a new task: "${task_title}" in project "${project_name}".`,
+    html: `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">
+      <h2 style="color:#005CDA">New Task Assigned</h2>
+      <p>Hi <strong>${name}</strong>,</p>
+      <p>You have been assigned: <strong>${task_title}</strong> in project <strong>${project_name}</strong>.</p>
+    </div>`,
+  });
+}
+
+export async function send_expense_approved_email(to, name, amount, description) {
+  return send_email({
+    to, subject: 'Expense Claim Approved',
+    text: `Hi ${name}, your expense claim of ${amount} for "${description}" has been approved.`,
+    html: `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px"><h2 style="color:#005CDA">Expense Approved</h2><p>Hi <strong>${name}</strong>, your expense claim of <strong>${amount}</strong> for <strong>${description}</strong> has been <span style="color:#10b981">approved</span>.</p></div>`,
+  });
+}
+
+export async function send_expense_rejected_email(to, name, amount, description, reason) {
+  return send_email({
+    to, subject: 'Expense Claim Rejected',
+    text: `Hi ${name}, your expense claim of ${amount} for "${description}" was rejected. Reason: ${reason || 'Not specified'}`,
+    html: `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px"><h2 style="color:#005CDA">Expense Rejected</h2><p>Hi <strong>${name}</strong>, your expense claim of <strong>${amount}</strong> for <strong>${description}</strong> was <span style="color:#ef4444">rejected</span>.</p>${reason ? `<p>Reason: <em>${reason}</em></p>` : ''}</div>`,
+  });
+}
+
+export async function send_performance_score_email(to, name, period, total_score) {
+  return send_email({
+    to, subject: `Performance Review — ${period}`,
+    text: `Hi ${name}, your performance score for ${period} is: ${total_score}/100.`,
+    html: `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px"><h2 style="color:#005CDA">Performance Review</h2><p>Hi <strong>${name}</strong>, your performance score for <strong>${period}</strong> has been submitted.</p><div style="font-size:40px;font-weight:900;text-align:center;color:#005CDA;padding:16px 0">${total_score}<span style="font-size:20px">/100</span></div></div>`,
+  });
+}

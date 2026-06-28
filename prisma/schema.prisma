@@ -101,6 +101,7 @@ model users {
   created_expense_txns      expense_transactions[] @relation("expense_txn_creator")
   financial_reports         financial_reports[]
   download_events           download_events[]
+  app_usage_logs            app_usage_logs[]
 
   @@index([department_id])
   @@index([division_id])
@@ -994,8 +995,9 @@ model screenshot_sessions {
   os_platform   String?
   created_at    DateTime  @default(now())
 
-  user        users         @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  screenshots screenshots[]
+  user           users            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  screenshots    screenshots[]
+  app_usage_logs app_usage_logs[]
 
   @@index([user_id])
 }
@@ -1935,4 +1937,24 @@ model download_events {
   @@index([platform])
   @@index([user_id])
   @@index([created_at])
+}
+
+// ─── App Usage Logs ───────────────────────────────────────────────────────────
+model app_usage_logs {
+  id               String   @id @default(cuid())
+  session_id       String
+  user_id          String
+  app_name         String
+  window_title     String?
+  url              String?
+  duration_seconds Int      @default(0)
+  captured_at      DateTime @default(now())
+  created_at       DateTime @default(now())
+
+  user    users               @relation(fields: [user_id],    references: [id])
+  session screenshot_sessions @relation(fields: [session_id], references: [id])
+
+  @@index([user_id])
+  @@index([session_id])
+  @@index([captured_at])
 }

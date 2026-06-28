@@ -1,5 +1,6 @@
 import prisma from '../../../shared/database/client.js';
 import { compute_account_summary, build_ledger } from '../services/expenses.service.js';
+import { send_expense_approved_email, send_expense_rejected_email } from '../../email/email.service.js';
 
 const ok   = (res, payload, message = 'OK', status = 200) => res.status(status).json({ success: true, message, payload });
 const fail = (res, message, status = 400) => res.status(status).json({ success: false, message });
@@ -135,6 +136,13 @@ export async function add_transaction(req, res, next) {
       },
       include: TX_INCLUDE,
     });
+    // Notify the employee when an expense entry is approved/recorded for them
+    if (transaction_type === 'expense') {
+      const employee = await prisma.users.findUnique({ where: { id: userId }, select: { email: true, first_name: true } });
+      if (employee?.email) {
+        send_expense_approved_email(employee.email, employee.first_name || 'Employee', `PKR ${(+total_amount).toLocaleString()}`, title).catch(() => {});
+      }
+    }
     return ok(res, txn, 'Transaction added', 201);
   } catch (e) { next(e); }
 }
