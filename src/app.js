@@ -10,6 +10,8 @@ import { error_handler, not_found_handler } from './shared/middleware/error-hand
 
 const app = express();
 
+app.set('trust proxy', 1);
+
 // Disable CSP only for swagger routes so inline scripts work
 app.use(['/api-docs', '/api/v1/api-docs'], helmet({ contentSecurityPolicy: false }));
 app.use(helmet());
