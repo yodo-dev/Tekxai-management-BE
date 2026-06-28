@@ -5,6 +5,7 @@ import {
 import { validate_create_task } from '../validators/tasks.validation.js';
 import { send_task_assigned_email } from '../../email/email.service.js';
 import prisma from '../../../shared/database/client.js';
+import { fire_webhook } from '../../../shared/services/webhook.service.js';
 
 function ok(res, payload, message = 'OK', status = 200) {
   return res.status(status).json({ success: true, message, payload });
@@ -46,6 +47,7 @@ export async function create_task_ctrl(req, res, next) {
         send_task_assigned_email(assignee.email, assignee.first_name || 'Team Member', task.title, project?.title || 'Unknown Project').catch(() => {});
       }
     }
+    fire_webhook('task.created', { id: task.id, title: task.title }).catch(() => {});
     return ok(res, task, 'Task created', 201);
   } catch (err) { next(err); }
 }

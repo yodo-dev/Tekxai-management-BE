@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate, authorize, can_or_role } from '../../../shared/middleware/authenticate.js';
 import prisma from '../../../shared/database/client.js';
+import { get_schema, run_report, list_saved, save_report, delete_saved } from '../report_builder.controller.js';
 
 const router = Router();
 router.use(authenticate);
@@ -244,5 +245,11 @@ router.get('/projects', MANAGER, async (req, res, next) => {
     return res.json({ success: true, payload: rows, total: rows.length });
   } catch (e) { return next(e); }
 });
+
+router.get('/builder/schema', get_schema);
+router.post('/builder/run', run_report);
+router.get('/builder/saved', list_saved);
+router.post('/builder/saved', save_report);
+router.delete('/builder/saved/:id', delete_saved);
 
 export default router;

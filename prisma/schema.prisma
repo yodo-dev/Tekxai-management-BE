@@ -110,6 +110,9 @@ model users {
   two_factor_enabled        Boolean  @default(false)
   two_factor_secret         String?
   google_id                 String?  @unique
+  created_webhooks          webhooks[]              @relation("webhook_creator")
+  saved_reports             saved_reports[]         @relation("saved_reports_creator")
+  google_calendar_token     google_calendar_tokens?
 
   @@index([department_id])
   @@index([division_id])
@@ -1035,6 +1038,66 @@ model screenshots {
   @@index([captured_at])
 }
 
+// ─── Webhooks ─────────────────────────────────────────────────────────────────
+
+model webhooks {
+  id          String   @id @default(cuid())
+  name        String
+  url         String
+  secret      String?
+  events      String[]
+  active      Boolean  @default(true)
+  created_by  String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  creator     users    @relation("webhook_creator", fields: [created_by], references: [id])
+  deliveries  webhook_deliveries[]
+}
+
+model webhook_deliveries {
+  id           String   @id @default(cuid())
+  webhook_id   String
+  event        String
+  payload      Json
+  status_code  Int?
+  response     String?
+  delivered_at DateTime @default(now())
+  success      Boolean  @default(false)
+
+  webhook      webhooks @relation(fields: [webhook_id], references: [id], onDelete: Cascade)
+}
+
+// ─── Saved Reports ────────────────────────────────────────────────────────────
+
+model saved_reports {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  config      Json
+  is_public   Boolean  @default(false)
+  created_by  String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  creator     users    @relation("saved_reports_creator", fields: [created_by], references: [id])
+}
+
+// ─── Google Calendar Tokens ───────────────────────────────────────────────────
+
+model google_calendar_tokens {
+  id            String    @id @default(cuid())
+  user_id       String    @unique
+  access_token  String
+  refresh_token String?
+  expires_at    DateTime?
+  scope         String?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  user          users     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
 model productivity_sessions {
   id                 String   @id @default(cuid())
   user_id            String
@@ -1888,6 +1951,8 @@ model expense_transactions {
   paid_to            String?
   notes              String?
   attachment_url     String?
+  receipt_url        String?
+  receipt_key        String?
   created_by         String?
   created_at         DateTime @default(now())
   updated_at         DateTime @updatedAt

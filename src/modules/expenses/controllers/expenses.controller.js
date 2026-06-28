@@ -1,6 +1,7 @@
 import prisma from '../../../shared/database/client.js';
 import { compute_account_summary, build_ledger } from '../services/expenses.service.js';
 import { send_expense_approved_email, send_expense_rejected_email } from '../../email/email.service.js';
+import { fire_webhook } from '../../../shared/services/webhook.service.js';
 
 const ok   = (res, payload, message = 'OK', status = 200) => res.status(status).json({ success: true, message, payload });
 const fail = (res, message, status = 400) => res.status(status).json({ success: false, message });
@@ -142,6 +143,7 @@ export async function add_transaction(req, res, next) {
       if (employee?.email) {
         send_expense_approved_email(employee.email, employee.first_name || 'Employee', `PKR ${(+total_amount).toLocaleString()}`, title).catch(() => {});
       }
+      fire_webhook('expense.approved', { id: txn.id, amount: txn.total_amount }).catch(() => {});
     }
     return ok(res, txn, 'Transaction added', 201);
   } catch (e) { next(e); }
@@ -198,6 +200,19 @@ export async function create_category(req, res, next) {
       create: { name, description },
     });
     return ok(res, cat, 'Category created', 201);
+  } catch (e) { next(e); }
+}
+
+export async function update_receipt(req, res, next) {
+  try {
+    const { receipt_url, receipt_key } = req.body;
+    if (!receipt_url) return fail(res, 'receipt_url required');
+    const expense = await prisma.expense_transactions.findUnique({ where: { id: req.params.id } });
+    if (!expense) return fail(res, 'Not found', 404);
+    const is_admin = req.user.roles.some(r => ['ADMIN','SUPER_ADMIN','HR'].includes(r));
+    if (!is_admin && expense.user_id !== req.user.id) return fail(res, 'Forbidden', 403);
+    const updated = await prisma.expense_transactions.update({ where: { id: req.params.id }, data: { receipt_url, receipt_key: receipt_key || null } });
+    return ok(res, updated, 'Receipt attached');
   } catch (e) { next(e); }
 }
 

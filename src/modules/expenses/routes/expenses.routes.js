@@ -4,7 +4,7 @@ import {
   list_accounts, get_account, create_account, update_account,
   list_transactions, add_transaction, update_transaction, delete_transaction,
   list_categories, create_category,
-  get_summary,
+  get_summary, update_receipt,
 } from '../controllers/expenses.controller.js';
 
 const router = Router();
@@ -23,5 +23,6 @@ router.get('/accounts/:userId/transactions',    SA, list_transactions);
 router.post('/accounts/:userId/transactions',   SA, add_transaction);
 router.put('/transactions/:id',           SA, update_transaction);
 router.delete('/transactions/:id',        SA, delete_transaction);
+router.patch('/transactions/:id/receipt',     update_receipt);
 
 export default router;
