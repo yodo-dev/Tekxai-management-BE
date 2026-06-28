@@ -36,6 +36,19 @@ export function invalidate_user_cache(user_id) {
   else user_cache.clear();
 }
 
+/**
+ * Sync helper: returns true (granted), false (denied), or null (not in cache / no override).
+ * Used by can_or_role for a fast synchronous first-pass before any DB call.
+ */
+export function get_user_cached_override(user_id, permission) {
+  const entry = user_cache.get(user_id);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > USER_CACHE_TTL) { user_cache.delete(user_id); return null; }
+  const overrides = entry.overrides;
+  if (!overrides.has(permission)) return null;
+  return overrides.get(permission); // true or false
+}
+
 // ── Core permission check ──────────────────────────────────────────────────────
 /**
  * Precedence order:

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, authorize, can_or_role } from '../../../shared/middleware/authenticate.js';
 import {
   approve_bonus_ctrl,
   calc_bonus,
@@ -15,7 +15,8 @@ import {
 
 const router = Router();
 router.use(authenticate);
-const MANAGER = authorize('ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
+const MANAGER = can_or_role('erp.performance.view',    'ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
+const APPROVE = can_or_role('erp.performance.approve', 'ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
 
 router.get('/daily-report', get_reports);
 router.post('/daily-report', post_report);
@@ -27,7 +28,7 @@ router.post('/score', MANAGER, post_score);
 
 router.get('/bonus', get_bonus);
 router.post('/bonus/calculate', MANAGER, calc_bonus);
-router.post('/bonus/:id/approve', MANAGER, approve_bonus_ctrl);
-router.post('/bonus/:id/pay', authorize('ADMIN', 'SUPER_ADMIN'), pay_bonus_ctrl);
+router.post('/bonus/:id/approve', APPROVE, approve_bonus_ctrl);
+router.post('/bonus/:id/pay', can_or_role('erp.performance.approve', 'ADMIN', 'SUPER_ADMIN'), pay_bonus_ctrl);
 
 export default router;

@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, authorize, can_or_role } from '../../../shared/middleware/authenticate.js';
 import { create_dept, create_div, delete_dept, get_dept, get_departments, get_divs, update_dept } from '../controllers/departments.controller.js';
 
 const router = Router();
 router.use(authenticate);
-const ADMIN = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
+const ADMIN = can_or_role('erp.departments.view', 'ADMIN', 'SUPER_ADMIN', 'HR');
 
 router.get('/', get_departments);
 router.post('/', ADMIN, create_dept);

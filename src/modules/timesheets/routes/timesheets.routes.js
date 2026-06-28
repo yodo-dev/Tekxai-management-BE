@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, authorize, can_or_role } from '../../../shared/middleware/authenticate.js';
 import {
   approve_edit,
   approve_time_off_ctrl,
@@ -24,7 +24,8 @@ import {
 const router = Router();
 router.use(authenticate);
 
-const MANAGER = authorize('ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
+const MANAGER = can_or_role('erp.timesheet.view', 'ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
+const APPROVE = can_or_role('erp.timesheet.approve', 'ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
 
 // Attendance clock-in / clock-out
 router.post('/clock-in',                       clock_in);
@@ -44,8 +45,8 @@ router.get('/my-requests',                     my_requests);
 router.get('/time-off/policies',               get_time_off_policies);
 router.get('/time-off',                        MANAGER, list_time_off_ctrl);
 router.post('/time-off/request',               time_off_request);
-router.post('/time-off/:id/approve',           MANAGER, approve_time_off_ctrl);
-router.post('/time-off/:id/reject',            MANAGER, reject_time_off_ctrl);
+router.post('/time-off/:id/approve',           APPROVE, approve_time_off_ctrl);
+router.post('/time-off/:id/reject',            APPROVE, reject_time_off_ctrl);
 
 // Manual entry CRUD
 router.post('/entry',                          create_entry_ctrl);
@@ -54,7 +55,7 @@ router.delete('/entry/:id',                    delete_entry_ctrl);
 router.post('/entry/:id/request',              request_entry_edit);
 
 // Edit request approvals
-router.post('/edit-request/:id/approve',       MANAGER, approve_edit);
-router.post('/edit-request/:id/reject',        MANAGER, reject_edit);
+router.post('/edit-request/:id/approve',       APPROVE, approve_edit);
+router.post('/edit-request/:id/reject',        APPROVE, reject_edit);
 
 export default router;

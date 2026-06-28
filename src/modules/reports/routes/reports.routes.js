@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, authorize, can_or_role } from '../../../shared/middleware/authenticate.js';
 import prisma from '../../../shared/database/client.js';
 
 const router = Router();
 router.use(authenticate);
-const MANAGER = authorize('ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
+const MANAGER = can_or_role('erp.reports.view', 'ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
 
 // ── CSV helpers ───────────────────────────────────────────────────────────────
 

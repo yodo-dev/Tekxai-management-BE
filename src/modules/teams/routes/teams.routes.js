@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import team_members_router from './team_members.routes.js';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, authorize, can_or_role } from '../../../shared/middleware/authenticate.js';
 import { create_team_ctrl, delete_team_ctrl, get_team_by_id, get_teams, update_team_ctrl, add_member_ctrl, remove_member_ctrl, list_members_ctrl } from '../controllers/teams.controller.js';
 
 const router = Router();
 router.use(authenticate);
 
-const ADMIN    = authorize('ADMIN', 'SUPER_ADMIN');
-const MANAGER  = authorize('ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
+const ADMIN    = can_or_role('erp.teams.create',  'ADMIN', 'SUPER_ADMIN');
+const MANAGER  = can_or_role('erp.teams.edit',    'ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
 
 router.get('/',     get_teams);
 router.get('/:id',  get_team_by_id);
