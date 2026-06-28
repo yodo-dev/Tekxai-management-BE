@@ -115,6 +115,22 @@ export async function login_user(payload, metadata) {
   const valid = await bcrypt.compare(payload.password, user.password_hash);
   if (!valid) throw app_error(AUTH_MESSAGES.INVALID_CREDENTIALS, 401);
 
+  // If 2FA is enabled, return a challenge instead of tokens
+  if (user.two_factor_enabled) {
+    return { requires_2fa: true, user_id: user.id };
+  }
+
+  return issue_tokens(user, metadata);
+}
+
+// Used by 2FA validate and Google OAuth to issue tokens for an already-authenticated user
+export async function sign_jwt_for_user(user_id, req) {
+  const user = await find_user_with_roles_by_id(user_id);
+  if (!user || !user.is_active) throw app_error(AUTH_MESSAGES.INVALID_CREDENTIALS, 401);
+  const metadata = {
+    ip_address: req?.ip || 'unknown',
+    user_agent: req?.get?.('user-agent') || 'unknown',
+  };
   return issue_tokens(user, metadata);
 }
 

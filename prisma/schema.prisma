@@ -21,6 +21,7 @@ model users {
   division_id   String?
   position      String?
   designation   String?
+  salary        Float?
   employee_id   String?   @unique
   status        String    @default("ACTIVE")
   is_active     Boolean   @default(true)
@@ -67,6 +68,10 @@ model users {
   performance_scores       employee_performance_scores[]
   performance_reviews      performance_reviews[]
   assigned_tasks           tasks[]                       @relation("task_assignee")
+  created_sub_items        task_sub_items[]              @relation("sub_item_creator")
+  task_time_logs           task_time_logs[]              @relation("task_time_logs")
+  payroll_entries          payroll_entries[]             @relation("payroll_entries")
+  processed_runs           payroll_runs[]                @relation("payroll_processor")
   employee_shifts          employee_shifts[]
   attendance_violations    attendance_violations[]
   leave_balances           leave_balances[]
@@ -102,6 +107,9 @@ model users {
   financial_reports         financial_reports[]
   download_events           download_events[]
   app_usage_logs            app_usage_logs[]
+  two_factor_enabled        Boolean  @default(false)
+  two_factor_secret         String?
+  google_id                 String?  @unique
 
   @@index([department_id])
   @@index([division_id])
@@ -302,12 +310,15 @@ model projects {
   total_hours Int       @default(0)
   start_date  DateTime?
   end_date    DateTime?
-  owner_id    String?
-  leader_id   String?
-  team_id     String?
-  created_at  DateTime  @default(now())
-  updated_at  DateTime  @updatedAt
-  deleted_at  DateTime?
+  owner_id        String?
+  leader_id       String?
+  team_id         String?
+  budget          Float?
+  budget_currency String    @default("PKR")
+  budget_spent    Float     @default(0)
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+  deleted_at      DateTime?
 
   owner       users?           @relation("project_owner",  fields: [owner_id],  references: [id], onDelete: SetNull)
   team_leader users?           @relation("project_leader", fields: [leader_id], references: [id], onDelete: SetNull)
@@ -352,9 +363,11 @@ model tasks {
   updated_at   DateTime  @updatedAt
   deleted_at   DateTime?
 
-  project   projects    @relation(fields: [project_id],   references: [id], onDelete: Cascade)
-  milestone milestones? @relation(fields: [milestone_id], references: [id], onDelete: SetNull)
-  assignee  users?      @relation("task_assignee", fields: [assigned_to], references: [id], onDelete: SetNull)
+  project        projects         @relation(fields: [project_id],   references: [id], onDelete: Cascade)
+  milestone      milestones?      @relation(fields: [milestone_id], references: [id], onDelete: SetNull)
+  assignee       users?           @relation("task_assignee", fields: [assigned_to], references: [id], onDelete: SetNull)
+  task_sub_items task_sub_items[]
+  task_time_logs task_time_logs[]
 
   @@index([project_id])
   @@index([milestone_id])
@@ -1912,6 +1925,91 @@ model financial_reports {
 
   @@index([created_by])
   @@index([period_from])
+}
+
+// ─── Task Sub-Items ───────────────────────────────────────────────────────────
+
+model task_sub_items {
+  id          String   @id @default(cuid())
+  task_id     String
+  title       String
+  completed   Boolean  @default(false)
+  created_by  String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  task    tasks @relation(fields: [task_id],    references: [id], onDelete: Cascade)
+  creator users @relation("sub_item_creator",   fields: [created_by], references: [id])
+
+  @@index([task_id])
+}
+
+// ─── Task Time Logs ───────────────────────────────────────────────────────────
+
+model task_time_logs {
+  id         String   @id @default(cuid())
+  task_id    String
+  user_id    String
+  seconds    Int      @default(0)
+  note       String?
+  logged_at  DateTime @default(now())
+  created_at DateTime @default(now())
+
+  task tasks @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  user users @relation("task_time_logs", fields: [user_id], references: [id])
+
+  @@index([task_id])
+  @@index([user_id])
+}
+
+// ─── Payroll ──────────────────────────────────────────────────────────────────
+
+model payroll_runs {
+  id               String    @id @default(cuid())
+  period_month     Int
+  period_year      Int
+  status           String    @default("DRAFT")
+  total_gross      Float     @default(0)
+  total_net        Float     @default(0)
+  total_deductions Float     @default(0)
+  notes            String?
+  processed_by     String?
+  processed_at     DateTime?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  entries   payroll_entries[]
+  processor users?            @relation("payroll_processor", fields: [processed_by], references: [id])
+
+  @@unique([period_month, period_year])
+  @@index([status])
+}
+
+model payroll_entries {
+  id              String   @id @default(cuid())
+  run_id          String
+  user_id         String
+  base_salary     Float    @default(0)
+  working_days    Int      @default(0)
+  present_days    Int      @default(0)
+  overtime_hours  Float    @default(0)
+  overtime_amount Float    @default(0)
+  bonus_amount    Float    @default(0)
+  deductions      Float    @default(0)
+  gross_amount    Float    @default(0)
+  net_amount      Float    @default(0)
+  tax_amount      Float    @default(0)
+  status          String   @default("PENDING")
+  payslip_url     String?
+  notes           String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  run  payroll_runs @relation(fields: [run_id],  references: [id], onDelete: Cascade)
+  user users        @relation("payroll_entries",  fields: [user_id], references: [id])
+
+  @@index([run_id])
+  @@index([user_id])
 }
 
 // ─── System Settings ──────────────────────────────────────────────────────────
