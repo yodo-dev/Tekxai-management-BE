@@ -10,6 +10,8 @@ import { error_handler, not_found_handler } from './shared/middleware/error-hand
 
 const app = express();
 
+// Disable CSP only for swagger routes so inline scripts work
+app.use(['/api-docs', '/api/v1/api-docs'], helmet({ contentSecurityPolicy: false }));
 app.use(helmet());
 app.use(
   cors({
@@ -28,11 +30,16 @@ app.use(
 
 // Health check
 app.get('/api/v1/health', (_req, res) => res.json({ success: true, message: 'OK', timestamp: new Date().toISOString() }));
+app.get('/health', (_req, res) => res.json({ success: true, message: 'OK', timestamp: new Date().toISOString() }));
 
-app.use('/api/v1/api-docs', swaggerUi.serve, swaggerUi.setup(swagger_spec, {
+// Swagger UI — mounted at both /api-docs and /api/v1/api-docs to support both direct and proxied access
+const swagger_setup = swaggerUi.setup(swagger_spec, {
   customSiteTitle: 'TekXAI ERP API Docs',
   swaggerOptions: { persistAuthorization: true },
-}));
+});
+app.use('/api-docs', swaggerUi.serve, swagger_setup);
+app.use('/api/v1/api-docs', swaggerUi.serve, swagger_setup);
+app.get('/api-docs.json', (_req, res) => res.json(swagger_spec));
 app.get('/api/v1/api-docs.json', (_req, res) => res.json(swagger_spec));
 
 app.use('/api/v1', api_routes);
