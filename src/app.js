@@ -29,11 +29,11 @@ app.use(
 // Health check
 app.get('/api/v1/health', (_req, res) => res.json({ success: true, message: 'OK', timestamp: new Date().toISOString() }));
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swagger_spec, {
+app.use('/api/v1/api-docs', swaggerUi.serve, swaggerUi.setup(swagger_spec, {
   customSiteTitle: 'TekXAI ERP API Docs',
   swaggerOptions: { persistAuthorization: true },
 }));
-app.get('/api-docs.json', (_req, res) => res.json(swagger_spec));
+app.get('/api/v1/api-docs.json', (_req, res) => res.json(swagger_spec));
 
 app.use('/api/v1', api_routes);
 
