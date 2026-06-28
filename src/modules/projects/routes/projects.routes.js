@@ -9,6 +9,7 @@ import {
   save_project_ctrl,
   unsave_project_ctrl,
   update_project_ctrl,
+  update_budget,
   request_extension_ctrl,
 } from '../controllers/projects.controller.js';
 
@@ -24,5 +25,6 @@ router.delete('/:id',can_or_role('erp.projects.delete', 'ADMIN', 'SUPER_ADMIN'),
 router.post('/:id/save',      save_project_ctrl);
 router.delete('/:id/save',    unsave_project_ctrl);
 router.post('/:id/extension', request_extension_ctrl);
+router.patch('/:id/budget',   can_or_role('erp.projects.edit', 'ADMIN', 'SUPER_ADMIN'), update_budget);
 
 export default router;

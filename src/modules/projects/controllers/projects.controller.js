@@ -67,6 +67,21 @@ export async function unsave_project_ctrl(req, res, next) {
   } catch (e) { return next(e); }
 }
 
+export async function update_budget(req, res, next) {
+  try {
+    const { budget, budget_currency, budget_spent } = req.body;
+    const project = await prisma.projects.update({
+      where: { id: req.params.id },
+      data: {
+        ...(budget !== undefined && { budget: +budget }),
+        ...(budget_currency && { budget_currency }),
+        ...(budget_spent !== undefined && { budget_spent: +budget_spent }),
+      },
+    });
+    return res.json({ success: true, message: 'Budget updated', payload: project });
+  } catch (e) { next(e); }
+}
+
 export async function request_extension_ctrl(req, res, next) {
   try {
     const { proposed_deadline, reason } = req.body;
