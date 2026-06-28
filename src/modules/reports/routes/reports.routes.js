@@ -26,6 +26,31 @@ function send_csv(res, filename, csv) {
   return res.send(csv);
 }
 
+/**
+ * @swagger
+ * /report/attendance:
+ *   get:
+ *     summary: Get attendance report (JSON or CSV)
+ *     tags: [Reports]
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: to
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: user_id
+ *         schema: { type: string }
+ *       - in: query
+ *         name: format
+ *         schema: { type: string, enum: [json, csv] }
+ *     responses:
+ *       200:
+ *         description: Attendance data or CSV file
+ *       401:
+ *         description: Unauthorized
+ */
 // ── Attendance Report ─────────────────────────────────────────────────────────
 
 router.get('/attendance', MANAGER, async (req, res, next) => {
@@ -71,6 +96,31 @@ router.get('/attendance', MANAGER, async (req, res, next) => {
   } catch (e) { return next(e); }
 });
 
+/**
+ * @swagger
+ * /report/leave:
+ *   get:
+ *     summary: Get leave report (JSON or CSV)
+ *     tags: [Reports]
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: to
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string }
+ *       - in: query
+ *         name: format
+ *         schema: { type: string, enum: [json, csv] }
+ *     responses:
+ *       200:
+ *         description: Leave report data or CSV
+ *       401:
+ *         description: Unauthorized
+ */
 // ── Leave Report ──────────────────────────────────────────────────────────────
 
 router.get('/leave', MANAGER, async (req, res, next) => {
@@ -123,6 +173,25 @@ router.get('/leave', MANAGER, async (req, res, next) => {
   } catch (e) { return next(e); }
 });
 
+/**
+ * @swagger
+ * /report/performance:
+ *   get:
+ *     summary: Get performance scores report (JSON or CSV)
+ *     tags: [Reports]
+ *     parameters:
+ *       - in: query
+ *         name: period
+ *         schema: { type: string }
+ *       - in: query
+ *         name: format
+ *         schema: { type: string, enum: [json, csv] }
+ *     responses:
+ *       200:
+ *         description: Performance report
+ *       401:
+ *         description: Unauthorized
+ */
 // ── Performance Report ────────────────────────────────────────────────────────
 
 router.get('/performance', MANAGER, async (req, res, next) => {
@@ -169,6 +238,25 @@ router.get('/performance', MANAGER, async (req, res, next) => {
   } catch (e) { return next(e); }
 });
 
+/**
+ * @swagger
+ * /report/bonus:
+ *   get:
+ *     summary: Get bonus records report (JSON or CSV)
+ *     tags: [Reports]
+ *     parameters:
+ *       - in: query
+ *         name: period
+ *         schema: { type: string }
+ *       - in: query
+ *         name: format
+ *         schema: { type: string, enum: [json, csv] }
+ *     responses:
+ *       200:
+ *         description: Bonus report
+ *       401:
+ *         description: Unauthorized
+ */
 // ── Bonus Report ──────────────────────────────────────────────────────────────
 
 router.get('/bonus', MANAGER, async (req, res, next) => {
@@ -201,6 +289,25 @@ router.get('/bonus', MANAGER, async (req, res, next) => {
   } catch (e) { return next(e); }
 });
 
+/**
+ * @swagger
+ * /report/projects:
+ *   get:
+ *     summary: Get projects report (JSON or CSV)
+ *     tags: [Reports]
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema: { type: string }
+ *       - in: query
+ *         name: format
+ *         schema: { type: string, enum: [json, csv] }
+ *     responses:
+ *       200:
+ *         description: Projects report
+ *       401:
+ *         description: Unauthorized
+ */
 // ── Project Report ────────────────────────────────────────────────────────────
 
 router.get('/projects', MANAGER, async (req, res, next) => {
@@ -246,6 +353,62 @@ router.get('/projects', MANAGER, async (req, res, next) => {
   } catch (e) { return next(e); }
 });
 
+/**
+ * @swagger
+ * /report/builder/schema:
+ *   get:
+ *     summary: Get available schema for report builder
+ *     tags: [Reports]
+ *     responses:
+ *       200:
+ *         description: Available models and fields
+ *       401:
+ *         description: Unauthorized
+ * /report/builder/run:
+ *   post:
+ *     summary: Run a custom report query
+ *     tags: [Reports]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               model: { type: string }
+ *               filters: { type: object }
+ *               columns:
+ *                 type: array
+ *                 items: { type: string }
+ *     responses:
+ *       200:
+ *         description: Report results
+ *       401:
+ *         description: Unauthorized
+ * /report/builder/saved:
+ *   get:
+ *     summary: List saved report builder queries
+ *     tags: [Reports]
+ *     responses:
+ *       200:
+ *         description: Saved queries
+ *       401:
+ *         description: Unauthorized
+ * /report/builder/saved/{id}:
+ *   delete:
+ *     summary: Delete a saved report query
+ *     tags: [Reports]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Saved query deleted
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/builder/schema', get_schema);
 router.post('/builder/run', run_report);
 router.get('/builder/saved', list_saved);

@@ -2,7 +2,9 @@ import cors from 'cors';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
+import swaggerUi from 'swagger-ui-express';
 import { env_config } from './config/env.js';
+import { swagger_spec } from './config/swagger.js';
 import api_routes from './routes/index.js';
 import { error_handler, not_found_handler } from './shared/middleware/error-handler.js';
 
@@ -26,6 +28,12 @@ app.use(
 
 // Health check
 app.get('/api/v1/health', (_req, res) => res.json({ success: true, message: 'OK', timestamp: new Date().toISOString() }));
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swagger_spec, {
+  customSiteTitle: 'TekXAI ERP API Docs',
+  swaggerOptions: { persistAuthorization: true },
+}));
+app.get('/api-docs.json', (_req, res) => res.json(swagger_spec));
 
 app.use('/api/v1', api_routes);
 

@@ -15,7 +15,31 @@ function is_admin(req) {
   return req.user.roles.some(r => ['ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER'].includes(r));
 }
 
-// POST /api/v1/overtime — employee submits
+/**
+ * @swagger
+ * /overtime:
+ *   post:
+ *     summary: Submit an overtime request
+ *     tags: [Overtime]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [date, hours]
+ *             properties:
+ *               date: { type: string, format: date }
+ *               hours: { type: number }
+ *               reason: { type: string }
+ *     responses:
+ *       201:
+ *         description: Overtime request submitted
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Unauthorized
+ */
 router.post('/', async (req, res, next) => {
   try {
     const record = await submit_overtime(req.user.id, req.body);
@@ -23,7 +47,31 @@ router.post('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/v1/overtime — list (admin sees all, employee sees own)
+/**
+ * @swagger
+ * /overtime:
+ *   get:
+ *     summary: List overtime requests (admin sees all, employee sees own)
+ *     tags: [Overtime]
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema: { type: string }
+ *       - in: query
+ *         name: user_id
+ *         schema: { type: string }
+ *       - in: query
+ *         name: month
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Overtime requests list
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/', async (req, res, next) => {
   try {
     const admin = is_admin(req);
@@ -36,7 +84,25 @@ router.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/v1/overtime/stats — aggregate stats
+/**
+ * @swagger
+ * /overtime/stats:
+ *   get:
+ *     summary: Get overtime aggregate stats
+ *     tags: [Overtime]
+ *     parameters:
+ *       - in: query
+ *         name: month
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Overtime stats
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/stats', MANAGER, async (req, res, next) => {
   try {
     const stats = await get_overtime_stats(req.query);
@@ -44,7 +110,33 @@ router.get('/stats', MANAGER, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/v1/overtime/payroll — payroll-ready data for a user+month
+/**
+ * @swagger
+ * /overtime/payroll:
+ *   get:
+ *     summary: Get payroll-ready overtime data for a user and month
+ *     tags: [Overtime]
+ *     parameters:
+ *       - in: query
+ *         name: user_id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: month
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: year
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Payroll data
+ *       400:
+ *         description: Missing required query params
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/payroll', ADMIN_HR, async (req, res, next) => {
   try {
     const { user_id, month, year } = req.query;
@@ -56,7 +148,25 @@ router.get('/payroll', ADMIN_HR, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/v1/overtime/:id — single record
+/**
+ * @swagger
+ * /overtime/{id}:
+ *   get:
+ *     summary: Get a single overtime request
+ *     tags: [Overtime]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Overtime record
+ *       404:
+ *         description: Not found
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/:id', async (req, res, next) => {
   try {
     const prisma = (await import('../../../shared/database/client.js')).default;
@@ -75,7 +185,30 @@ router.get('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/v1/overtime/:id/approve
+/**
+ * @swagger
+ * /overtime/{id}/approve:
+ *   post:
+ *     summary: Approve an overtime request
+ *     tags: [Overtime]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               comment: { type: string }
+ *     responses:
+ *       200:
+ *         description: Overtime approved
+ *       401:
+ *         description: Unauthorized
+ */
 router.post('/:id/approve', MANAGER, async (req, res, next) => {
   try {
     const record = await approve_overtime(req.params.id, req.user.id, req.body.comment);
@@ -83,7 +216,30 @@ router.post('/:id/approve', MANAGER, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/v1/overtime/:id/reject
+/**
+ * @swagger
+ * /overtime/{id}/reject:
+ *   post:
+ *     summary: Reject an overtime request
+ *     tags: [Overtime]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               comment: { type: string }
+ *     responses:
+ *       200:
+ *         description: Overtime rejected
+ *       401:
+ *         description: Unauthorized
+ */
 router.post('/:id/reject', MANAGER, async (req, res, next) => {
   try {
     const record = await reject_overtime(req.params.id, req.user.id, req.body.comment);
@@ -91,7 +247,23 @@ router.post('/:id/reject', MANAGER, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/v1/overtime/:id/cancel
+/**
+ * @swagger
+ * /overtime/{id}/cancel:
+ *   post:
+ *     summary: Cancel an overtime request
+ *     tags: [Overtime]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Overtime cancelled
+ *       401:
+ *         description: Unauthorized
+ */
 router.post('/:id/cancel', async (req, res, next) => {
   try {
     const record = await cancel_overtime(req.params.id, req.user.id, is_admin(req));

@@ -18,6 +18,50 @@ const USER_SELECT = {
   roles: { select: { role: { select: { name: true } } }, take: 1 },
 };
 
+/**
+ * @swagger
+ * /employee:
+ *   get:
+ *     summary: List employees (directory with stats)
+ *     tags: [Employees]
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema: { type: string }
+ *         description: Search by name, email, designation
+ *       - in: query
+ *         name: department_id
+ *         schema: { type: string }
+ *       - in: query
+ *         name: division_id
+ *         schema: { type: string }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string }
+ *       - in: query
+ *         name: employment_status
+ *         schema: { type: string }
+ *       - in: query
+ *         name: business_unit
+ *         schema: { type: string }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: sort_by
+ *         schema: { type: string }
+ *       - in: query
+ *         name: sort_dir
+ *         schema: { type: string, enum: [asc, desc] }
+ *     responses:
+ *       200:
+ *         description: Paginated employee list with stats
+ *       401:
+ *         description: Unauthorized
+ */
 // GET /api/v1/employee — directory listing
 router.get('/', ADMIN_HR, async (req, res, next) => {
   try {
@@ -129,6 +173,22 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * @swagger
+ * /employee/stats:
+ *   get:
+ *     summary: Get employee count statistics
+ *     tags: [Employees]
+ *     parameters:
+ *       - in: query
+ *         name: business_unit
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Employee stats summary
+ *       401:
+ *         description: Unauthorized
+ */
 // GET /api/v1/employee/stats — summary cards only
 router.get('/stats', ADMIN_HR, async (req, res, next) => {
   try {
@@ -163,6 +223,25 @@ router.get('/stats', ADMIN_HR, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * @swagger
+ * /employee/{id}:
+ *   get:
+ *     summary: Get employee by ID
+ *     tags: [Employees]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Employee object
+ *       404:
+ *         description: Employee not found
+ *       401:
+ *         description: Unauthorized
+ */
 // GET /api/v1/employee/:id — single employee detail
 router.get('/:id', ADMIN_HR, async (req, res, next) => {
   try {

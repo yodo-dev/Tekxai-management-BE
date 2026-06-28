@@ -6,7 +6,23 @@ const router = Router();
 router.use(authenticate);
 const ADMIN_HR = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
 
-// GET /api/v1/education-record/:userId
+/**
+ * @swagger
+ * /education-record/{userId}:
+ *   get:
+ *     summary: Get education records for a user
+ *     tags: [Education]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Education records list
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/:userId', ADMIN_HR, async (req, res, next) => {
   try {
     const records = await prisma.education_records.findMany({
@@ -17,7 +33,39 @@ router.get('/:userId', ADMIN_HR, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/v1/education-record/:userId
+/**
+ * @swagger
+ * /education-record/{userId}:
+ *   post:
+ *     summary: Add education record for a user
+ *     tags: [Education]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [qualification]
+ *             properties:
+ *               qualification: { type: string }
+ *               field_of_study: { type: string }
+ *               institute: { type: string }
+ *               passing_year: { type: integer }
+ *               cgpa: { type: number }
+ *               cgpa_out_of: { type: number }
+ *               division_class: { type: string }
+ *               percentage: { type: number }
+ *     responses:
+ *       201:
+ *         description: Record created
+ *       401:
+ *         description: Unauthorized
+ */
 router.post('/:userId', ADMIN_HR, async (req, res, next) => {
   try {
     const { qualification, field_of_study, institute, passing_year, cgpa, cgpa_out_of, division_class, percentage } = req.body;
@@ -37,7 +85,27 @@ router.post('/:userId', ADMIN_HR, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PUT /api/v1/education-record/:userId/:id
+/**
+ * @swagger
+ * /education-record/{userId}/{id}:
+ *   put:
+ *     summary: Update an education record
+ *     tags: [Education]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Record updated
+ *       401:
+ *         description: Unauthorized
+ */
 router.put('/:userId/:id', ADMIN_HR, async (req, res, next) => {
   try {
     const { qualification, field_of_study, institute, passing_year, cgpa, cgpa_out_of, division_class, percentage } = req.body;
@@ -56,7 +124,27 @@ router.put('/:userId/:id', ADMIN_HR, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// DELETE /api/v1/education-record/:userId/:id
+/**
+ * @swagger
+ * /education-record/{userId}/{id}:
+ *   delete:
+ *     summary: Delete an education record
+ *     tags: [Education]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Record deleted
+ *       401:
+ *         description: Unauthorized
+ */
 router.delete('/:userId/:id', ADMIN_HR, async (req, res, next) => {
   try {
     await prisma.education_records.delete({ where: { id: req.params.id } });

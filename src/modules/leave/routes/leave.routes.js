@@ -7,7 +7,22 @@ router.use(authenticate);
 
 const MANAGER = authorize('ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
 
-// GET /leave/balance — own balance
+/**
+ * @swagger
+ * /leave/balance:
+ *   get:
+ *     summary: Get current user's leave balance
+ *     tags: [Leave]
+ *     parameters:
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Leave balance by policy
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/balance', async (req, res, next) => {
   try {
     const { year } = req.query;
@@ -15,21 +30,78 @@ router.get('/balance', async (req, res, next) => {
   } catch (e) { return next(e); }
 });
 
-// GET /leave/balance/all — all employees (admin/HR)
+/**
+ * @swagger
+ * /leave/balance/all:
+ *   get:
+ *     summary: Get leave balances for all employees
+ *     tags: [Leave]
+ *     parameters:
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: All employee leave balances
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/balance/all', MANAGER, async (req, res, next) => {
   try {
     return res.json({ success: true, payload: await list_all_balances(+req.query.year || undefined) });
   } catch (e) { return next(e); }
 });
 
-// GET /leave/balance/:userId — specific user (admin/HR)
+/**
+ * @swagger
+ * /leave/balance/{userId}:
+ *   get:
+ *     summary: Get leave balance for a specific user
+ *     tags: [Leave]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: User leave balance
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/balance/:userId', MANAGER, async (req, res, next) => {
   try {
     return res.json({ success: true, payload: await get_user_balances(req.params.userId, +req.query.year || undefined) });
   } catch (e) { return next(e); }
 });
 
-// POST /leave/balance/initialize — initialize balances for a user
+/**
+ * @swagger
+ * /leave/balance/initialize:
+ *   post:
+ *     summary: Initialize leave balances for a user
+ *     tags: [Leave]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [user_id]
+ *             properties:
+ *               user_id: { type: string }
+ *               year: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Balances initialized
+ *       400:
+ *         description: user_id required
+ *       401:
+ *         description: Unauthorized
+ */
 router.post('/balance/initialize', MANAGER, async (req, res, next) => {
   try {
     const { user_id, year } = req.body;

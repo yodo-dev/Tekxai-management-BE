@@ -42,6 +42,26 @@ function get_weekday(dt) {
 function is_monday(dt) { return get_weekday(dt) === 1; }
 function is_friday(dt) { return get_weekday(dt) === 5; }
 
+/**
+ * @swagger
+ * /hr-report/employee/{userId}/annual:
+ *   get:
+ *     summary: Get annual HR report for an employee
+ *     tags: [HR Reports]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Annual leave, attendance, latecoming, overtime summary
+ *       401:
+ *         description: Unauthorized
+ */
 // ── GET /api/v1/hr-report/employee/:userId/annual?year= ───────────────────────
 router.get('/employee/:userId/annual', ADMIN_HR, async (req, res, next) => {
   try {
@@ -167,6 +187,29 @@ router.get('/employee/:userId/annual', ADMIN_HR, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * @swagger
+ * /hr-report/employee/{userId}/monthly:
+ *   get:
+ *     summary: Get monthly HR report for an employee
+ *     tags: [HR Reports]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: month
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Monthly leave, attendance, latecoming summary
+ *       401:
+ *         description: Unauthorized
+ */
 // ── GET /api/v1/hr-report/employee/:userId/monthly?year=&month= ──────────────
 router.get('/employee/:userId/monthly', ADMIN_HR, async (req, res, next) => {
   try {
@@ -250,6 +293,25 @@ router.get('/employee/:userId/monthly', ADMIN_HR, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * @swagger
+ * /hr-report/aggregate:
+ *   get:
+ *     summary: Get aggregate HR stats for a month (leaves, latecomings, violations)
+ *     tags: [HR Reports]
+ *     parameters:
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: month
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Aggregate HR statistics
+ *       401:
+ *         description: Unauthorized
+ */
 // ── GET /api/v1/hr-report/aggregate?month=&year= ─────────────────────────────
 router.get('/aggregate', ADMIN_HR, async (req, res, next) => {
   try {

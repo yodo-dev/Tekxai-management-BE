@@ -7,11 +7,137 @@ router.use(authenticate);
 
 const HR_ADMIN = can_or_role('erp.users.view', 'ADMIN', 'SUPER_ADMIN', 'HR');
 
+/**
+ * @swagger
+ * /payroll:
+ *   get:
+ *     summary: List payroll runs
+ *     tags: [Payroll]
+ *     responses:
+ *       200:
+ *         description: Payroll runs list
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/',                              HR_ADMIN, list_runs);
+
+/**
+ * @swagger
+ * /payroll:
+ *   post:
+ *     summary: Create a payroll run
+ *     tags: [Payroll]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [period]
+ *             properties:
+ *               period: { type: string, example: '2026-06' }
+ *               name: { type: string }
+ *     responses:
+ *       201:
+ *         description: Payroll run created
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Unauthorized
+ */
 router.post('/',                             HR_ADMIN, create_run);
+
+/**
+ * @swagger
+ * /payroll/{id}:
+ *   get:
+ *     summary: Get a payroll run by ID
+ *     tags: [Payroll]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Payroll run details
+ *       404:
+ *         description: Not found
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/:id',                           HR_ADMIN, get_run);
+
+/**
+ * @swagger
+ * /payroll/{id}/calculate:
+ *   post:
+ *     summary: Calculate payroll for a run
+ *     tags: [Payroll]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Payroll calculated
+ *       401:
+ *         description: Unauthorized
+ */
 router.post('/:id/calculate',               HR_ADMIN, calculate_run);
+
+/**
+ * @swagger
+ * /payroll/{id}/status:
+ *   patch:
+ *     summary: Update payroll run status
+ *     tags: [Payroll]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status: { type: string, enum: [DRAFT, APPROVED, PAID] }
+ *     responses:
+ *       200:
+ *         description: Status updated
+ *       401:
+ *         description: Unauthorized
+ */
 router.patch('/:id/status',                 HR_ADMIN, update_run_status);
+
+/**
+ * @swagger
+ * /payroll/{id}/entries/{entryId}/payslip:
+ *   get:
+ *     summary: Get payslip for a payroll entry
+ *     tags: [Payroll]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: entryId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Payslip data
+ *       404:
+ *         description: Not found
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/:id/entries/:entryId/payslip', get_payslip);
 
 export default router;

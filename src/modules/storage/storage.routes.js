@@ -12,7 +12,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOAD_DIR = path.join(__dirname, '../../../../uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-// Memory storage — buffer passed to S3; falls back to disk if no S3
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 function gen_key(entity_type, user_id, file_name) {
@@ -25,7 +24,45 @@ const router = Router();
 router.use(authenticate);
 const MANAGER = authorize('ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
 
-// POST /storage/upload — upload to S3; falls back to local disk if S3 not configured
+/**
+ * @swagger
+ * /storage/upload:
+ *   post:
+ *     summary: Upload a file (multipart, S3 or local fallback)
+ *     tags: [Storage]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: File uploaded
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 payload:
+ *                   type: object
+ *                   properties:
+ *                     file_url: { type: string }
+ *                     file_key: { type: string }
+ *                     file_name: { type: string }
+ *                     file_size: { type: integer }
+ *                     mime_type: { type: string }
+ *       400:
+ *         description: No file provided
+ *       401:
+ *         description: Unauthorized
+ */
 router.post('/upload', upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, message: 'No file provided' });
@@ -35,7 +72,6 @@ router.post('/upload', upload.single('file'), async (req, res, next) => {
     let file_url = await upload_buffer(key, req.file.buffer, req.file.mimetype);
 
     if (!file_url) {
-      // S3 not configured — save to local disk
       const filename = path.basename(key);
       fs.writeFileSync(path.join(UPLOAD_DIR, filename), req.file.buffer);
       file_url = `${req.protocol}://${req.get('host')}/uploads/${filename}`;
@@ -45,7 +81,43 @@ router.post('/upload', upload.single('file'), async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /storage/presign — request presigned upload URL
+/**
+ * @swagger
+ * /storage/presign:
+ *   post:
+ *     summary: Request a presigned S3 upload URL
+ *     tags: [Storage]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [file_name, mime_type]
+ *             properties:
+ *               file_name: { type: string }
+ *               mime_type: { type: string }
+ *               entity_type: { type: string }
+ *               entity_id: { type: string }
+ *     responses:
+ *       200:
+ *         description: Presigned upload URL
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 payload:
+ *                   type: object
+ *                   properties:
+ *                     upload_url: { type: string }
+ *                     file_key: { type: string }
+ *                     file_id: { type: string }
+ *       400:
+ *         description: Missing required fields
+ *       401:
+ *         description: Unauthorized
+ */
 router.post('/presign', async (req, res, next) => {
   try {
     const { file_name, mime_type, entity_type, entity_id } = req.body;
@@ -69,7 +141,30 @@ router.post('/presign', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PATCH /storage/:fileId/confirm — confirm upload complete + update size
+/**
+ * @swagger
+ * /storage/{fileId}/confirm:
+ *   patch:
+ *     summary: Confirm upload complete and update file size
+ *     tags: [Storage]
+ *     parameters:
+ *       - in: path
+ *         name: fileId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file_size: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Upload confirmed
+ *       401:
+ *         description: Unauthorized
+ */
 router.patch('/:fileId/confirm', async (req, res, next) => {
   try {
     const { file_size } = req.body;
@@ -81,7 +176,24 @@ router.patch('/:fileId/confirm', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /storage/download/:fileKey — get download URL
+/**
+ * @swagger
+ * /storage/download/{fileKey}:
+ *   get:
+ *     summary: Get a presigned download URL for a file
+ *     tags: [Storage]
+ *     parameters:
+ *       - in: path
+ *         name: fileKey
+ *         required: true
+ *         schema: { type: string }
+ *         description: URL-encoded file key
+ *     responses:
+ *       200:
+ *         description: Download URL (expires in 3600s)
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/download/:fileKey', async (req, res, next) => {
   try {
     const key = decodeURIComponent(req.params.fileKey);
@@ -90,7 +202,29 @@ router.get('/download/:fileKey', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /storage/files?entity_type=&entity_id=&user_id=
+/**
+ * @swagger
+ * /storage/files:
+ *   get:
+ *     summary: List uploaded files
+ *     tags: [Storage]
+ *     parameters:
+ *       - in: query
+ *         name: entity_type
+ *         schema: { type: string }
+ *       - in: query
+ *         name: entity_id
+ *         schema: { type: string }
+ *       - in: query
+ *         name: user_id
+ *         schema: { type: string }
+ *         description: Admin only
+ *     responses:
+ *       200:
+ *         description: Files list
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/files', async (req, res, next) => {
   try {
     const is_admin = req.user.roles.some(r => ['ADMIN','SUPER_ADMIN','HR','DIVISION_MANAGER'].includes(r));
@@ -104,7 +238,28 @@ router.get('/files', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// DELETE /storage/:fileKey
+/**
+ * @swagger
+ * /storage/{fileKey}:
+ *   delete:
+ *     summary: Delete a file from storage
+ *     tags: [Storage]
+ *     parameters:
+ *       - in: path
+ *         name: fileKey
+ *         required: true
+ *         schema: { type: string }
+ *         description: URL-encoded file key
+ *     responses:
+ *       200:
+ *         description: File deleted
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: File not found
+ *       401:
+ *         description: Unauthorized
+ */
 router.delete('/:fileKey', async (req, res, next) => {
   try {
     const key = decodeURIComponent(req.params.fileKey);

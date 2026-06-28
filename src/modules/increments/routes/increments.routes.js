@@ -9,7 +9,34 @@ const router = Router();
 router.use(authenticate);
 const ADMIN_HR = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
 
-// GET /api/v1/increment?user_id=&status=&review_year=&page=&limit=
+/**
+ * @swagger
+ * /increment:
+ *   get:
+ *     summary: List salary increment records
+ *     tags: [Increments]
+ *     parameters:
+ *       - in: query
+ *         name: user_id
+ *         schema: { type: string }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string }
+ *       - in: query
+ *         name: review_year
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Increment records
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/', ADMIN_HR, async (req, res, next) => {
   try {
     const result = await list_increments(req.query);
@@ -17,7 +44,26 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/v1/increment/calculate/:userId?year=
+/**
+ * @swagger
+ * /increment/calculate/{userId}:
+ *   get:
+ *     summary: Calculate suggested increment for a user
+ *     tags: [Increments]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Calculated increment suggestion
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/calculate/:userId', ADMIN_HR, async (req, res, next) => {
   try {
     const year = +req.query.year || new Date().getFullYear() - 1;
@@ -26,7 +72,23 @@ router.get('/calculate/:userId', ADMIN_HR, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/v1/increment/:userId/history
+/**
+ * @swagger
+ * /increment/{userId}/history:
+ *   get:
+ *     summary: Get increment history for a user
+ *     tags: [Increments]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Increment history
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/:userId/history', ADMIN_HR, async (req, res, next) => {
   try {
     const result = await list_increments({ user_id: req.params.userId, ...req.query });
@@ -34,7 +96,35 @@ router.get('/:userId/history', ADMIN_HR, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/v1/increment/:userId
+/**
+ * @swagger
+ * /increment/{userId}:
+ *   post:
+ *     summary: Create salary increment for a user
+ *     tags: [Increments]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [new_salary, review_year]
+ *             properties:
+ *               new_salary: { type: number }
+ *               review_year: { type: integer }
+ *               percentage: { type: number }
+ *               notes: { type: string }
+ *     responses:
+ *       201:
+ *         description: Increment created
+ *       401:
+ *         description: Unauthorized
+ */
 router.post('/:userId', ADMIN_HR, async (req, res, next) => {
   try {
     const record = await create_increment(req.params.userId, req.body, req.user.id);
@@ -42,10 +132,38 @@ router.post('/:userId', ADMIN_HR, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PUT /api/v1/increment/:userId/:id
+/**
+ * @swagger
+ * /increment/{userId}/{id}:
+ *   put:
+ *     summary: Update increment (or approve/reject by setting status)
+ *     tags: [Increments]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status: { type: string, enum: [APPROVED, REJECTED] }
+ *               notes: { type: string }
+ *     responses:
+ *       200:
+ *         description: Increment updated
+ *       401:
+ *         description: Unauthorized
+ */
 router.put('/:userId/:id', ADMIN_HR, async (req, res, next) => {
   try {
-    const { status, notes, approved_by } = req.body;
+    const { status, notes } = req.body;
     let result;
     if (status === 'APPROVED') {
       result = await approve_increment(req.params.id, req.user.id, notes);
@@ -62,7 +180,27 @@ router.put('/:userId/:id', ADMIN_HR, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// DELETE /api/v1/increment/:userId/:id
+/**
+ * @swagger
+ * /increment/{userId}/{id}:
+ *   delete:
+ *     summary: Delete an increment record
+ *     tags: [Increments]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Increment deleted
+ *       401:
+ *         description: Unauthorized
+ */
 router.delete('/:userId/:id', ADMIN_HR, async (req, res, next) => {
   try {
     const prisma = (await import('../../../shared/database/client.js')).default;

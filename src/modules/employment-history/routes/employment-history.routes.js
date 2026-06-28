@@ -6,7 +6,23 @@ const router = Router();
 router.use(authenticate);
 const ADMIN_HR = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
 
-// GET /api/v1/employment-history/:userId
+/**
+ * @swagger
+ * /employment-history/{userId}:
+ *   get:
+ *     summary: Get employment history for a user
+ *     tags: [Employment History]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Employment history list
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/:userId', ADMIN_HR, async (req, res, next) => {
   try {
     const records = await prisma.employment_history.findMany({
@@ -17,7 +33,37 @@ router.get('/:userId', ADMIN_HR, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/v1/employment-history/:userId
+/**
+ * @swagger
+ * /employment-history/{userId}:
+ *   post:
+ *     summary: Add employment history record
+ *     tags: [Employment History]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [company_name, designation]
+ *             properties:
+ *               company_name: { type: string }
+ *               designation: { type: string }
+ *               from_date: { type: string, format: date }
+ *               to_date: { type: string, format: date }
+ *               is_current: { type: boolean }
+ *               notes: { type: string }
+ *     responses:
+ *       201:
+ *         description: Record created
+ *       401:
+ *         description: Unauthorized
+ */
 router.post('/:userId', ADMIN_HR, async (req, res, next) => {
   try {
     const { company_name, designation, from_date, to_date, is_current, notes } = req.body;
@@ -36,7 +82,27 @@ router.post('/:userId', ADMIN_HR, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PUT /api/v1/employment-history/:userId/:id
+/**
+ * @swagger
+ * /employment-history/{userId}/{id}:
+ *   put:
+ *     summary: Update an employment history record
+ *     tags: [Employment History]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Record updated
+ *       401:
+ *         description: Unauthorized
+ */
 router.put('/:userId/:id', ADMIN_HR, async (req, res, next) => {
   try {
     const { company_name, designation, from_date, to_date, is_current, notes } = req.body;
@@ -54,7 +120,27 @@ router.put('/:userId/:id', ADMIN_HR, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// DELETE /api/v1/employment-history/:userId/:id
+/**
+ * @swagger
+ * /employment-history/{userId}/{id}:
+ *   delete:
+ *     summary: Delete an employment history record
+ *     tags: [Employment History]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Record deleted
+ *       401:
+ *         description: Unauthorized
+ */
 router.delete('/:userId/:id', ADMIN_HR, async (req, res, next) => {
   try {
     await prisma.employment_history.delete({ where: { id: req.params.id } });
