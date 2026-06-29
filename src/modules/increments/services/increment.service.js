@@ -20,6 +20,7 @@ async function get_leave_count(user_id, year) {
   const start = new Date(`${year}-01-01`);
   const end = new Date(`${year}-12-31T23:59:59.999Z`);
   const requests = await prisma.time_off_requests.findMany({
+    take: 500,
     where: {
       user_id,
       status: 'APPROVED',
@@ -39,6 +40,7 @@ async function get_late_after_grace_count(user_id, year) {
   const end = new Date(`${year}-12-31T23:59:59.999Z`);
   // attendance_violations stores late entries with late_mins
   const violations = await prisma.attendance_violations.findMany({
+    take: 500,
     where: {
       user_id,
       violation_type: 'LATE',

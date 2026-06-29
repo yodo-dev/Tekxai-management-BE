@@ -46,7 +46,8 @@ export async function save_jd(user_id, data) {
 export async function list_jds({ department_id } = {}) {
   const where = {};
   if (department_id) where.department_id = department_id;
-  return prisma.job_descriptions.findMany({ where, include: JD_INCLUDE, orderBy: { created_at: 'desc' } });
+  return prisma.job_descriptions.findMany({
+  take: 500, where, include: JD_INCLUDE, orderBy: { created_at: 'desc' } });
 }
 
 export async function delete_jd_svc(user_id) {

@@ -5,7 +5,8 @@ function app_error(m, c = 400) { const e = new Error(m); e.status_code = c; retu
 /** Initialize leave balances for a user for current year based on active policies */
 export async function initialize_balances(user_id, year) {
   const y = year || new Date().getFullYear();
-  const policies = await prisma.time_off_policies.findMany({ where: { is_active: true } });
+  const policies = await prisma.time_off_policies.findMany({
+  take: 500, where: { is_active: true } });
 
   const results = [];
   for (const policy of policies) {
@@ -35,10 +36,12 @@ export async function initialize_balances(user_id, year) {
 export async function get_user_balances(user_id, year) {
   const y = year || new Date().getFullYear();
   // Auto-initialize if missing
-  const existing = await prisma.leave_balances.findMany({ where: { user_id, year: y } });
+  const existing = await prisma.leave_balances.findMany({
+  take: 500, where: { user_id, year: y } });
   if (existing.length === 0) await initialize_balances(user_id, y);
 
   return prisma.leave_balances.findMany({
+    take: 500,
     where: { user_id, year: y },
     include: { policy: true },
   });
@@ -93,6 +96,7 @@ export async function remove_pending_leave(user_id, policy_id, days, year) {
 export async function list_all_balances(year) {
   const y = year || new Date().getFullYear();
   return prisma.leave_balances.findMany({
+    take: 500,
     where: { year: y },
     include: {
       policy: true,

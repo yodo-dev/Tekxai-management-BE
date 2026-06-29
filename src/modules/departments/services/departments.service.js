@@ -10,7 +10,8 @@ const DEPT_INCLUDE = {
 export async function list_departments({ search } = {}) {
   const where = { deleted_at: null };
   if (search) where.name = { contains: search, mode: 'insensitive' };
-  return prisma.departments.findMany({ where, include: DEPT_INCLUDE, orderBy: { name: 'asc' } });
+  return prisma.departments.findMany({
+  take: 500, where, include: DEPT_INCLUDE, orderBy: { name: 'asc' } });
 }
 
 export async function get_department(id) {
@@ -39,6 +40,7 @@ export async function delete_department(id) {
 
 export async function list_divisions(department_id) {
   return prisma.divisions.findMany({
+    take: 500,
     where: { department_id, deleted_at: null },
     orderBy: { name: 'asc' },
   });

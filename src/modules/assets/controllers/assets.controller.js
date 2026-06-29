@@ -87,6 +87,7 @@ export async function list_all_maintenance_ctrl(req, res, next) {
   try {
     const prisma_client = (await import('../../../shared/database/client.js')).default;
     const logs = await prisma_client.asset_maintenance_logs.findMany({
+      take: 500,
       orderBy: { maintenance_date: 'desc' },
       include: { asset: { select: { id: true, name: true, asset_tag: true } } },
     });

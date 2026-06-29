@@ -3,7 +3,8 @@ import crypto from 'crypto';
 
 export async function fire_webhook(event, payload) {
   try {
-    const hooks = await prisma.webhooks.findMany({ where: { active: true, events: { has: event } } });
+    const hooks = await prisma.webhooks.findMany({
+  take: 500, where: { active: true, events: { has: event } } });
     for (const hook of hooks) deliver_webhook(hook, event, payload).catch(() => {});
   } catch (e) { console.error('[webhook]', e.message); }
 }

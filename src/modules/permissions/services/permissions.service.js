@@ -64,7 +64,8 @@ export async function check_permission(roles, permission, user_id = null) {
   if (user_id) {
     let overrides = get_user_cached(user_id);
     if (!overrides) {
-      const rows = await prisma.user_permissions.findMany({ where: { user_id } });
+      const rows = await prisma.user_permissions.findMany({
+  take: 500, where: { user_id } });
       overrides = new Map(rows.map(r => [r.permission, r.granted]));
       set_user_cached(user_id, overrides);
     }
@@ -120,6 +121,7 @@ export async function save_role_permissions(role_name, grants) {
 // ── User permission overrides ─────────────────────────────────────────────────
 export async function get_user_overrides(user_id) {
   return prisma.user_permissions.findMany({
+    take: 500,
     where: { user_id },
     orderBy: { permission: 'asc' },
   });
@@ -127,7 +129,8 @@ export async function get_user_overrides(user_id) {
 
 export async function get_user_effective_permissions(user_id, roles) {
   const [overrides, role_rows] = await Promise.all([
-    prisma.user_permissions.findMany({ where: { user_id } }),
+    prisma.user_permissions.findMany({
+  take: 500, where: { user_id } }),
     list_all_permissions(),
   ]);
 

@@ -10,6 +10,7 @@ const MANAGER = authorize('ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
 router.get('/', async (req, res, next) => {
   try {
     const members = await prisma.team_members.findMany({
+      take: 500,
       where: { team_id: req.params.teamId },
       include: {
         user: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true, designation: true } },

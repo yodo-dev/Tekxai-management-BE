@@ -4,7 +4,8 @@ function fail(res,m,s=400){return res.status(s).json({success:false,message:m});
 
 const VALID_EVENTS=['task.created','task.updated','task.completed','expense.submitted','expense.approved','expense.rejected','project.created','project.updated','user.created','payroll.completed','performance.scored'];
 
-export async function list_webhooks(req,res,next){try{const hooks=await prisma.webhooks.findMany({include:{_count:{select:{deliveries:true}},creator:{select:{id:true,first_name:true,last_name:true}}}});return ok(res,{hooks,valid_events:VALID_EVENTS});}catch(e){next(e);}}
+export async function list_webhooks(req,res,next){try{const hooks=await prisma.webhooks.findMany({
+  take: 500,include:{_count:{select:{deliveries:true}},creator:{select:{id:true,first_name:true,last_name:true}}}});return ok(res,{hooks,valid_events:VALID_EVENTS});}catch(e){next(e);}}
 
 export async function create_webhook(req,res,next){try{const{name,url,secret,events}=req.body;if(!name||!url||!events?.length)return fail(res,'name, url, and events required');const invalid=events.filter(e=>!VALID_EVENTS.includes(e));if(invalid.length)return fail(res,`Invalid events: ${invalid.join(', ')}`);const hook=await prisma.webhooks.create({data:{name,url,secret:secret||null,events,created_by:req.user.id}});return ok(res,hook,'Webhook created',201);}catch(e){next(e);}}
 

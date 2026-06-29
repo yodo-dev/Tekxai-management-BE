@@ -14,6 +14,7 @@ const TX_INCLUDE = {
 export async function list_accounts(req, res, next) {
   try {
     const accounts = await prisma.expense_accounts.findMany({
+      take: 500,
       where: { is_enabled: true },
       include: {
         user: { select: { id: true, first_name: true, last_name: true, avatar: true, designation: true } },
@@ -69,8 +70,10 @@ export async function get_account(req, res, next) {
     if (from || to) where.date = {};
     if (from) where.date.gte = new Date(from);
     if (to)   where.date.lte = new Date(to);
-    const transactions = await prisma.expense_transactions.findMany({ where, include: TX_INCLUDE, orderBy: { date: 'asc' } });
-    const allTxns = await prisma.expense_transactions.findMany({ where: { expense_account_id: account.id } });
+    const transactions = await prisma.expense_transactions.findMany({
+  take: 500, where, include: TX_INCLUDE, orderBy: { date: 'asc' } });
+    const allTxns = await prisma.expense_transactions.findMany({
+  take: 500, where: { expense_account_id: account.id } });
     const summary = await compute_account_summary(account, allTxns);
     const ledger  = await build_ledger(account, transactions);
     return ok(res, { account: { ...account, ...summary }, transactions: ledger });
@@ -186,7 +189,8 @@ export async function delete_transaction(req, res, next) {
 
 export async function list_categories(req, res, next) {
   try {
-    const cats = await prisma.expense_categories.findMany({ where: { is_active: true }, orderBy: { name: 'asc' } });
+    const cats = await prisma.expense_categories.findMany({
+  take: 500, where: { is_active: true }, orderBy: { name: 'asc' } });
     return ok(res, { records: cats });
   } catch (e) { next(e); }
 }
@@ -226,6 +230,7 @@ export async function get_summary(req, res, next) {
     const where = Object.keys(dateFilter).length ? { date: dateFilter } : {};
 
     const accounts = await prisma.expense_accounts.findMany({
+      take: 500,
       where: { is_enabled: true },
       include: {
         user: { select: { id: true, first_name: true, last_name: true } },

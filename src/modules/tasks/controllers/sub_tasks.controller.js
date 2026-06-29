@@ -4,7 +4,8 @@ function fail(res,m,s=400){return res.status(s).json({success:false,message:m});
 
 export async function list_sub_tasks(req,res,next){
   try{
-    const items=await prisma.task_sub_items.findMany({where:{task_id:req.params.taskId},orderBy:{created_at:'asc'}});
+    const items=await prisma.task_sub_items.findMany({
+  take: 500,where:{task_id:req.params.taskId},orderBy:{created_at:'asc'}});
     return ok(res,items);
   }catch(e){next(e);}
 }

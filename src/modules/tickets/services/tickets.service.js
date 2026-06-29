@@ -13,6 +13,7 @@ const USER_SELECT = { id: true, first_name: true, last_name: true, email: true, 
 
 async function get_replies_for(ticket_id) {
   return prisma.ticket_replies.findMany({
+    take: 500,
     where: { ticket_id },
     include: { user: { select: USER_SELECT } },
     orderBy: { created_at: 'asc' },
@@ -21,6 +22,7 @@ async function get_replies_for(ticket_id) {
 
 async function get_attachments_for(entity_id) {
   return prisma.file_uploads.findMany({
+    take: 500,
     where: { entity_type: 'ticket', entity_id },
     select: { id: true, file_name: true, file_key: true, mime_type: true, file_size: true, created_at: true },
     orderBy: { created_at: 'asc' },

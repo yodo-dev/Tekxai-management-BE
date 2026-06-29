@@ -22,7 +22,8 @@ export async function get_or_create_balance(user_id, policy_id, year) {
 
 export async function get_user_balances(user_id, year) {
   const yr = year ? Number(year) : new Date().getFullYear();
-  const policies = await prisma.time_off_policies.findMany({ where: { is_active: true } });
+  const policies = await prisma.time_off_policies.findMany({
+  take: 500, where: { is_active: true } });
   const balances = await Promise.all(policies.map((p) => get_or_create_balance(user_id, p.id, yr)));
   return balances.filter(Boolean);
 }

@@ -23,7 +23,8 @@ const ADMIN_HR = can_or_role('erp.users.view',   'ADMIN', 'SUPER_ADMIN', 'HR');
  */
 router.get('/roles', ADMIN_HR, async (_req, res, next) => {
   try {
-    const roles = await prisma.roles.findMany({ orderBy: { level: 'desc' } });
+    const roles = await prisma.roles.findMany({
+  take: 500, orderBy: { level: 'desc' } });
     return res.json({ success: true, payload: roles });
   } catch (e) { return next(e); }
 });

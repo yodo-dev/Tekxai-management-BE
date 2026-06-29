@@ -26,6 +26,7 @@ const ADMIN_HR = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
 router.get('/:userId', ADMIN_HR, async (req, res, next) => {
   try {
     const records = await prisma.employment_history.findMany({
+      take: 500,
       where: { user_id: req.params.userId },
       orderBy: [{ is_current: 'desc' }, { from_date: 'desc' }],
     });

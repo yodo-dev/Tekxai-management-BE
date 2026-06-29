@@ -6,6 +6,7 @@ function fail(res,m,s=400){return res.status(s).json({success:false,message:m});
 export async function list_runs(req, res, next) {
   try {
     const runs = await prisma.payroll_runs.findMany({
+      take: 500,
       orderBy: [{ period_year: 'desc' }, { period_month: 'desc' }],
       include: {
         _count: { select: { entries: true } },
@@ -40,6 +41,7 @@ export async function calculate_run(req, res, next) {
 
     // Get all active employees with their salary info
     const employees = await prisma.users.findMany({
+      take: 500,
       where: { deleted_at: null },
       select: {
         id: true, first_name: true, last_name: true, email: true,
@@ -61,6 +63,7 @@ export async function calculate_run(req, res, next) {
     // Get approved bonus records for the period
     const period_str = `${period_year}-${String(period_month).padStart(2,'0')}`;
     const bonus_records = await prisma.monthly_bonus_records.findMany({
+      take: 500,
       where: { period: period_str, approval_status: 'APPROVED' },
       select: { user_id: true, bonus_amount: true },
     });

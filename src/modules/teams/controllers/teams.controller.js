@@ -59,6 +59,7 @@ export async function list_members_ctrl(req, res, next) {
   try {
     const prisma_client = (await import('../../../shared/database/client.js')).default;
     const members = await prisma_client.team_members.findMany({
+      take: 500,
       where: { team_id: req.params.id },
       include: { user: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true, designation: true } } },
       orderBy: { joined_at: 'asc' },

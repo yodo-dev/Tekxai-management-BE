@@ -17,6 +17,7 @@ export async function find_weekly_entries(user_id, week_start) {
   end.setDate(end.getDate() + 7);
 
   return prisma.timesheet_entries.findMany({
+    take: 500,
     where: { user_id, check_in: { gte: start, lt: end }, deleted_at: null },
     include: { user: { select: { id: true, first_name: true, last_name: true } } },
     orderBy: { check_in: 'asc' },
@@ -204,7 +205,8 @@ export async function update_edit_request_status(id, status, reviewed_by) {
 // ── Time Off Policies ────────────────────────────────────────────────────────
 
 export async function find_time_off_policies() {
-  return prisma.time_off_policies.findMany({ where: { is_active: true }, orderBy: { name: 'asc' } });
+  return prisma.time_off_policies.findMany({
+  take: 500, where: { is_active: true }, orderBy: { name: 'asc' } });
 }
 
 // ── Time Off Requests ────────────────────────────────────────────────────────

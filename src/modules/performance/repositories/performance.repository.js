@@ -36,6 +36,7 @@ export async function find_performance_scores({ user_id, period, is_admin }) {
   if (!is_admin) where.user_id = user_id;
   if (period) where.period = period;
   return prisma.employee_performance_scores.findMany({
+    take: 500,
     where,
     include: { user: { select: { id: true, first_name: true, last_name: true, avatar: true } } },
     orderBy: { created_at: 'desc' },

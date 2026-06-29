@@ -46,6 +46,7 @@ export async function update_daily_report(id, user_id, data, is_admin) {
 
 async function get_bonus_config_from_db(score) {
   const configs = await prisma.bonus_configurations.findMany({
+    take: 500,
     where: { is_active: true }, orderBy: { min_score: 'desc' },
   });
   if (configs.length > 0) {
@@ -73,6 +74,7 @@ export async function list_scores({ user_id, period, score_type, division_id, is
   }
 
   return prisma.employee_performance_scores.findMany({
+    take: 500,
     where,
     include: {
       user: {

@@ -27,7 +27,8 @@ export async function accept_offer(req,res,next){try{const o=await prisma.offers
 export async function reject_offer(req,res,next){try{const o=await prisma.offers.update({where:{id:req.params.id},data:{status:'REJECTED',rejected_at:new Date(),rejection_reason:req.body.reason},include:{candidate:true}});await prisma.candidates.update({where:{id:o.candidate_id},data:{status:'REJECTED'}});return ok(res,o,'Offer rejected');}catch(e){next(e);}}
 
 // GET /onboarding/tasks/:userId
-export async function get_tasks(req,res,next){try{const tasks=await prisma.onboarding_tasks.findMany({where:{user_id:req.params.userId},orderBy:[{is_completed:'asc'},{created_at:'asc'}]});return ok(res,{records:tasks,total:tasks.length});}catch(e){next(e);}}
+export async function get_tasks(req,res,next){try{const tasks=await prisma.onboarding_tasks.findMany({
+  take: 500,where:{user_id:req.params.userId},orderBy:[{is_completed:'asc'},{created_at:'asc'}]});return ok(res,{records:tasks,total:tasks.length});}catch(e){next(e);}}
 
 // POST /onboarding/tasks
 export async function create_task(req,res,next){try{const{user_id,title,description,category,due_date}=req.body;if(!user_id||!title)return fail(res,'user_id and title required');const t=await prisma.onboarding_tasks.create({data:{user_id,title,description,category:category||'GENERAL',due_date:due_date?new Date(due_date):null,assigned_by:req.user.id}});return ok(res,t,'Task created',201);}catch(e){next(e);}}

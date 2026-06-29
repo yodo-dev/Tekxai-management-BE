@@ -120,6 +120,7 @@ export async function add_maintenance(asset_id, data) {
 
 export async function list_categories() {
   return prisma.asset_categories.findMany({
+    take: 500,
     where: { is_active: true },
     orderBy: [{ sort_order: 'asc' }, { name: 'asc' }],
   });
@@ -135,9 +136,11 @@ export async function create_category({ name, description, is_device = false, is
 }
 
 export async function list_locations() {
-  return prisma.asset_locations.findMany({ orderBy: { office: 'asc' } });
+  return prisma.asset_locations.findMany({
+  take: 500, orderBy: { office: 'asc' } });
 }
 
 export async function list_vendors() {
-  return prisma.asset_vendors.findMany({ orderBy: { name: 'asc' } });
+  return prisma.asset_vendors.findMany({
+  take: 500, orderBy: { name: 'asc' } });
 }

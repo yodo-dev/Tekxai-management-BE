@@ -12,7 +12,8 @@ export async function list_screenshots(req,res,next){try{const is_admin=req.user
 
 export async function update_productivity(req,res,next){try{const{date,active_seconds=0,idle_seconds=0,mouse_events=0,keyboard_events=0}=req.body;const total=+active_seconds+(+idle_seconds);const score=total>0?Math.round((+active_seconds/total)*100):0;const s=await prisma.productivity_sessions.upsert({where:{user_id_date:{user_id:req.user.id,date:new Date(date||new Date().toISOString().split('T')[0])}},update:{active_seconds:+active_seconds,idle_seconds:+idle_seconds,mouse_events:+mouse_events,keyboard_events:+keyboard_events,productivity_score:score},create:{user_id:req.user.id,date:new Date(date||new Date().toISOString().split('T')[0]),active_seconds:+active_seconds,idle_seconds:+idle_seconds,mouse_events:+mouse_events,keyboard_events:+keyboard_events,productivity_score:score}});return ok(res,s);}catch(e){next(e);}}
 
-export async function get_productivity(req,res,next){try{const is_admin=req.user.roles.some(r=>['ADMIN','SUPER_ADMIN','HR','DIVISION_MANAGER'].includes(r));const{user_id,from,to}=req.query;const where={user_id:(is_admin&&user_id)?user_id:req.user.id};if(from||to){where.date={};if(from)where.date.gte=new Date(from);if(to)where.date.lte=new Date(to);}const records=await prisma.productivity_sessions.findMany({where,orderBy:{date:'desc'},include:{user:{select:{id:true,first_name:true,last_name:true}}}});return ok(res,{records,total:records.length});}catch(e){next(e);}}
+export async function get_productivity(req,res,next){try{const is_admin=req.user.roles.some(r=>['ADMIN','SUPER_ADMIN','HR','DIVISION_MANAGER'].includes(r));const{user_id,from,to}=req.query;const where={user_id:(is_admin&&user_id)?user_id:req.user.id};if(from||to){where.date={};if(from)where.date.gte=new Date(from);if(to)where.date.lte=new Date(to);}const records=await prisma.productivity_sessions.findMany({
+  take: 500,where,orderBy:{date:'desc'},include:{user:{select:{id:true,first_name:true,last_name:true}}}});return ok(res,{records,total:records.length});}catch(e){next(e);}}
 
 export async function log_app_usage(req, res, next) {
   try {
@@ -56,7 +57,8 @@ export async function get_app_usage(req, res, next) {
     ]);
     // Aggregate by app_name for summary
     const by_app = {};
-    const all_logs = await prisma.app_usage_logs.findMany({ where });
+    const all_logs = await prisma.app_usage_logs.findMany({
+  take: 500, where });
     for (const l of all_logs) {
       by_app[l.app_name] = (by_app[l.app_name] || 0) + l.duration_seconds;
     }

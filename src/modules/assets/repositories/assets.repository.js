@@ -68,15 +68,18 @@ export async function return_asset_db(asset_id, { returned_condition, notes }) {
 }
 
 export async function find_categories() {
-  return prisma.asset_categories.findMany({ orderBy: { name: 'asc' } });
+  return prisma.asset_categories.findMany({
+  take: 500, orderBy: { name: 'asc' } });
 }
 
 export async function find_locations() {
-  return prisma.asset_locations.findMany({ orderBy: { office: 'asc' } });
+  return prisma.asset_locations.findMany({
+  take: 500, orderBy: { office: 'asc' } });
 }
 
 export async function find_vendors() {
-  return prisma.asset_vendors.findMany({ orderBy: { name: 'asc' } });
+  return prisma.asset_vendors.findMany({
+  take: 500, orderBy: { name: 'asc' } });
 }
 
 export async function create_maintenance_log(data) {

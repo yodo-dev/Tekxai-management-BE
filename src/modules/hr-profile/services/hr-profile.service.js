@@ -87,17 +87,22 @@ export async function get_full_employee_record(user_id) {
 
   const [profile, documents, contracts, onboarding_tasks, leave_balances, performance_scores, asset_assignments, policy_acknowledgements] = await Promise.all([
     prisma.employee_profiles.findUnique({ where: { user_id: db_id } }),
-    prisma.employee_documents.findMany({ where: { user_id: db_id }, orderBy: { created_at: 'desc' } }),
+    prisma.employee_documents.findMany({
+  take: 500, where: { user_id: db_id }, orderBy: { created_at: 'desc' } }),
     prisma.contracts.findMany({ where: { user_id: db_id }, orderBy: { created_at: 'desc' }, take: 10 }),
-    prisma.onboarding_tasks.findMany({ where: { user_id: db_id }, orderBy: { created_at: 'asc' } }),
-    prisma.leave_balances.findMany({ where: { user_id: db_id }, include: { policy: true } }),
+    prisma.onboarding_tasks.findMany({
+  take: 500, where: { user_id: db_id }, orderBy: { created_at: 'asc' } }),
+    prisma.leave_balances.findMany({
+  take: 500, where: { user_id: db_id }, include: { policy: true } }),
     prisma.employee_performance_scores.findMany({ where: { user_id: db_id }, orderBy: { created_at: 'desc' }, take: 5 }),
     prisma.asset_assignments.findMany({
+      take: 500,
       where: { user_id: db_id },
       include: { asset: { include: { category: true } } },
       orderBy: { assigned_at: 'desc' },
     }),
-    prisma.policy_acknowledgements.findMany({ where: { user_id: db_id }, include: { policy: { select: { id: true, title: true, category: true } } } }),
+    prisma.policy_acknowledgements.findMany({
+  take: 500, where: { user_id: db_id }, include: { policy: { select: { id: true, title: true, category: true } } } }),
   ]);
 
   return {

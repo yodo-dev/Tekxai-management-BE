@@ -72,6 +72,7 @@ router.get('/employee/:userId/annual', ADMIN_HR, async (req, res, next) => {
 
     // ── Leaves ──────────────────────────────────────────────────────────
     const leaves = await prisma.time_off_requests.findMany({
+      take: 500,
       where: { user_id: userId, start_date: { gte: start, lte: end } },
       include: { policy: { select: { name: true } } },
     });
@@ -225,6 +226,7 @@ router.get('/employee/:userId/monthly', ADMIN_HR, async (req, res, next) => {
     end.setMilliseconds(-1);
 
     const leaves = await prisma.time_off_requests.findMany({
+      take: 500,
       where: { user_id: userId, status: 'APPROVED', start_date: { gte: start, lte: end } },
       include: { policy: { select: { name: true } } },
     });
@@ -349,6 +351,7 @@ router.get('/aggregate', ADMIN_HR, async (req, res, next) => {
     const late_users_map = late_user_ids.length
       ? Object.fromEntries(
           (await prisma.users.findMany({
+            take: 500,
             where: { id: { in: late_user_ids } },
             select: { id: true, first_name: true, last_name: true, email: true, employee_id: true, designation: true },
           })).map(u => [u.id, u])
@@ -374,6 +377,7 @@ router.get('/aggregate', ADMIN_HR, async (req, res, next) => {
     const leave_users_map = leave_user_ids.length
       ? Object.fromEntries(
           (await prisma.users.findMany({
+            take: 500,
             where: { id: { in: leave_user_ids } },
             select: { id: true, first_name: true, last_name: true, email: true, employee_id: true },
           })).map(u => [u.id, u])
@@ -393,6 +397,7 @@ router.get('/aggregate', ADMIN_HR, async (req, res, next) => {
     const late_annual_users_map = late_annual_user_ids.length
       ? Object.fromEntries(
           (await prisma.users.findMany({
+            take: 500,
             where: { id: { in: late_annual_user_ids } },
             select: { id: true, first_name: true, last_name: true, email: true, employee_id: true },
           })).map(u => [u.id, u])

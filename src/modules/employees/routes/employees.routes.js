@@ -101,7 +101,8 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
 
     const [total, records] = await Promise.all([
       prisma.users.count({ where }),
-      prisma.users.findMany({ where, select: USER_SELECT, orderBy, skip, take }),
+      prisma.users.findMany({
+  take: 500, where, select: USER_SELECT, orderBy, skip, take }),
     ]);
 
     const baseWhere = { deleted_at: null, ...(business_unit ? { business_unit } : {}) };

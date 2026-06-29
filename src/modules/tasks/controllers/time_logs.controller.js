@@ -5,6 +5,7 @@ function fail(res,m,s=400){return res.status(s).json({success:false,message:m});
 export async function list_time_logs(req,res,next){
   try{
     const logs=await prisma.task_time_logs.findMany({
+      take: 500,
       where:{task_id:req.params.taskId},
       orderBy:{logged_at:'desc'},
       include:{user:{select:{id:true,first_name:true,last_name:true}}}

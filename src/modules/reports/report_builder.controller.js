@@ -35,7 +35,8 @@ export async function run_report(req,res,next){
 }
 
 export async function list_saved(req,res,next){
-  try{const saved=await prisma.saved_reports.findMany({where:{OR:[{created_by:req.user.id},{is_public:true}]},orderBy:{created_at:'desc'},include:{creator:{select:{id:true,first_name:true,last_name:true}}}});return ok(res,saved);}catch(e){next(e);}
+  try{const saved=await prisma.saved_reports.findMany({
+  take: 500,where:{OR:[{created_by:req.user.id},{is_public:true}]},orderBy:{created_at:'desc'},include:{creator:{select:{id:true,first_name:true,last_name:true}}}});return ok(res,saved);}catch(e){next(e);}
 }
 
 export async function save_report(req,res,next){

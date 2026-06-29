@@ -14,7 +14,8 @@ export async function get_user_shift(user_id) {
 
 /** List all shifts */
 export async function find_all_shifts() {
-  return prisma.shifts.findMany({ orderBy: { name: 'asc' } });
+  return prisma.shifts.findMany({
+  take: 500, orderBy: { name: 'asc' } });
 }
 
 /** Create or update a shift */
@@ -97,6 +98,7 @@ export async function attendance_summary(user_id, start_date, end_date) {
       where: { user_id, check_in: { gte: start, lte: end }, deleted_at: null },
     }),
     prisma.attendance_violations.findMany({
+      take: 500,
       where: { user_id, date: { gte: start, lte: end } },
     }),
   ]);

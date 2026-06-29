@@ -5,6 +5,7 @@ export async function get_starred(user_id, item_type) {
   if (item_type) where.item_type = item_type;
 
   const items = await prisma.starred_items.findMany({
+    take: 500,
     where,
     orderBy: { created_at: 'desc' },
     include: { project: { select: { id: true, title: true, status: true, progress: true } } },

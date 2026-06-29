@@ -233,7 +233,8 @@ router.get('/files', async (req, res, next) => {
     if (req.query.entity_id)   where.entity_id   = req.query.entity_id;
     if (req.query.user_id && is_admin) where.user_id = req.query.user_id;
     else if (!is_admin)                where.user_id = req.user.id;
-    const files = await prisma.file_uploads.findMany({ where, orderBy: { created_at: 'desc' } });
+    const files = await prisma.file_uploads.findMany({
+  take: 500, where, orderBy: { created_at: 'desc' } });
     return res.json({ success: true, payload: { records: files, total: files.length } });
   } catch (err) { next(err); }
 });

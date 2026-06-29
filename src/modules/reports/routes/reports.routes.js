@@ -65,6 +65,7 @@ router.get('/attendance', MANAGER, async (req, res, next) => {
     }
 
     const entries = await prisma.timesheet_entries.findMany({
+      take: 500,
       where,
       include: { user: { select: { id: true, first_name: true, last_name: true, email: true } } },
       orderBy: [{ user_id: 'asc' }, { check_in: 'asc' }],
@@ -135,6 +136,7 @@ router.get('/leave', MANAGER, async (req, res, next) => {
     }
 
     const requests = await prisma.time_off_requests.findMany({
+      take: 500,
       where,
       include: {
         user:   { select: { id: true, first_name: true, last_name: true, email: true } },
@@ -201,6 +203,7 @@ router.get('/performance', MANAGER, async (req, res, next) => {
     if (period) where.period = period;
 
     const scores = await prisma.employee_performance_scores.findMany({
+      take: 500,
       where,
       include: { user: { select: { id: true, first_name: true, last_name: true, email: true } } },
       orderBy: { total_score: 'desc' },
@@ -266,6 +269,7 @@ router.get('/bonus', MANAGER, async (req, res, next) => {
     if (period) where.period = period;
 
     const records = await prisma.monthly_bonus_records.findMany({
+      take: 500,
       where,
       include: {
         // No direct relation in schema — fetch user separately if needed
@@ -317,6 +321,7 @@ router.get('/projects', MANAGER, async (req, res, next) => {
     if (status) where.status = status;
 
     const projects = await prisma.projects.findMany({
+      take: 500,
       where,
       include: {
         owner:   { select: { id: true, first_name: true, last_name: true } },

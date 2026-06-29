@@ -56,6 +56,7 @@ export async function find_projects({ search, page = 1, limit = 20, status, user
   let saved_ids = new Set();
   if (user_id) {
     const starred = await prisma.starred_items.findMany({
+      take: 500,
       where: { user_id, item_type: 'project', item_id: { in: records.map((r) => r.id) } },
     });
     saved_ids = new Set(starred.map((s) => s.item_id));
@@ -149,6 +150,7 @@ export async function find_saved_projects(user_id, { page = 1, limit = 20 } = {}
 
   const project_ids = starred.map((s) => s.item_id);
   const projects = await prisma.projects.findMany({
+    take: 500,
     where: { id: { in: project_ids }, deleted_at: null },
     include: PROJECT_INCLUDE,
   });

@@ -104,6 +104,7 @@ export async function get_team_hierarchy(user_id, role) {
   if (is_manager) {
     // Return all users with business_unit = CRM and their supervisors
     const crm_users = await prisma.users.findMany({
+      take: 500,
       where: { business_unit: 'CRM', deleted_at: null, is_active: true },
       select: {
         id: true, first_name: true, last_name: true, email: true,

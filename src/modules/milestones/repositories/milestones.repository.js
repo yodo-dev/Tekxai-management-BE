@@ -2,6 +2,7 @@ import prisma from '../../../shared/database/client.js';
 
 export async function find_milestones_by_project(project_id) {
   return prisma.milestones.findMany({
+    take: 500,
     where: { project_id },
     orderBy: { due_date: 'asc' },
   });

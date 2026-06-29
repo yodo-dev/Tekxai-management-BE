@@ -166,7 +166,8 @@ export async function get_overtime_stats({ user_id, month, year, department_id, 
     where.date = { gte: start, lt: end };
   }
 
-  const all = await prisma.overtime_requests.findMany({ where, select: {
+  const all = await prisma.overtime_requests.findMany({
+    take: 500, where, select: {
     status: true, duration_minutes: true, approved_minutes: true,
     approved_amount: true, is_late_submission: true, eligible_for_overtime: true,
   }});
@@ -195,14 +196,17 @@ export async function get_payroll_data({ user_id, month, year }) {
   end.setMonth(end.getMonth() + 1);
 
   const approved = await prisma.overtime_requests.findMany({
+    take: 500,
     where: { user_id, status: 'APPROVED', date: { gte: start, lt: end } },
     select: { id: true, date: true, duration_minutes: true, approved_minutes: true, approved_amount: true, approval_comment: true },
   });
   const excluded = await prisma.overtime_requests.findMany({
+    take: 500,
     where: { user_id, status: { in: ['REJECTED', 'CANCELLED'] }, date: { gte: start, lt: end } },
     select: { id: true, date: true, status: true, duration_minutes: true, approval_comment: true },
   });
   const pending = await prisma.overtime_requests.findMany({
+    take: 500,
     where: { user_id, status: 'PENDING', date: { gte: start, lt: end } },
     select: { id: true, date: true, duration_minutes: true },
   });

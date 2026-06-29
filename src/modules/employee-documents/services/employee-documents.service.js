@@ -8,6 +8,7 @@ export const DOC_TYPES = [
 
 export async function list_employee_docs(user_id) {
   return prisma.employee_documents.findMany({
+    take: 500,
     where: { user_id },
     orderBy: { created_at: 'desc' },
   });
