@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 /**
  * Classify a single Upwork transaction row into a category.
@@ -63,11 +63,26 @@ export function parse_csv_text(csvText) {
   return rows;
 }
 
-export function parse_xlsx_buffer(buffer) {
-  const wb = XLSX.read(buffer, { type: 'buffer' });
-  const sheetName = wb.SheetNames[0];
-  const ws = wb.Sheets[sheetName];
-  return XLSX.utils.sheet_to_json(ws, { defval: '' });
+export async function parse_xlsx_buffer(buffer) {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  const ws = wb.worksheets[0];
+  if (!ws) return [];
+
+  const rows = [];
+  const headers = [];
+  ws.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) {
+      row.eachCell((cell, colNumber) => { headers[colNumber] = String(cell.value ?? ''); });
+    } else {
+      const obj = {};
+      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        obj[headers[colNumber] || colNumber] = cell.value ?? '';
+      });
+      if (Object.values(obj).some(v => v !== '')) rows.push(obj);
+    }
+  });
+  return rows;
 }
 
 export function classify_all(rows) {

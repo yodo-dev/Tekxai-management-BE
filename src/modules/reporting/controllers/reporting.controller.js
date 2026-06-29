@@ -19,7 +19,7 @@ export async function parse_file(req, res, next) {
       const text = file.buffer.toString('utf-8');
       raw_rows = parse_csv_text(text);
     } else if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
-      raw_rows = parse_xlsx_buffer(file.buffer);
+      raw_rows = await parse_xlsx_buffer(file.buffer);
     } else {
       return fail(res, 'Unsupported format. Upload .csv or .xlsx');
     }
