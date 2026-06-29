@@ -41,6 +41,7 @@ export async function find_all_weekly_entries(week_start, search) {
     where,
     include: { user: { select: { id: true, first_name: true, last_name: true, avatar: true } } },
     orderBy: { check_in: 'asc' },
+    take: 500,
   });
 }
 
@@ -189,6 +190,7 @@ export async function find_edit_requests({ status, user_id } = {}) {
       entry: true,
     },
     orderBy: { created_at: 'desc' },
+    take: 500,
   });
 }
 
@@ -235,6 +237,7 @@ export async function find_time_off_requests({ user_id, status } = {}) {
       user: { select: { id: true, first_name: true, last_name: true, email: true, avatar: true } },
     },
     orderBy: { created_at: 'desc' },
+    take: 500,
   });
 }
 

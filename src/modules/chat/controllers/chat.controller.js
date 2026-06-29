@@ -128,6 +128,7 @@ export async function list_members(req,res,next){
       where:{channel_id:req.params.id},
       include:{user:{select:{id:true,first_name:true,last_name:true,avatar:true,designation:true,email:true}}},
       orderBy:{joined_at:'asc'},
+      take:500,
     });
     return ok(res,{records:members,total:members.length});
   }catch(e){next(e);}
@@ -390,6 +391,7 @@ export async function get_thread(req,res,next){
     const replies=await prisma.messages.findMany({
       where:{parent_id:msgId,deleted_at:null},
       orderBy:{created_at:'asc'},
+      take:500,
       include:{
         user:{select:{id:true,first_name:true,last_name:true,avatar:true}},
         reactions:{select:{id:true,user_id:true,emoji:true,created_at:true}},

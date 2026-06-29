@@ -112,6 +112,7 @@ router.get('/employee/:userId/annual', ADMIN_HR, async (req, res, next) => {
     // ── Latecomings ─────────────────────────────────────────────────────
     const violations = await prisma.attendance_violations.findMany({
       where: { user_id: userId, violation_type: 'LATE', date: { gte: start, lte: end } },
+      take: 500,
     });
     const late_total = violations.length;
     const late_after_grace = violations.filter(v => (v.late_mins || 0) > GRACE_MINUTES).length;
@@ -120,6 +121,7 @@ router.get('/employee/:userId/annual', ADMIN_HR, async (req, res, next) => {
     const ts_entries = await prisma.timesheet_entries.findMany({
       where: { user_id: userId, check_in: { gte: start, lte: end } },
       select: { check_in: true, check_out: true },
+      take: 500,
     });
 
     let late_after_1115 = 0;
@@ -237,6 +239,7 @@ router.get('/employee/:userId/monthly', ADMIN_HR, async (req, res, next) => {
     const ts_entries = await prisma.timesheet_entries.findMany({
       where: { user_id: userId, check_in: { gte: start, lte: end } },
       select: { check_in: true, check_out: true },
+      take: 500,
     });
 
     let late_count = 0, late_1115 = 0, late_1130 = 0, missing_checkout = 0;
@@ -342,15 +345,16 @@ router.get('/aggregate', ADMIN_HR, async (req, res, next) => {
       take: 10,
     });
 
-    const top_late_users = await Promise.all(
-      late_by_user.map(async r => {
-        const u = await prisma.users.findUnique({
-          where: { id: r.user_id },
-          select: { first_name: true, last_name: true, email: true, employee_id: true, designation: true },
-        });
-        return { ...u, late_count: r._count.id };
-      })
-    );
+    const late_user_ids = late_by_user.map(r => r.user_id);
+    const late_users_map = late_user_ids.length
+      ? Object.fromEntries(
+          (await prisma.users.findMany({
+            where: { id: { in: late_user_ids } },
+            select: { id: true, first_name: true, last_name: true, email: true, employee_id: true, designation: true },
+          })).map(u => [u.id, u])
+        )
+      : {};
+    const top_late_users = late_by_user.map(r => ({ ...late_users_map[r.user_id], late_count: r._count.id }));
 
     // Employees exceeding annual leave threshold (> 12 in current year)
     const annual_start = new Date(`${year}-01-01`);
@@ -366,15 +370,16 @@ router.get('/aggregate', ADMIN_HR, async (req, res, next) => {
       having: { days: { _sum: { gt: ANNUAL_PAID_LEAVE } } },
     });
 
-    const employees_over_leave = await Promise.all(
-      leave_by_user.map(async r => {
-        const u = await prisma.users.findUnique({
-          where: { id: r.user_id },
-          select: { first_name: true, last_name: true, email: true, employee_id: true },
-        });
-        return { ...u, total_leaves: r._sum.days };
-      })
-    );
+    const leave_user_ids = leave_by_user.map(r => r.user_id);
+    const leave_users_map = leave_user_ids.length
+      ? Object.fromEntries(
+          (await prisma.users.findMany({
+            where: { id: { in: leave_user_ids } },
+            select: { id: true, first_name: true, last_name: true, email: true, employee_id: true },
+          })).map(u => [u.id, u])
+        )
+      : {};
+    const employees_over_leave = leave_by_user.map(r => ({ ...leave_users_map[r.user_id], total_leaves: r._sum.days }));
 
     // Employees exceeding latecoming threshold (> 24 after grace in year)
     const late_annual = await prisma.attendance_violations.groupBy({
@@ -384,15 +389,16 @@ router.get('/aggregate', ADMIN_HR, async (req, res, next) => {
       having: { id: { _count: { gt: 24 } } },
     });
 
-    const employees_over_late = await Promise.all(
-      late_annual.map(async r => {
-        const u = await prisma.users.findUnique({
-          where: { id: r.user_id },
-          select: { first_name: true, last_name: true, email: true, employee_id: true },
-        });
-        return { ...u, late_count: r._count.id };
-      })
-    );
+    const late_annual_user_ids = late_annual.map(r => r.user_id);
+    const late_annual_users_map = late_annual_user_ids.length
+      ? Object.fromEntries(
+          (await prisma.users.findMany({
+            where: { id: { in: late_annual_user_ids } },
+            select: { id: true, first_name: true, last_name: true, email: true, employee_id: true },
+          })).map(u => [u.id, u])
+        )
+      : {};
+    const employees_over_late = late_annual.map(r => ({ ...late_annual_users_map[r.user_id], late_count: r._count.id }));
 
     return res.json({
       success: true,

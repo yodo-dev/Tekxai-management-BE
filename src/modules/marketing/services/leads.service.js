@@ -150,6 +150,7 @@ export async function list_lead_activities(lead_id, lead_source) {
   return prisma.lead_activities.findMany({
     where: { lead_id, lead_source },
     orderBy: { created_at: 'desc' },
+    take: 500,
   });
 }
 
@@ -177,14 +178,14 @@ export async function list_won_deals({ user_id, source, page = 1, limit = 50, fr
   let upwork = [], linkedin = [];
   if (!source || source === 'all' || source === 'Upwork') {
     const rows = await prisma.upwork_bids.findMany({
-      where: upwhere, orderBy: { date: 'desc' },
+      where: upwhere, orderBy: { date: 'desc' }, take: 500,
       include: { user: { select: userSelect } },
     });
     upwork = rows.map(r => ({ ...r, _source: 'Upwork' }));
   }
   if (!source || source === 'all' || source === 'LinkedIn') {
     const rows = await prisma.linkedin_leads.findMany({
-      where: liwhere, orderBy: { date: 'desc' },
+      where: liwhere, orderBy: { date: 'desc' }, take: 500,
       include: { user: { select: userSelect } },
     });
     linkedin = rows.map(r => ({ ...r, _source: 'LinkedIn', job_title: r.full_name }));

@@ -476,6 +476,7 @@ router.get('/my-salaries', async (req, res, next) => {
     const records = await prisma.salary_builders.findMany({
       where: { user_id: req.user.id, status: 'published' },
       orderBy: { period: 'desc' },
+      take: 500,
       include: { user: { select: { id: true, first_name: true, last_name: true } } },
     });
     return res.json({ success: true, payload: records });

@@ -104,6 +104,7 @@ export async function list_transactions(req, res, next) {
       where: { expense_account_id: account.id },
       include: TX_INCLUDE,
       orderBy: { date: 'desc' },
+      take: 500,
     });
     return ok(res, { records: txns, total: txns.length });
   } catch (e) { next(e); }

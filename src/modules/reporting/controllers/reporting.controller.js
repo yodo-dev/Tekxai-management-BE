@@ -69,10 +69,14 @@ export async function get_internal_data(req, res, next) {
           where.period = { ...where.period, lte: toPeriod };
         }
       }
-      const slips = await prisma.salary_builders.findMany({ where });
-      result.tekxai_salaries = slips.reduce((sum, s) => {
-        return sum + parseFloat(s.basic_salary_pkr || 0) + parseFloat(s.commission_pkr || 0) - parseFloat(s.deductions_pkr || 0);
-      }, 0);
+      const agg_salary = await prisma.salary_builders.aggregate({
+        where,
+        _sum: { basic_salary_pkr: true, commission_pkr: true, deductions_pkr: true },
+      });
+      result.tekxai_salaries =
+        parseFloat(agg_salary._sum.basic_salary_pkr || 0) +
+        parseFloat(agg_salary._sum.commission_pkr   || 0) -
+        parseFloat(agg_salary._sum.deductions_pkr   || 0);
     } catch (_) {}
 
     return ok(res, result);
@@ -110,6 +114,7 @@ export async function list_reports(req, res, next) {
   try {
     const reports = await prisma.financial_reports.findMany({
       orderBy: { created_at: 'desc' },
+      take: 500,
       include: { creator: { select: { id: true, first_name: true, last_name: true } } },
     });
     return ok(res, { records: reports, total: reports.length });
