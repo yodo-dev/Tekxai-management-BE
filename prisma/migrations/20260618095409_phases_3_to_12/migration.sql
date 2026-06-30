@@ -360,10 +360,10 @@ ALTER TABLE "client_project_access" ADD CONSTRAINT "client_project_access_client
     FOREIGN KEY ("client_id") REFERENCES "client_accounts"("id") ON DELETE CASCADE;
 
 -- Seed default channels
-INSERT INTO "channels" ("id","name","description","type","created_by") VALUES
-  ('chan_general_001','general','Company-wide announcements and general chat','PUBLIC',NULL),
-  ('chan_dev_001','development','Engineering team discussions','PUBLIC',NULL),
-  ('chan_design_001','design','Design team discussions','PUBLIC',NULL),
-  ('chan_marketing_001','marketing','Marketing team discussions','PUBLIC',NULL),
-  ('chan_hr_001','hr','HR announcements','PUBLIC',NULL)
+INSERT INTO "channels" ("id","name","description","type","created_by","updated_at") VALUES
+  ('chan_general_001','general','Company-wide announcements and general chat','PUBLIC',NULL,CURRENT_TIMESTAMP),
+  ('chan_dev_001','development','Engineering team discussions','PUBLIC',NULL,CURRENT_TIMESTAMP),
+  ('chan_design_001','design','Design team discussions','PUBLIC',NULL,CURRENT_TIMESTAMP),
+  ('chan_marketing_001','marketing','Marketing team discussions','PUBLIC',NULL,CURRENT_TIMESTAMP),
+  ('chan_hr_001','hr','HR announcements','PUBLIC',NULL,CURRENT_TIMESTAMP)
 ON CONFLICT DO NOTHING;
