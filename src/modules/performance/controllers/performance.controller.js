@@ -51,6 +51,7 @@ export async function post_score(req, res, next) {
   try {
     const data = { ...req.body };
     if (!data.user_id && data.employee_id) data.user_id = data.employee_id;
+    delete data.employee_id;
     const result = await upsert_score(data);
     // Email the employee their performance score
     if (data.user_id) {

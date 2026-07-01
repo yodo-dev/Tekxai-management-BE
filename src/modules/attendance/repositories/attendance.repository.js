@@ -26,6 +26,11 @@ export async function upsert_shift({ id, name, start_time, end_time, grace_perio
   return prisma.shifts.create({ data: { name, start_time, end_time, grace_period_min: Number(grace_period_min || 15), is_default: Boolean(is_default) } });
 }
 
+/** Delete a shift */
+export async function delete_shift(id) {
+  return prisma.shifts.delete({ where: { id } });
+}
+
 /** Assign shift to employee */
 export async function assign_shift(user_id, shift_id) {
   return prisma.employee_shifts.create({

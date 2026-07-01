@@ -18,8 +18,14 @@ const router = Router();
  */
 router.get('/system/public', async (req, res, next) => {
   try {
-    const row = await prisma.system_settings.findUnique({ where: { key: 'screenshot_interval_minutes' } });
-    return res.json({ success: true, payload: { screenshot_interval_minutes: row?.value || '10' } });
+    const rows = await prisma.system_settings.findMany({
+      where: { key: { in: ['screenshot_interval_minutes', 'idle_timeout_minutes'] } },
+    });
+    const map = Object.fromEntries(rows.map(r => [r.key, r.value]));
+    return res.json({ success: true, payload: {
+      screenshot_interval_minutes: map.screenshot_interval_minutes || '10',
+      idle_timeout_minutes: map.idle_timeout_minutes || '15',
+    }});
   } catch (e) { next(e); }
 });
 

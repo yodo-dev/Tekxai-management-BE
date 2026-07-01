@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
 import {
-  assign_shift_ctrl, get_my_attendance_summary, get_my_shift_ctrl,
+  assign_shift_ctrl, delete_shift_ctrl, get_my_attendance_summary, get_my_shift_ctrl,
   list_shifts_ctrl, list_violations_ctrl, upsert_shift_ctrl,
 } from '../controllers/attendance.controller.js';
 
@@ -50,6 +50,7 @@ router.get('/shifts',          list_shifts_ctrl);
  *         description: Unauthorized
  */
 router.post('/shifts',         MANAGER, upsert_shift_ctrl);
+router.delete('/shifts/:id',   MANAGER, delete_shift_ctrl);
 
 /**
  * @swagger

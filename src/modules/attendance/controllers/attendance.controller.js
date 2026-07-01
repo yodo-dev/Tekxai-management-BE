@@ -1,5 +1,5 @@
 import {
-  assign_shift, attendance_summary, compute_violation,
+  assign_shift, attendance_summary, compute_violation, delete_shift,
   find_all_shifts, find_violations, get_user_shift, upsert_shift,
 } from '../repositories/attendance.repository.js';
 
@@ -23,6 +23,13 @@ export async function upsert_shift_ctrl(req, res, next) {
     if (!name || !start_time || !end_time) return fail(res, 'name, start_time, end_time required');
     const shift = await upsert_shift({ id, name, start_time, end_time, grace_period_min, is_default });
     return ok(res, shift, id ? 'Shift updated' : 'Shift created', id ? 200 : 201);
+  } catch (err) { next(err); }
+}
+
+export async function delete_shift_ctrl(req, res, next) {
+  try {
+    await delete_shift(req.params.id);
+    return ok(res, null, 'Shift deleted');
   } catch (err) { next(err); }
 }
 
