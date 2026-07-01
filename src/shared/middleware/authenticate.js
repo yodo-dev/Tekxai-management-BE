@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { env_config } from '../../config/env.js';
+import prisma from '../database/client.js';
 
 function app_error(message, status_code = 401) {
   const error = new Error(message);
@@ -7,7 +8,7 @@ function app_error(message, status_code = 401) {
   return error;
 }
 
-export function authenticate(req, res, next) {
+export async function authenticate(req, res, next) {
   const header = req.headers['authorization'] || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
 
@@ -15,9 +16,20 @@ export function authenticate(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, env_config.jwt_secret);
+
+    // Reject deleted or inactive users even if their token is still valid
+    const user = await prisma.users.findUnique({
+      where: { id: decoded.sub },
+      select: { id: true, deleted_at: true, status: true },
+    });
+    if (!user || user.deleted_at !== null || user.status === 'INACTIVE') {
+      return next(app_error('Account is deactivated or deleted', 401));
+    }
+
     req.user = { id: decoded.sub, email: decoded.email, roles: decoded.roles || [] };
     return next();
-  } catch {
+  } catch (err) {
+    if (err.status_code) return next(err);
     return next(app_error('Invalid or expired token', 401));
   }
 }
