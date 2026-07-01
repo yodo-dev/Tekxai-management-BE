@@ -13,8 +13,7 @@ export async function get_projects(req, res, next) {
   try {
     const { search, page, limit, status } = req.query;
     const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN', 'HR', 'MARKETING'];
-    const role = req.user?.role_name || req.user?.role || '';
-    const member_only = !ADMIN_ROLES.includes(role);
+    const member_only = !req.user?.roles?.some((r) => ADMIN_ROLES.includes(r));
     const result = await list_projects({ search, page: +page || 1, limit: +limit || 20, status, member_only }, req.user.id);
     return res.json({ success: true, payload: result });
   } catch (e) { return next(e); }
