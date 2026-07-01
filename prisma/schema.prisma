@@ -1020,7 +1020,7 @@ model screenshot_sessions {
 
 model screenshots {
   id            String   @id @default(cuid())
-  session_id    String
+  session_id    String?
   user_id       String
   file_key      String
   file_url      String?
@@ -1030,8 +1030,8 @@ model screenshots {
   captured_at   DateTime @default(now())
   created_at    DateTime @default(now())
 
-  session screenshot_sessions @relation(fields: [session_id], references: [id], onDelete: Cascade)
-  user    users               @relation(fields: [user_id],   references: [id], onDelete: Cascade)
+  session screenshot_sessions? @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  user    users                @relation(fields: [user_id],   references: [id], onDelete: Cascade)
 
   @@index([user_id])
   @@index([session_id])
