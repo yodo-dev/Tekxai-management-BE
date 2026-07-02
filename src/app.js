@@ -8,6 +8,7 @@ import { env_config } from './config/env.js';
 import { swagger_spec } from './config/swagger.js';
 import api_routes from './routes/index.js';
 import { error_handler, not_found_handler } from './shared/middleware/error-handler.js';
+import { build_allowed_origins, is_origin_allowed } from './shared/cors-config.js';
 
 const app = express();
 
@@ -17,9 +18,18 @@ app.use(compression());
 // Disable CSP only for swagger routes so inline scripts work
 app.use(['/api-docs', '/api/v1/api-docs'], helmet({ contentSecurityPolicy: false }));
 app.use(helmet());
+// Fixed allowlist — never reflect an arbitrary Origin header back with
+// credentials:true, that defeats CORS entirely. CORS_ORIGIN env var (if
+// set) can extend this with a comma-separated list, but the app is never
+// left wide open by a missing/misconfigured env var.
+const ALLOWED_ORIGINS = build_allowed_origins(env_config.cors_origin);
+
 app.use(
   cors({
-    origin: env_config.cors_origin === '*' ? true : env_config.cors_origin,
+    origin: (origin, callback) => {
+      if (is_origin_allowed(origin, ALLOWED_ORIGINS)) return callback(null, true);
+      return callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
   }),
 );

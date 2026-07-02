@@ -7,29 +7,13 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { is_mime_allowed, is_extension_dangerous, can_modify_file } from './upload-validation.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOAD_DIR = path.join(__dirname, '../../../../uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
-
-// Allowlist, not a blocklist — presigned URLs must never be issued for
-// executables/scripts. Covers the document/image/media types this ERP
-// actually uses (avatars, receipts, contracts, chat/ticket attachments).
-const ALLOWED_MIME_TYPES = new Set([
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'text/csv', 'text/plain',
-  'application/zip', 'application/x-zip-compressed',
-  'audio/mpeg', 'audio/wav', 'video/mp4',
-]);
 
 function gen_key(entity_type, user_id, file_name) {
   const ext = file_name.split('.').pop() || 'bin';
@@ -141,10 +125,10 @@ router.post('/presign', async (req, res, next) => {
     if (!file_name || !mime_type) {
       return res.status(400).json({ success: false, message: 'file_name and mime_type required' });
     }
-    if (!ALLOWED_MIME_TYPES.has(mime_type)) {
+    if (!is_mime_allowed(mime_type)) {
       return res.status(400).json({ success: false, message: `File type not allowed: ${mime_type}` });
     }
-    if (/\.(exe|bat|cmd|sh|ps1|msi|dll|apk|jar|com|scr|vbs|js)$/i.test(file_name)) {
+    if (is_extension_dangerous(file_name)) {
       return res.status(400).json({ success: false, message: 'File extension not allowed' });
     }
     const key = gen_key(entity_type, req.user.id, file_name);
@@ -192,8 +176,7 @@ router.patch('/:fileId/confirm', async (req, res, next) => {
   try {
     const existing = await prisma.file_uploads.findUnique({ where: { id: req.params.fileId } });
     if (!existing) return res.status(404).json({ success: false, message: 'File not found' });
-    const is_admin = req.user.roles.some((r) => ['ADMIN', 'SUPER_ADMIN'].includes(r));
-    if (!is_admin && existing.user_id !== req.user.id) {
+    if (!can_modify_file(req.user, existing)) {
       return res.status(403).json({ success: false, message: 'Forbidden' });
     }
     const { file_size } = req.body;
