@@ -14,9 +14,12 @@ export async function upload_screenshot(req,res,next){try{const{session_id,file_
 
 export async function list_screenshots(req,res,next){
   try{
-    const{from,to,page=1,limit=20}=req.query;
+    // Route-level can_or_role('erp.monitoring.view', ...) middleware already
+    // gates who may reach this handler at all, so user_id here is a pure
+    // filter (any employee, or all if omitted) rather than a security check.
+    const{user_id,from,to,page=1,limit=20}=req.query;
     const skip=(+page-1)*+limit;
-    const where={...scoped_user_id_where(req)};
+    const where=user_id?{user_id}:{};
     if(from||to){where.captured_at={};if(from)where.captured_at.gte=new Date(from);if(to)where.captured_at.lte=new Date(to);}
     const[total,records]=await Promise.all([
       prisma.screenshots.count({where}),

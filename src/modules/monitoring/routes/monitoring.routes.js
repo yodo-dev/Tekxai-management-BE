@@ -1,9 +1,14 @@
 import { Router } from 'express';
-import { authenticate } from '../../../shared/middleware/authenticate.js';
+import { authenticate, can_or_role } from '../../../shared/middleware/authenticate.js';
 import { end_session, get_productivity, list_screenshots, start_session, update_productivity, upload_screenshot, log_app_usage, get_app_usage } from '../controllers/monitoring.controller.js';
 
 const router = Router();
 router.use(authenticate);
+
+// Screenshots are never shown to the employee they belong to — only
+// ADMIN/SUPER_ADMIN, or anyone else explicitly granted erp.monitoring.view
+// (role default or a per-user permission override), may view them.
+const CAN_VIEW_SCREENSHOTS = can_or_role('erp.monitoring.view', 'ADMIN', 'SUPER_ADMIN');
 
 /**
  * @swagger
@@ -82,7 +87,7 @@ router.post('/screenshot', upload_screenshot);
  *       401:
  *         description: Unauthorized
  */
-router.get('/screenshots', list_screenshots);
+router.get('/screenshots', CAN_VIEW_SCREENSHOTS, list_screenshots);
 
 /**
  * @swagger
