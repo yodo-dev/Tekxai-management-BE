@@ -28,6 +28,10 @@ export async function log_time(req,res,next){
 
 export async function delete_time_log(req,res,next){
   try{
+    const log=await prisma.task_time_logs.findUnique({where:{id:req.params.logId}});
+    if(!log) return fail(res,'Not found',404);
+    const is_admin=req.user.roles?.some(r=>['ADMIN','SUPER_ADMIN','HR','DIVISION_MANAGER'].includes(r));
+    if(!is_admin && log.user_id!==req.user.id) return fail(res,"Cannot delete another employee's time log",403);
     await prisma.task_time_logs.delete({where:{id:req.params.logId}});
     return ok(res,null,'Deleted');
   }catch(e){next(e);}
