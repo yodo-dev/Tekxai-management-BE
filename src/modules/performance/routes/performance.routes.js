@@ -3,7 +3,9 @@ import { authenticate, authorize, can_or_role } from '../../../shared/middleware
 import {
   approve_bonus_ctrl,
   calc_bonus,
+  delete_score_ctrl,
   get_bonus,
+  get_bonus_config_ctrl,
   get_reports,
   get_score_for_employee,
   get_scores,
@@ -161,6 +163,39 @@ router.get('/score/:employeeId', MANAGER, get_score_for_employee);
  *         description: Unauthorized
  */
 router.post('/score', MANAGER, post_score);
+
+/**
+ * @swagger
+ * /performance/score/{id}:
+ *   delete:
+ *     summary: Delete a performance score record
+ *     tags: [Performance]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Score deleted
+ *       401:
+ *         description: Unauthorized
+ */
+router.delete('/score/:id', MANAGER, delete_score_ctrl);
+
+/**
+ * @swagger
+ * /performance/bonus-config:
+ *   get:
+ *     summary: List configured bonus tiers (read-only)
+ *     tags: [Performance]
+ *     responses:
+ *       200:
+ *         description: Bonus tiers
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/bonus-config', MANAGER, get_bonus_config_ctrl);
 
 /**
  * @swagger

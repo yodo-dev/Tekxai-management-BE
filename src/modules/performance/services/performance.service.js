@@ -106,6 +106,31 @@ export async function upsert_score(data) {
   });
 }
 
+export async function delete_score(id) {
+  const existing = await prisma.employee_performance_scores.findUnique({ where: { id } });
+  if (!existing) throw app_error('Performance score not found', 404);
+  return prisma.employee_performance_scores.delete({ where: { id } });
+}
+
+/** All configured bonus tiers, for display in the admin UI (read-only — tiers
+ * themselves are managed directly in the database, same as calculate_bonus's
+ * fallback below). */
+export async function list_bonus_config() {
+  const configs = await prisma.bonus_configurations.findMany({
+    take: 500,
+    where: { is_active: true },
+    orderBy: { min_score: 'desc' },
+  });
+  if (configs.length > 0) return configs;
+  return [
+    { id: 'fallback-1', level_name: 'Outstanding',        min_score: 95, max_score: 100, bonus_amount: 20000 },
+    { id: 'fallback-2', level_name: 'Excellent',           min_score: 85, max_score: 94,  bonus_amount: 15000 },
+    { id: 'fallback-3', level_name: 'Good',                min_score: 75, max_score: 84,  bonus_amount: 10000 },
+    { id: 'fallback-4', level_name: 'Average',              min_score: 50, max_score: 74,  bonus_amount: 5000  },
+    { id: 'fallback-5', level_name: 'Needs Improvement',   min_score: 0,  max_score: 49,  bonus_amount: 0     },
+  ];
+}
+
 // ── Bonus ────────────────────────────────────────────────────────────────────
 
 export async function calculate_bonus(user_id, period) {

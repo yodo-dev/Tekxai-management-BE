@@ -2,7 +2,9 @@ import {
   approve_bonus,
   calculate_bonus,
   create_daily_report,
+  delete_score,
   get_employee_score,
+  list_bonus_config,
   list_bonus_records,
   list_daily_reports,
   list_scores,
@@ -64,7 +66,20 @@ export async function post_score(req, res, next) {
   } catch (e) { return next(e); }
 }
 
+export async function delete_score_ctrl(req, res, next) {
+  try {
+    await delete_score(req.params.id);
+    return res.json({ success: true, message: 'Performance score deleted' });
+  } catch (e) { return next(e); }
+}
+
 // ── Bonus ────────────────────────────────────────────────────────────────────
+export async function get_bonus_config_ctrl(req, res, next) {
+  try {
+    return res.json({ success: true, payload: await list_bonus_config() });
+  } catch (e) { return next(e); }
+}
+
 export async function get_bonus(req, res, next) {
   try {
     return res.json({ success: true, payload: await list_bonus_records({ ...req.query, user_id: req.user.id, is_admin: is_admin(req) }) });
