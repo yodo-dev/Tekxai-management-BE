@@ -68,15 +68,16 @@ export async function find_todays_open_entry(user_id) {
   });
 }
 
-export async function find_today_entry(user_id) {
+/** All of today's entries (possibly several, if the user clocked in/out more than once) */
+export async function find_today_entries(user_id) {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
   const end = new Date(start);
   end.setDate(end.getDate() + 1);
 
-  return prisma.timesheet_entries.findFirst({
+  return prisma.timesheet_entries.findMany({
     where: { user_id, check_in: { gte: start, lt: end }, deleted_at: null },
-    orderBy: { check_in: 'desc' },
+    orderBy: { check_in: 'asc' },
   });
 }
 

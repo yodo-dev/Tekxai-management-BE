@@ -1,4 +1,5 @@
 import { send_leave_approved_email, send_leave_rejected_email } from '../../email/email.service.js';
+import { compute_violation } from '../../attendance/repositories/attendance.repository.js';
 import {
   clock_in as repo_clock_in,
   clock_out as repo_clock_out,
@@ -12,7 +13,7 @@ import {
   find_time_off_policies,
   find_time_off_requests,
   find_todays_open_entry,
-  find_today_entry,
+  find_today_entries,
   find_weekly_entries,
   force_checkout as repo_force_checkout,
   update_edit_request_status,
@@ -106,23 +107,46 @@ export async function force_checkout(req, res, next) {
 }
 
 // GET /timesheet/today
+// Aggregates all of today's sessions so an employee who clocks in more than
+// once in a day (e.g. 9am-11am, then 2pm-6pm) sees a running total rather
+// than only their most recent session.
 export async function today_entry(req, res, next) {
   try {
-    const entry = await find_today_entry(req.user.id);
-    if (!entry) {
+    const entries = await find_today_entries(req.user.id);
+    if (!entries.length) {
       return ok(res, { clocked_in: false, clocked_out: false, entry: null });
     }
-    const dur = entry.duration_sec || 0;
+
+    const open = entries.find((e) => !e.check_out);
+    const completed_seconds = entries
+      .filter((e) => e.check_out)
+      .reduce((sum, e) => sum + (e.duration_sec || 0), 0);
+    const last = entries[entries.length - 1];
+
+    if (open) {
+      return ok(res, {
+        clocked_in: true,
+        clocked_out: false,
+        entry: {
+          id: open.id,
+          check_in: open.check_in,
+          check_out: null,
+          prior_seconds: completed_seconds,
+          status: open.status,
+        },
+      });
+    }
+
     return ok(res, {
       clocked_in: true,
-      clocked_out: !!entry.check_out,
+      clocked_out: true,
       entry: {
-        id: entry.id,
-        check_in: entry.check_in,
-        check_out: entry.check_out,
-        duration_seconds: dur,
-        duration_label: format_duration_local(dur),
-        status: entry.status,
+        id: last.id,
+        check_in: last.check_in,
+        check_out: last.check_out,
+        duration_seconds: completed_seconds,
+        duration_label: format_duration_local(completed_seconds),
+        status: last.status,
       },
     });
   } catch (err) { next(err); }

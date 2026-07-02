@@ -8,9 +8,9 @@ export function not_found_handler(req, res) {
 export function error_handler(err, req, res, next) {
   const status_code = err.status_code || 500;
 
-  if (process.env.NODE_ENV !== "production") {
-    console.error(err);
-  }
+  // Always log server-side so production failures are visible in pm2 logs;
+  // the client response below still only ever exposes err.message, never the stack.
+  console.error(err);
 
   return res.status(status_code).json({
     success: false,
