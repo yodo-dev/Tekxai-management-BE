@@ -91,7 +91,11 @@ export async function create_project({ title, description, start_date, end_date,
         title, description,
         start_date: start_date ? new Date(start_date) : undefined,
         end_date:   end_date   ? new Date(end_date)   : undefined,
-        total_hours: total_hours || 0, owner_id, leader_id,
+        total_hours: total_hours || 0,
+        // owner_id/leader_id are foreign keys — an empty string isn't a valid
+        // users.id and fails the FK constraint, rolling back the whole create.
+        owner_id: owner_id || null,
+        leader_id: leader_id || null,
       },
     });
 
@@ -116,8 +120,8 @@ export async function update_project(id, { title, description, status, progress,
     if (start_date !== undefined) data.start_date = start_date ? new Date(start_date) : null;
     if (end_date !== undefined)   data.end_date   = end_date   ? new Date(end_date)   : null;
     if (total_hours !== undefined) data.total_hours = total_hours;
-    if (owner_id !== undefined) data.owner_id = owner_id;
-    if (leader_id !== undefined) data.leader_id = leader_id;
+    if (owner_id !== undefined) data.owner_id = owner_id || null;
+    if (leader_id !== undefined) data.leader_id = leader_id || null;
 
     await tx.projects.update({ where: { id }, data });
 
