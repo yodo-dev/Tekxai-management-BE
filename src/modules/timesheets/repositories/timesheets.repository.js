@@ -46,6 +46,16 @@ export async function find_all_weekly_entries(week_start, search) {
   });
 }
 
+/** Most recently checked-in-or-out entries, for an activity feed. Pass user_id to scope to one employee. */
+export async function find_recent_entries(limit = 10, user_id = null) {
+  return prisma.timesheet_entries.findMany({
+    where: { deleted_at: null, ...(user_id ? { user_id } : {}) },
+    include: { user: { select: { id: true, first_name: true, last_name: true } } },
+    orderBy: { updated_at: 'desc' },
+    take: limit,
+  });
+}
+
 export async function find_entry_by_id(id) {
   return prisma.timesheet_entries.findFirst({ where: { id, deleted_at: null } });
 }

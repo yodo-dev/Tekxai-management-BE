@@ -14,6 +14,7 @@ import {
   find_time_off_requests,
   find_todays_open_entry,
   find_today_entries,
+  find_recent_entries,
   find_weekly_entries,
   force_checkout as repo_force_checkout,
   update_edit_request_status,
@@ -62,6 +63,34 @@ export async function weekly(req, res, next) {
       total_duration_label: format_duration(total_sec),
       rows,
     });
+  } catch (err) { next(err); }
+}
+
+// GET /timesheet/recent-activity
+// Admin-facing feed of the most recent check-in/check-out events across all
+// employees (non-admins only ever see their own).
+export async function recent_activity(req, res, next) {
+  try {
+    const is_admin = req.user.roles.some((r) =>
+      ['ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER'].includes(r)
+    );
+    const limit = Math.min(+req.query.limit || 10, 50);
+    const entries = await find_recent_entries(limit, is_admin ? null : req.user.id);
+
+    const activity = entries.map((e) => {
+      const is_checkout = !!e.check_out;
+      const at = is_checkout ? e.check_out : e.check_in;
+      return {
+        id: e.id,
+        type: is_checkout ? 'CHECK_OUT' : 'CHECK_IN',
+        employee: e.user ? `${e.user.first_name} ${e.user.last_name}`.trim() : 'Unknown',
+        user_id: e.user_id,
+        at,
+        message: `${e.user ? `${e.user.first_name} ${e.user.last_name}`.trim() : 'Someone'} ${is_checkout ? 'checked out' : 'checked in'}`,
+      };
+    });
+
+    return ok(res, activity);
   } catch (err) { next(err); }
 }
 

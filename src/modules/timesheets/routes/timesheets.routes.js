@@ -13,6 +13,7 @@ import {
   my_requests,
   reject_edit,
   reject_time_off_ctrl,
+  recent_activity,
   request_entry_edit,
   requests,
   time_off_request,
@@ -115,6 +116,24 @@ router.get('/today',                           today_entry);
  *         description: Unauthorized
  */
 router.get('/weekly',                          weekly);
+
+/**
+ * @swagger
+ * /timesheet/recent-activity:
+ *   get:
+ *     summary: Recent check-in/check-out activity feed (admin sees all employees)
+ *     tags: [Timesheets]
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Recent activity events
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/recent-activity',                 recent_activity);
 
 /**
  * @swagger
