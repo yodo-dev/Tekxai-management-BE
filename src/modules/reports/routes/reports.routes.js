@@ -126,9 +126,10 @@ router.get('/attendance', MANAGER, async (req, res, next) => {
 
 router.get('/leave', MANAGER, async (req, res, next) => {
   try {
-    const { from, to, status, format = 'json' } = req.query;
+    const { from, to, status, user_id, format = 'json' } = req.query;
     const where = {};
     if (status) where.status = status;
+    if (user_id) where.user_id = user_id;
     if (from || to) {
       where.start_date = {};
       if (from) where.start_date.gte = new Date(from);
@@ -198,9 +199,10 @@ router.get('/leave', MANAGER, async (req, res, next) => {
 
 router.get('/performance', MANAGER, async (req, res, next) => {
   try {
-    const { period, format = 'json' } = req.query;
+    const { period, user_id, format = 'json' } = req.query;
     const where = {};
     if (period) where.period = period;
+    if (user_id) where.user_id = user_id;
 
     const scores = await prisma.employee_performance_scores.findMany({
       take: 500,
