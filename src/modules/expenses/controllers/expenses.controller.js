@@ -17,7 +17,7 @@ export async function list_accounts(req, res, next) {
       take: 500,
       where: { is_enabled: true },
       include: {
-        user: { select: { id: true, first_name: true, last_name: true, avatar: true, designation: true } },
+        user: { select: { id: true, employee_id: true, first_name: true, last_name: true, avatar: true, designation: true } },
         transactions: true,
       },
       orderBy: { created_at: 'asc' },
@@ -48,21 +48,23 @@ export async function get_account(req, res, next) {
   try {
     const { userId } = req.params;
     const { from, to, type } = req.query;
-    // Auto-create account for any valid user so Super Admin can add transactions immediately
-    const userRecord = await prisma.users.findUnique({
-      where: { id: userId },
+    // Accept either UUID or employee_id (e.g. TXI-0001)
+    const isEmployeeId = userId.startsWith('TXI-');
+    const userRecord = await prisma.users.findFirst({
+      where: isEmployeeId ? { employee_id: userId } : { id: userId },
       select: { id: true, first_name: true, last_name: true, designation: true, avatar: true },
     });
     if (!userRecord) return fail(res, 'User not found', 404);
+    const resolvedId = userRecord.id;
 
     let account = await prisma.expense_accounts.findUnique({
-      where: { user_id: userId },
-      include: { user: { select: { id: true, first_name: true, last_name: true, designation: true, avatar: true } } },
+      where: { user_id: resolvedId },
+      include: { user: { select: { id: true, employee_id: true, first_name: true, last_name: true, designation: true, avatar: true } } },
     });
     if (!account) {
       account = await prisma.expense_accounts.create({
-        data: { user_id: userId, opening_balance: 0, is_enabled: true },
-        include: { user: { select: { id: true, first_name: true, last_name: true, designation: true, avatar: true } } },
+        data: { user_id: resolvedId, opening_balance: 0, is_enabled: true },
+        include: { user: { select: { id: true, employee_id: true, first_name: true, last_name: true, designation: true, avatar: true } } },
       });
     }
     const where = { expense_account_id: account.id };
@@ -82,7 +84,11 @@ export async function get_account(req, res, next) {
 
 export async function update_account(req, res, next) {
   try {
-    const { userId } = req.params;
+    let { userId } = req.params;
+    if (userId.startsWith('TXI-')) {
+      const u = await prisma.users.findFirst({ where: { employee_id: userId }, select: { id: true } });
+      if (u) userId = u.id;
+    }
     const { opening_balance, notes, is_enabled } = req.body;
     const account = await prisma.expense_accounts.findUnique({ where: { user_id: userId } });
     if (!account) return fail(res, 'Not found', 404);
@@ -100,7 +106,8 @@ export async function update_account(req, res, next) {
 
 export async function list_transactions(req, res, next) {
   try {
-    const { userId } = req.params;
+    let { userId } = req.params;
+    if (userId.startsWith('TXI-')) { const u = await prisma.users.findFirst({ where: { employee_id: userId }, select: { id: true } }); if (u) userId = u.id; }
     let account = await prisma.expense_accounts.findUnique({ where: { user_id: userId } });
     if (!account) account = await prisma.expense_accounts.create({ data: { user_id: userId } });
     const txns = await prisma.expense_transactions.findMany({
@@ -115,7 +122,8 @@ export async function list_transactions(req, res, next) {
 
 export async function add_transaction(req, res, next) {
   try {
-    const { userId } = req.params;
+    let { userId } = req.params;
+    if (userId.startsWith('TXI-')) { const u = await prisma.users.findFirst({ where: { employee_id: userId }, select: { id: true } }); if (u) userId = u.id; }
     const { transaction_type, date, title, total_amount, ce_amount = 0, tekxai_amount = 0, category_id, paid_to, notes } = req.body;
     if (!transaction_type || !date || !title || total_amount == null) return fail(res, 'transaction_type, date, title, total_amount required');
     if (transaction_type === 'expense') {
