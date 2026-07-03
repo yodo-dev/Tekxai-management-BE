@@ -26,8 +26,16 @@ export async function send_invite({ email, role_id, team_id, department, designa
   });
   if (existing) throw app_error('An active invite already exists for this email', 409);
 
+  // Default to EMPLOYEE role if none specified
+  let resolved_role_id = role_id;
+  if (!resolved_role_id) {
+    const employee_role = await prisma.roles.findFirst({ where: { name: 'EMPLOYEE' } });
+    if (!employee_role) throw app_error('EMPLOYEE role not found in database', 500);
+    resolved_role_id = employee_role.id;
+  }
+
   const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-  return create_invite({ email, role_id, team_id, department, designation, invited_by, expires_at });
+  return create_invite({ email, role_id: resolved_role_id, team_id, department, designation, invited_by, expires_at });
 }
 
 export async function preview_token(token) {

@@ -18,12 +18,28 @@ export async function get_user(id) {
   return user;
 }
 
+async function generate_employee_id() {
+  const last = await prisma.users.findFirst({
+    where: { employee_id: { startsWith: 'TXI-' } },
+    orderBy: { employee_id: 'desc' },
+    select: { employee_id: true },
+  });
+  const next = last?.employee_id ? parseInt(last.employee_id.replace('TXI-', ''), 10) + 1 : 1;
+  return `TXI-${String(next).padStart(4, '0')}`;
+}
+
 export async function create_new_user(body) {
   const existing = await prisma.users.findUnique({ where: { email: body.email } });
   if (existing) throw app_error('Email already in use', 409);
 
   const password_hash = await bcrypt.hash(body.password || Math.random().toString(36), 12);
   const { team_id, ...rest } = body;
+
+  // Always generate employee_id server-side to avoid FE count-based collisions
+  if (!rest.employee_id) {
+    rest.employee_id = await generate_employee_id();
+  }
+
   const user = await create_user({ ...rest, password_hash });
 
   // Assign to team if provided
