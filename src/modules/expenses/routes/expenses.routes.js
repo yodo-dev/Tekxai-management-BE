@@ -3,7 +3,7 @@ import { authenticate, authorize } from '../../../shared/middleware/authenticate
 import {
   list_accounts, get_account, create_account, update_account,
   list_transactions, add_transaction, update_transaction, delete_transaction,
-  list_categories, create_category,
+  list_categories, create_category, title_suggestions,
   get_summary, update_receipt,
 } from '../controllers/expenses.controller.js';
 
@@ -70,6 +70,7 @@ router.get('/categories',                     list_categories);
  *         description: Unauthorized
  */
 router.post('/categories',                SA, create_category);
+router.get('/title-suggestions',              title_suggestions);
 
 /**
  * @swagger

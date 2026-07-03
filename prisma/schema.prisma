@@ -1928,11 +1928,12 @@ model expense_accounts {
 }
 
 model expense_categories {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  description String?
-  is_active   Boolean  @default(true)
-  created_at  DateTime @default(now())
+  id           String   @id @default(cuid())
+  name         String   @unique
+  description  String?
+  expense_type String   @default("BOTH") // MARKETING | OPERATIONS | BOTH
+  is_active    Boolean  @default(true)
+  created_at   DateTime @default(now())
 
   transactions expense_transactions[]
 }

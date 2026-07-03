@@ -198,21 +198,39 @@ export async function delete_transaction(req, res, next) {
 export async function list_categories(req, res, next) {
   try {
     const cats = await prisma.expense_categories.findMany({
-  take: 500, where: { is_active: true }, orderBy: { name: 'asc' } });
+      take: 500, where: { is_active: true }, orderBy: { name: 'asc' },
+    });
     return ok(res, { records: cats });
   } catch (e) { next(e); }
 }
 
 export async function create_category(req, res, next) {
   try {
-    const { name, description } = req.body;
+    const { name, description, expense_type = 'BOTH' } = req.body;
     if (!name) return fail(res, 'name required');
+    const valid_types = ['MARKETING', 'OPERATIONS', 'BOTH'];
+    if (!valid_types.includes(expense_type)) return fail(res, 'expense_type must be MARKETING, OPERATIONS, or BOTH');
     const cat = await prisma.expense_categories.upsert({
       where: { name },
-      update: { is_active: true, description },
-      create: { name, description },
+      update: { is_active: true, description, expense_type },
+      create: { name, description, expense_type },
     });
     return ok(res, cat, 'Category created', 201);
+  } catch (e) { next(e); }
+}
+
+export async function title_suggestions(req, res, next) {
+  try {
+    const { q } = req.query;
+    if (!q || q.length < 2) return ok(res, { records: [] });
+    const txns = await prisma.expense_transactions.findMany({
+      where: { title: { contains: q, mode: 'insensitive' } },
+      select: { title: true, category_id: true, category: { select: { id: true, name: true, expense_type: true } } },
+      distinct: ['title'],
+      orderBy: { title: 'asc' },
+      take: 10,
+    });
+    return ok(res, { records: txns });
   } catch (e) { next(e); }
 }
 
