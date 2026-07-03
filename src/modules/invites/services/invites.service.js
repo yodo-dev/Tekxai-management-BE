@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../../../shared/database/client.js';
+import { send_invite_email } from '../../email/email.service.js';
 import {
   create_invite,
   delete_invite,
@@ -9,6 +10,8 @@ import {
   mark_invite_used,
   update_invite,
 } from '../repositories/invites.repository.js';
+
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://tekxai.services';
 
 function app_error(m, c = 400) { const e = new Error(m); e.status_code = c; return e; }
 
@@ -35,7 +38,22 @@ export async function send_invite({ email, role_id, team_id, department, designa
   }
 
   const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-  return create_invite({ email, role_id: resolved_role_id, team_id, department, designation, invited_by, expires_at });
+  const invite = await create_invite({ email, role_id: resolved_role_id, team_id, department, designation, invited_by, expires_at });
+
+  // Send invite email (non-fatal — invite is still created if email fails)
+  try {
+    const inviter = await prisma.users.findUnique({
+      where: { id: invited_by },
+      select: { first_name: true, last_name: true },
+    });
+    const inviter_name = inviter ? `${inviter.first_name} ${inviter.last_name}`.trim() : 'TekXAI';
+    const invite_url = `${FRONTEND_URL}/invite/${invite.token}`;
+    await send_invite_email(email, invite_url, inviter_name, invite.role?.name || 'Employee');
+  } catch (e) {
+    console.error('[invite] Email send failed:', e.message);
+  }
+
+  return invite;
 }
 
 export async function preview_token(token) {
