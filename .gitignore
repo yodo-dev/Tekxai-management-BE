@@ -1,6 +1,7 @@
-node_modules/
-!.env.example
-*.log
-.github/
-config.bat
+node_modules/
+!.env.example
+*.log
+.github/
+config.bat
 .env.development
+.env

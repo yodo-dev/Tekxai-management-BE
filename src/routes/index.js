@@ -40,6 +40,7 @@ import overtime_routes         from '../modules/overtime/routes/overtime.routes.
 import hr_reports_routes       from '../modules/hr-reports/hr-reports.routes.js';
 import expenses_routes         from '../modules/expenses/routes/expenses.routes.js';
 import reporting_routes        from '../modules/reporting/routes/reporting.routes.js';
+import email_logs_routes       from '../modules/email/email-logs.routes.js';
 import payroll_router           from '../modules/payroll/payroll.routes.js';
 import webhooks_router         from '../modules/webhooks/webhooks.routes.js';
 import calendar_router         from '../modules/calendar/calendar.routes.js';
@@ -119,6 +120,9 @@ router.use('/expenses',          expenses_routes);
 
 // Financial Reporting (Super Admin only)
 router.use('/reporting',         reporting_routes);
+
+// Email Logs (Super Admin only)
+router.use('/email-logs',        email_logs_routes);
 
 // Payroll
 router.use('/payroll',           payroll_router);

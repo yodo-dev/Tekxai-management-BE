@@ -4,6 +4,8 @@
  * Falls back to console.log in development.
  */
 
+import prisma from '../../shared/database/client.js';
+
 let transporter = null;
 
 async function get_transporter() {
@@ -31,20 +33,30 @@ async function get_transporter() {
 const FROM_NAME = process.env.FROM_NAME || 'Tekxai ERP';
 const FROM = process.env.SMTP_FROM || `"${FROM_NAME}" <${process.env.SMTP_USER || 'noreply@tekxai.com'}>`;
 
-async function send_email({ to, subject, html, text }) {
+async function send_email({ to, subject, html, text, template }) {
   const t = await get_transporter();
-  if (!t) {
-    console.log(`[EMAIL] To: ${to} | Subject: ${subject}\n${text || html}`);
-    return;
+  let status = 'SENT', error = null;
+  try {
+    if (!t) {
+      console.log(`[EMAIL] To: ${to} | Subject: ${subject}\n${text || html}`);
+      status = 'DEV_LOG';
+    } else {
+      await t.sendMail({ from: FROM, to, subject, html, text });
+    }
+  } catch (e) {
+    status = 'FAILED';
+    error = e?.message || String(e);
+    throw e;
+  } finally {
+    prisma.email_logs.create({ data: { to_email: to, subject, template: template || null, status, error } }).catch(() => {});
   }
-  await t.sendMail({ from: FROM, to, subject, html, text });
 }
 
 // ── Templates ─────────────────────────────────────────────────────────────────
 
 export async function send_otp_email(to, otp, purpose = 'password reset') {
   return send_email({
-    to,
+    to, template: 'OTP',
     subject: `Your Tekxai ERP OTP Code`,
     text:    `Your OTP code for ${purpose} is: ${otp}\n\nThis code expires in 10 minutes. Do not share it.`,
     html:    `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">
@@ -58,7 +70,7 @@ export async function send_otp_email(to, otp, purpose = 'password reset') {
 
 export async function send_invite_email(to, invite_url, inviter_name, role) {
   return send_email({
-    to,
+    to, template: 'INVITE',
     subject: `You've been invited to join Tekxai ERP`,
     text:    `${inviter_name} has invited you to join Tekxai ERP as ${role}.\nAccept your invitation: ${invite_url}`,
     html:    `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">
@@ -74,7 +86,7 @@ export async function send_invite_email(to, invite_url, inviter_name, role) {
 
 export async function send_leave_approved_email(to, name, policy_name, date_range) {
   return send_email({
-    to,
+    to, template: 'LEAVE_APPROVED',
     subject: `Leave Request Approved — ${policy_name}`,
     text:    `Hi ${name},\n\nYour ${policy_name} request for ${date_range} has been approved.`,
     html:    `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">
@@ -87,7 +99,7 @@ export async function send_leave_approved_email(to, name, policy_name, date_rang
 
 export async function send_leave_rejected_email(to, name, policy_name, date_range, comment) {
   return send_email({
-    to,
+    to, template: 'LEAVE_REJECTED',
     subject: `Leave Request Rejected — ${policy_name}`,
     text:    `Hi ${name},\n\nYour ${policy_name} request for ${date_range} was rejected.\n${comment ? `Reason: ${comment}` : ''}`,
     html:    `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">
@@ -101,7 +113,7 @@ export async function send_leave_rejected_email(to, name, policy_name, date_rang
 
 export async function send_password_reset_email(to, name, otp) {
   return send_email({
-    to,
+    to, template: 'PASSWORD_RESET',
     subject: 'Reset Your Tekxai ERP Password',
     text: `Hi ${name},\n\nYour password reset OTP is: ${otp}\n\nExpires in 10 minutes.`,
     html: `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">
@@ -115,7 +127,7 @@ export async function send_password_reset_email(to, name, otp) {
 
 export async function send_contract_email(to, name, contract_title, sign_url) {
   return send_email({
-    to,
+    to, template: 'CONTRACT',
     subject: `Contract Ready for Signature — ${contract_title}`,
     text: `Hi ${name},\n\nYour contract "${contract_title}" is ready for your signature.\n\nSign here: ${sign_url}`,
     html: `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">
@@ -130,7 +142,7 @@ export async function send_contract_email(to, name, contract_title, sign_url) {
 
 export async function send_offer_email(to, name, position, offer_url) {
   return send_email({
-    to,
+    to, template: 'OFFER',
     subject: `Job Offer — ${position} at Tekxai`,
     text: `Hi ${name},\n\nWe're pleased to offer you the position of ${position}.\n\nView your offer: ${offer_url}`,
     html: `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">
@@ -145,7 +157,7 @@ export async function send_offer_email(to, name, position, offer_url) {
 
 export async function send_task_assigned_email(to, name, task_title, project_name) {
   return send_email({
-    to,
+    to, template: 'TASK_ASSIGNED',
     subject: `New Task Assigned: ${task_title}`,
     text: `Hi ${name},\n\nYou have been assigned a new task: "${task_title}" in project "${project_name}".`,
     html: `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">
@@ -158,7 +170,7 @@ export async function send_task_assigned_email(to, name, task_title, project_nam
 
 export async function send_expense_approved_email(to, name, amount, description) {
   return send_email({
-    to, subject: 'Expense Claim Approved',
+    to, template: 'EXPENSE_APPROVED', subject: 'Expense Claim Approved',
     text: `Hi ${name}, your expense claim of ${amount} for "${description}" has been approved.`,
     html: `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px"><h2 style="color:#005CDA">Expense Approved</h2><p>Hi <strong>${name}</strong>, your expense claim of <strong>${amount}</strong> for <strong>${description}</strong> has been <span style="color:#10b981">approved</span>.</p></div>`,
   });
@@ -166,7 +178,7 @@ export async function send_expense_approved_email(to, name, amount, description)
 
 export async function send_expense_rejected_email(to, name, amount, description, reason) {
   return send_email({
-    to, subject: 'Expense Claim Rejected',
+    to, template: 'EXPENSE_REJECTED', subject: 'Expense Claim Rejected',
     text: `Hi ${name}, your expense claim of ${amount} for "${description}" was rejected. Reason: ${reason || 'Not specified'}`,
     html: `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px"><h2 style="color:#005CDA">Expense Rejected</h2><p>Hi <strong>${name}</strong>, your expense claim of <strong>${amount}</strong> for <strong>${description}</strong> was <span style="color:#ef4444">rejected</span>.</p>${reason ? `<p>Reason: <em>${reason}</em></p>` : ''}</div>`,
   });
@@ -174,7 +186,7 @@ export async function send_expense_rejected_email(to, name, amount, description,
 
 export async function send_performance_score_email(to, name, period, total_score) {
   return send_email({
-    to, subject: `Performance Review — ${period}`,
+    to, template: 'PERFORMANCE_REVIEW', subject: `Performance Review — ${period}`,
     text: `Hi ${name}, your performance score for ${period} is: ${total_score}/100.`,
     html: `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px"><h2 style="color:#005CDA">Performance Review</h2><p>Hi <strong>${name}</strong>, your performance score for <strong>${period}</strong> has been submitted.</p><div style="font-size:40px;font-weight:900;text-align:center;color:#005CDA;padding:16px 0">${total_score}<span style="font-size:20px">/100</span></div></div>`,
   });
