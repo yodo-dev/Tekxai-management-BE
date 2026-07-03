@@ -4,6 +4,7 @@ const PROJECT_INCLUDE = {
   owner: { select: { id: true, first_name: true, last_name: true, avatar: true, email: true } },
   team_leader: { select: { id: true, first_name: true, last_name: true, avatar: true, email: true } },
   members: { include: { user: { select: { id: true, first_name: true, last_name: true, avatar: true, email: true } } } },
+  milestones: { orderBy: { due_date: 'asc' }, select: { id: true, title: true, due_date: true, completed: true } },
   _count: { select: { members: true } },
 };
 
@@ -24,6 +25,8 @@ function normalize_project(p, user_id = null) {
     team_leader: p.team_leader,
     members: p.members?.map((m) => m.user) || [],
     member_count: p._count?.members || 0,
+    milestones: p.milestones || [],
+    current_milestone: p.milestones?.find((m) => !m.completed) || null,
     is_saved: false, // overridden per-user in list
     created_at: p.created_at,
     updated_at: p.updated_at,
