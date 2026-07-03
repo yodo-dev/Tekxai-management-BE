@@ -1,5 +1,5 @@
 import prisma from '../../../shared/database/client.js';
-import { get_presigned_download_url } from '../../storage/storage.service.js';
+import { get_presigned_download_url, delete_file } from '../../storage/storage.service.js';
 function ok(res,p,m='OK',s=200){return res.status(s).json({success:true,message:m,payload:p});}
 function fail(res,m,s=400){return res.status(s).json({success:false,message:m});}
 // Admins/HR/managers see all employees unless they filter to one; everyone
@@ -33,6 +33,17 @@ export async function list_screenshots(req,res,next){
     }));
     return ok(res,{records:signed_records,total,page:+page,limit:+limit});
   }catch(e){next(e);}
+}
+
+export async function delete_screenshot(req,res,next){
+  try {
+    const screenshot = await prisma.screenshots.findUnique({ where: { id: req.params.id } });
+    if (!screenshot) return fail(res, 'Screenshot not found', 404);
+    // Delete from S3 first, then remove DB record
+    try { await delete_file(screenshot.file_key); } catch (e) { console.error('[delete_screenshot] S3 delete failed:', e.message); }
+    await prisma.screenshots.delete({ where: { id: req.params.id } });
+    return ok(res, null, 'Screenshot deleted');
+  } catch(e) { next(e); }
 }
 
 export async function update_productivity(req,res,next){try{const{date,active_seconds=0,idle_seconds=0,mouse_events=0,keyboard_events=0}=req.body;const total=+active_seconds+(+idle_seconds);const score=total>0?Math.round((+active_seconds/total)*100):0;const s=await prisma.productivity_sessions.upsert({where:{user_id_date:{user_id:req.user.id,date:new Date(date||new Date().toISOString().split('T')[0])}},update:{active_seconds:+active_seconds,idle_seconds:+idle_seconds,mouse_events:+mouse_events,keyboard_events:+keyboard_events,productivity_score:score},create:{user_id:req.user.id,date:new Date(date||new Date().toISOString().split('T')[0]),active_seconds:+active_seconds,idle_seconds:+idle_seconds,mouse_events:+mouse_events,keyboard_events:+keyboard_events,productivity_score:score}});return ok(res,s);}catch(e){next(e);}}
