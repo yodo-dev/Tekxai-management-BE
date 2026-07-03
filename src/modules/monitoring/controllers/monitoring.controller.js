@@ -20,7 +20,7 @@ export async function list_screenshots(req,res,next){
     const{user_id,from,to,page=1,limit=20}=req.query;
     const skip=(+page-1)*+limit;
     const where=user_id?{user_id}:{};
-    if(from||to){where.captured_at={};if(from)where.captured_at.gte=new Date(from);if(to)where.captured_at.lte=new Date(to);}
+    if(from||to){where.captured_at={};if(from)where.captured_at.gte=new Date(from);if(to){const d=new Date(to);d.setHours(23,59,59,999);where.captured_at.lte=d;}}
     const[total,records]=await Promise.all([
       prisma.screenshots.count({where}),
       prisma.screenshots.findMany({where,skip,take:+limit,orderBy:{captured_at:'desc'},include:{user:{select:{id:true,first_name:true,last_name:true}}}}),
@@ -39,16 +39,27 @@ export async function delete_screenshot(req,res,next){
   try {
     const screenshot = await prisma.screenshots.findUnique({ where: { id: req.params.id } });
     if (!screenshot) return fail(res, 'Screenshot not found', 404);
-    // Delete from S3 first, then remove DB record
     try { await delete_file(screenshot.file_key); } catch (e) { console.error('[delete_screenshot] S3 delete failed:', e.message); }
     await prisma.screenshots.delete({ where: { id: req.params.id } });
     return ok(res, null, 'Screenshot deleted');
   } catch(e) { next(e); }
 }
 
+export async function bulk_delete_screenshots(req,res,next){
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || !ids.length) return fail(res, 'ids array required');
+    const screenshots = await prisma.screenshots.findMany({ where: { id: { in: ids } }, select: { id: true, file_key: true } });
+    // Delete from S3 in parallel (non-fatal)
+    await Promise.allSettled(screenshots.map(s => delete_file(s.file_key)));
+    const { count } = await prisma.screenshots.deleteMany({ where: { id: { in: ids } } });
+    return ok(res, { deleted: count }, `${count} screenshot(s) deleted`);
+  } catch(e) { next(e); }
+}
+
 export async function update_productivity(req,res,next){try{const{date,active_seconds=0,idle_seconds=0,mouse_events=0,keyboard_events=0}=req.body;const total=+active_seconds+(+idle_seconds);const score=total>0?Math.round((+active_seconds/total)*100):0;const s=await prisma.productivity_sessions.upsert({where:{user_id_date:{user_id:req.user.id,date:new Date(date||new Date().toISOString().split('T')[0])}},update:{active_seconds:+active_seconds,idle_seconds:+idle_seconds,mouse_events:+mouse_events,keyboard_events:+keyboard_events,productivity_score:score},create:{user_id:req.user.id,date:new Date(date||new Date().toISOString().split('T')[0]),active_seconds:+active_seconds,idle_seconds:+idle_seconds,mouse_events:+mouse_events,keyboard_events:+keyboard_events,productivity_score:score}});return ok(res,s);}catch(e){next(e);}}
 
-export async function get_productivity(req,res,next){try{const{from,to}=req.query;const where={...scoped_user_id_where(req)};if(from||to){where.date={};if(from)where.date.gte=new Date(from);if(to)where.date.lte=new Date(to);}const records=await prisma.productivity_sessions.findMany({
+export async function get_productivity(req,res,next){try{const{from,to}=req.query;const where={...scoped_user_id_where(req)};if(from||to){where.date={};if(from)where.date.gte=new Date(from);if(to){const d=new Date(to);d.setHours(23,59,59,999);where.date.lte=d;}}const records=await prisma.productivity_sessions.findMany({
   take: 500,where,orderBy:{date:'desc'},include:{user:{select:{id:true,first_name:true,last_name:true}}}});return ok(res,{records,total:records.length});}catch(e){next(e);}}
 
 export async function log_app_usage(req, res, next) {
@@ -78,7 +89,7 @@ export async function get_app_usage(req, res, next) {
     if (from || to) {
       where.captured_at = {};
       if (from) where.captured_at.gte = new Date(from);
-      if (to) where.captured_at.lte = new Date(to);
+      if (to) { const d = new Date(to); d.setHours(23,59,59,999); where.captured_at.lte = d; }
     }
     const [total, records] = await Promise.all([
       prisma.app_usage_logs.count({ where }),
