@@ -40,11 +40,33 @@ export async function find_invite_by_token(token) {
 }
 
 export async function create_invite(data) {
-  return prisma.invites.create({ data, include: INVITE_INCLUDE });
+  const { team_id, role_id, invited_by, ...rest } = data;
+  return prisma.invites.create({
+    data: {
+      ...rest,
+      role:    { connect: { id: role_id } },
+      inviter: { connect: { id: invited_by } },
+      ...(team_id ? { team: { connect: { id: team_id } } } : {}),
+    },
+    include: INVITE_INCLUDE,
+  });
 }
 
 export async function update_invite(id, data) {
-  return prisma.invites.update({ where: { id }, data, include: INVITE_INCLUDE });
+  const { team_id, role_id, expires_in_days, ...rest } = data;
+  const prisma_data = { ...rest };
+
+  if (team_id !== undefined) {
+    prisma_data.team = team_id ? { connect: { id: team_id } } : { disconnect: true };
+  }
+  if (role_id !== undefined) {
+    prisma_data.role = { connect: { id: role_id } };
+  }
+  if (expires_in_days) {
+    prisma_data.expires_at = new Date(Date.now() + expires_in_days * 24 * 60 * 60 * 1000);
+  }
+
+  return prisma.invites.update({ where: { id }, data: prisma_data, include: INVITE_INCLUDE });
 }
 
 export async function delete_invite(id) {
