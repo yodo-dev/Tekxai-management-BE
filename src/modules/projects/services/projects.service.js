@@ -4,6 +4,7 @@ import {
   find_project_by_id,
   find_projects,
   find_saved_projects,
+  get_dashboard_stats,
   save_project,
   unsave_project,
   update_project,
@@ -33,6 +34,7 @@ export async function delete_existing_project(id) {
 }
 
 export const get_saved = (user_id, p) => find_saved_projects(user_id, p);
+export const get_dashboard = () => get_dashboard_stats();
 
 export async function toggle_save_project(user_id, project_id, action) {
   await get_project(project_id, user_id);

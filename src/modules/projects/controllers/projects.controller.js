@@ -2,12 +2,15 @@ import prisma from '../../../shared/database/client.js';
 import {
   create_new_project,
   delete_existing_project,
+  get_dashboard,
   get_project,
   get_saved,
   list_projects,
   toggle_save_project,
   update_existing_project,
 } from '../services/projects.service.js';
+import { validate_create_project, validate_update_project } from '../validators/projects.validation.js';
+import { log_activity } from '../../activity-logs/repositories/activity.repository.js';
 
 export async function get_projects(req, res, next) {
   try {
@@ -19,6 +22,12 @@ export async function get_projects(req, res, next) {
   } catch (e) { return next(e); }
 }
 
+export async function get_dashboard_stats_ctrl(req, res, next) {
+  try {
+    return res.json({ success: true, payload: await get_dashboard() });
+  } catch (e) { return next(e); }
+}
+
 export async function get_project_by_id(req, res, next) {
   try {
     return res.json({ success: true, payload: await get_project(req.params.id, req.user.id) });
@@ -27,6 +36,8 @@ export async function get_project_by_id(req, res, next) {
 
 export async function create_project_ctrl(req, res, next) {
   try {
+    const { valid, message } = validate_create_project(req.body);
+    if (!valid) return res.status(400).json({ success: false, message });
     const data = { ...req.body, owner_id: req.body.owner_id || req.user.id };
     return res.status(201).json({ success: true, payload: await create_new_project(data) });
   } catch (e) { return next(e); }
@@ -34,7 +45,39 @@ export async function create_project_ctrl(req, res, next) {
 
 export async function update_project_ctrl(req, res, next) {
   try {
-    return res.json({ success: true, payload: await update_existing_project(req.params.id, req.body, req.user.id) });
+    const { valid, message } = validate_update_project(req.body);
+    if (!valid) return res.status(400).json({ success: false, message });
+
+    const before = req.body.status !== undefined
+      ? await prisma.projects.findUnique({ where: { id: req.params.id }, select: { status: true, title: true, owner_id: true, leader_id: true } })
+      : null;
+
+    const updated = await update_existing_project(req.params.id, req.body, req.user.id);
+
+    if (before && req.body.status !== undefined && req.body.status !== before.status) {
+      log_activity({
+        user_id: req.user.id, action: 'UPDATE', entity_type: 'project', entity_id: req.params.id,
+        description: `Status changed from ${before.status} to ${req.body.status}`,
+      }).catch(() => {});
+
+      // No scheduler exists in this codebase for time-based checks (delivery/milestone overdue),
+      // so notifications here are limited to event-driven transitions like BLOCKED.
+      if (req.body.status === 'BLOCKED') {
+        const recipients = [...new Set([before.owner_id, before.leader_id].filter(Boolean))];
+        for (const user_id of recipients) {
+          prisma.notifications.create({
+            data: {
+              user_id,
+              title: `Project Blocked — ${before.title}`,
+              message: `${req.user.email} marked "${before.title}" as BLOCKED.`,
+              type: 'PROJECT',
+            },
+          }).catch(() => null);
+        }
+      }
+    }
+
+    return res.json({ success: true, payload: updated });
   } catch (e) { return next(e); }
 }
 
@@ -96,12 +139,16 @@ export async function request_extension_ctrl(req, res, next) {
     await prisma.notifications.create({
       data: {
         user_id: req.user.id,
-        title: `Deadline Extension Request — ${project.name}`,
+        title: `Deadline Extension Request — ${project.title}`,
         message: `Requested new deadline: ${new Date(proposed_deadline).toLocaleDateString()}. Reason: ${reason}`,
         type: 'PROJECT',
-        link: `/admin/project-detail?id=${req.params.id}`,
       },
     }).catch(() => null); // graceful — if notifications table missing just skip
+
+    log_activity({
+      user_id: req.user.id, action: 'UPDATE', entity_type: 'project', entity_id: req.params.id,
+      description: `Requested deadline extension to ${new Date(proposed_deadline).toLocaleDateString()}: ${reason}`,
+    }).catch(() => {});
 
     return res.json({ success: true, message: 'Extension request submitted' });
   } catch (e) { return next(e); }

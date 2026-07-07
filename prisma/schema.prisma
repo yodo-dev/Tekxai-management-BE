@@ -113,6 +113,8 @@ model users {
   created_webhooks          webhooks[]              @relation("webhook_creator")
   saved_reports             saved_reports[]         @relation("saved_reports_creator")
   google_calendar_token     google_calendar_tokens?
+  client_weekly_updates     client_weekly_updates[]
+  project_documents_uploaded project_documents[]
 
   @@index([department_id])
   @@index([division_id])
@@ -310,6 +312,7 @@ model projects {
   description String?
   status      String    @default("PENDING")
   progress    Int       @default(0)
+  progress_mode String  @default("MANUAL") // MANUAL | AUTO (auto = computed from milestone completion)
   total_hours Int       @default(0)
   start_date  DateTime?
   end_date    DateTime?
@@ -319,6 +322,8 @@ model projects {
   budget          Float?
   budget_currency String    @default("PKR")
   budget_spent    Float     @default(0)
+  client_name     String?
+  dev_status      String?
   created_at      DateTime  @default(now())
   updated_at      DateTime  @updatedAt
   deleted_at      DateTime?
@@ -332,6 +337,10 @@ model projects {
   starred_by   starred_items[]
   discussions  project_discussions[]
   crm_handoffs crm_handoffs[]
+  devops_access devops_access_tracking?
+  tracking_links project_tracking_links[]
+  weekly_updates client_weekly_updates[]
+  documents      project_documents[]
 
   @@index([owner_id])
   @@index([status])
@@ -385,11 +394,80 @@ model milestones {
   description String?
   due_date    DateTime?
   completed   Boolean   @default(false)
+  blocked     Boolean   @default(false)
   created_at  DateTime  @default(now())
   updated_at  DateTime  @updatedAt
 
   project projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
   tasks   tasks[]
+
+  @@index([project_id])
+}
+
+model devops_access_tracking {
+  id                        String    @id @default(cuid())
+  project_id                String    @unique
+  point_of_communication    String    @default("EMAIL")           // EMAIL | CLICKUP | SLACK | TEAMS | WHATSAPP | GOOGLE_MEET | ZOOM | OTHER
+  progress_shared_to_client Boolean   @default(false)              // kept for backward compat; derived from progress_shared_status
+  progress_shared_status    String    @default("NOT_SHARED")       // NOT_SHARED | SHARED | AWAITING_FEEDBACK | CLIENT_APPROVED
+  progress_shared_date      DateTime?
+  git_access_status         String    @default("NOT_APPLICABLE")  // GRANTED | PENDING | NOT_APPLICABLE
+  server_access_status      String    @default("NOT_APPLICABLE")
+  domain_access_status      String    @default("NOT_APPLICABLE")
+  email_smtp_access_status  String    @default("NOT_APPLICABLE")
+  aws_access_status         String    @default("NOT_APPLICABLE")  // GRANTED | PENDING | LIMITED | NOT_APPLICABLE
+  devops_remarks            String?
+  created_at                DateTime  @default(now())
+  updated_at                DateTime  @updatedAt
+
+  project projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@index([project_id])
+}
+
+model project_tracking_links {
+  id         String   @id @default(cuid())
+  project_id String
+  link_type  String   // CLICKUP | GOOGLE_SHEET | NOTION | JIRA | GITHUB_PROJECT | LINEAR | OTHER
+  label      String?
+  url        String
+  created_by String?
+  created_at DateTime @default(now())
+
+  project projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@index([project_id])
+}
+
+model client_weekly_updates {
+  id              String    @id @default(cuid())
+  project_id      String
+  update_date     DateTime  @default(now())
+  updated_by      String?
+  method          String    @default("EMAIL") // same values as devops_access_tracking.point_of_communication
+  summary         String
+  client_response String?
+  created_at      DateTime  @default(now())
+
+  project  projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  updater  users?   @relation(fields: [updated_by], references: [id], onDelete: SetNull)
+
+  @@index([project_id])
+}
+
+model project_documents {
+  id            String   @id @default(cuid())
+  project_id    String
+  document_type String   @default("OTHER") // CONTRACT | SCOPE | PROPOSAL | SOW | WIREFRAME | ARCHITECTURE | MEETING_NOTES | OTHER
+  title         String
+  file_key      String?
+  file_url      String?
+  notes         String?
+  uploaded_by   String?
+  created_at    DateTime @default(now())
+
+  project    projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  uploader   users?   @relation(fields: [uploaded_by], references: [id], onDelete: SetNull)
 
   @@index([project_id])
 }

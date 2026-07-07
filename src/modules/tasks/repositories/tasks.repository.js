@@ -21,10 +21,11 @@ export async function find_task_by_id(id) {
   return prisma.tasks.findFirst({ where: { id, deleted_at: null }, include: TASK_INCLUDE });
 }
 
-export async function create_task({ project_id, title, description, status, priority, assigned_to, due_date }) {
+export async function create_task({ project_id, milestone_id, title, description, status, priority, assigned_to, due_date }) {
   return prisma.tasks.create({
     data: {
       project_id,
+      milestone_id: milestone_id || null,
       title,
       description,
       status: status || 'TODO',
@@ -36,7 +37,7 @@ export async function create_task({ project_id, title, description, status, prio
   });
 }
 
-export async function update_task(id, { title, description, status, priority, assigned_to, due_date }) {
+export async function update_task(id, { title, description, status, priority, assigned_to, due_date, milestone_id }) {
   const data = {};
   if (title !== undefined) data.title = title;
   if (description !== undefined) data.description = description;
@@ -44,6 +45,7 @@ export async function update_task(id, { title, description, status, priority, as
   if (priority) data.priority = priority;
   if (assigned_to !== undefined) data.assigned_to = assigned_to;
   if (due_date !== undefined) data.due_date = due_date ? new Date(due_date) : null;
+  if (milestone_id !== undefined) data.milestone_id = milestone_id || null;
   return prisma.tasks.update({ where: { id }, data, include: TASK_INCLUDE });
 }
 

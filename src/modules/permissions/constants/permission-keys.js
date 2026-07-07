@@ -231,6 +231,8 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   ],
   EMPLOYEE: [
     // Employees use the /employee workspace — no ERP/CRM/HR workspace access by default
+    // except projects, which the controller scopes to member_only for this role
+    'erp.projects.view',
   ],
 };
 

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate, authorize, can_or_role } from '../../../shared/middleware/authenticate.js';
 import prisma from '../../../shared/database/client.js';
 import { get_schema, run_report, list_saved, save_report, delete_saved } from '../report_builder.controller.js';
+import { list_projects } from '../../projects/services/projects.service.js';
 
 const router = Router();
 router.use(authenticate);
@@ -319,39 +320,44 @@ router.get('/bonus', MANAGER, async (req, res, next) => {
 router.get('/projects', MANAGER, async (req, res, next) => {
   try {
     const { status, format = 'json' } = req.query;
-    const where = { deleted_at: null };
-    if (status) where.status = status;
-
-    const projects = await prisma.projects.findMany({
-      take: 500,
-      where,
-      include: {
-        owner:   { select: { id: true, first_name: true, last_name: true } },
-        members: { select: { id: true } },
-      },
-      orderBy: { created_at: 'desc' },
-    });
+    // Reuses the same list_projects() the Project Management UI uses, so this
+    // report (Project Summary / Delivery Report / Project Health Report) always
+    // reflects the same client_name, dev_status, health_status, and access-score
+    // computed fields — no separate/duplicated query logic to drift out of sync.
+    const { records: projects } = await list_projects({ status, limit: 500, member_only: false }, null);
 
     const rows = projects.map((p) => ({
-      title:     p.title,
-      status:    p.status,
-      progress:  `${p.progress}%`,
-      members:   p.members.length,
-      total_hours: p.total_hours,
-      start_date:  p.start_date ? new Date(p.start_date).toLocaleDateString() : '',
-      end_date:    p.end_date   ? new Date(p.end_date).toLocaleDateString()   : '',
-      owner:       p.owner ? `${p.owner.first_name} ${p.owner.last_name}` : '',
+      title:        p.title,
+      status:       p.status,
+      client_name:  p.client_name || '',
+      dev_status:   p.dev_status || '',
+      progress:     `${p.progress}%`,
+      members:      p.member_count,
+      total_hours:  p.total_hours,
+      start_date:   p.start_date ? new Date(p.start_date).toLocaleDateString() : '',
+      end_date:     p.end_date   ? new Date(p.end_date).toLocaleDateString()   : '',
+      is_overdue:   p.is_overdue ? 'Yes' : 'No',
+      days_remaining: p.days_remaining ?? '',
+      health_status: p.health_status,
+      access_score: `${p.access_completion_score.percent}%`,
+      owner:        p.owner ? `${p.owner.first_name} ${p.owner.last_name}` : '',
     }));
 
     if (format === 'csv') {
       const cols = [
         { label: 'Project',       key: 'title' },
         { label: 'Status',        key: 'status' },
+        { label: 'Client',        key: 'client_name' },
+        { label: 'Dev Status',    key: 'dev_status' },
         { label: 'Progress',      key: 'progress' },
         { label: 'Members',       key: 'members' },
         { label: 'Total Hours',   key: 'total_hours' },
         { label: 'Start Date',    key: 'start_date' },
         { label: 'End Date',      key: 'end_date' },
+        { label: 'Overdue',       key: 'is_overdue' },
+        { label: 'Days Remaining', key: 'days_remaining' },
+        { label: 'Health',        key: 'health_status' },
+        { label: 'Access Score',  key: 'access_score' },
         { label: 'Owner',         key: 'owner' },
       ];
       return send_csv(res, `projects_report.csv`, to_csv(rows, cols));

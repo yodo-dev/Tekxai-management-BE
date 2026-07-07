@@ -1,0 +1,2 @@
+ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "client_name" TEXT;
+ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "dev_status" TEXT;

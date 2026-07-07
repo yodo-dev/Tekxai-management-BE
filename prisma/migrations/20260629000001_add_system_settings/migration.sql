@@ -6,5 +6,5 @@ CREATE TABLE IF NOT EXISTS "system_settings" (
     CONSTRAINT "system_settings_pkey" PRIMARY KEY ("key")
 );
 
-INSERT INTO "system_settings" ("key", "value") VALUES ('screenshot_interval_minutes', '10')
+INSERT INTO "system_settings" ("key", "value", "updated_at") VALUES ('screenshot_interval_minutes', '10', CURRENT_TIMESTAMP)
 ON CONFLICT ("key") DO NOTHING;

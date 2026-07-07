@@ -3,6 +3,7 @@ import { authenticate, authorize, can_or_role } from '../../../shared/middleware
 import {
   create_project_ctrl,
   delete_project_ctrl,
+  get_dashboard_stats_ctrl,
   get_project_by_id,
   get_projects,
   get_saved_projects,
@@ -29,6 +30,20 @@ router.use(authenticate);
  *         description: Unauthorized
  */
 router.get('/saved', get_saved_projects);
+
+/**
+ * @swagger
+ * /projects/dashboard:
+ *   get:
+ *     summary: Project delivery dashboard KPI aggregate
+ *     tags: [Projects]
+ *     responses:
+ *       200:
+ *         description: Dashboard stats
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/dashboard', get_dashboard_stats_ctrl);
 
 /**
  * @swagger

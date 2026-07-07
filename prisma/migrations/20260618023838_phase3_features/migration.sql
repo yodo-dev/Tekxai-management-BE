@@ -116,6 +116,6 @@ ALTER TABLE "activity_logs" ADD CONSTRAINT "activity_logs_user_id_fkey"
     FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE;
 
 -- Seed default shift
-INSERT INTO "shifts" ("id", "name", "start_time", "end_time", "grace_period_min", "is_default")
-VALUES ('shift_default_001', 'Standard (9AM-6PM)', '09:00', '18:00', 15, true)
+INSERT INTO "shifts" ("id", "name", "start_time", "end_time", "grace_period_min", "is_default", "updated_at")
+VALUES ('shift_default_001', 'Standard (9AM-6PM)', '09:00', '18:00', 15, true, CURRENT_TIMESTAMP)
 ON CONFLICT DO NOTHING;

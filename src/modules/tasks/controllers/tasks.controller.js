@@ -6,6 +6,7 @@ import { validate_create_task } from '../validators/tasks.validation.js';
 import { send_task_assigned_email } from '../../email/email.service.js';
 import prisma from '../../../shared/database/client.js';
 import { fire_webhook } from '../../../shared/services/webhook.service.js';
+import { log_activity } from '../../activity-logs/repositories/activity.repository.js';
 
 function ok(res, payload, message = 'OK', status = 200) {
   return res.status(status).json({ success: true, message, payload });
@@ -48,6 +49,10 @@ export async function create_task_ctrl(req, res, next) {
       }
     }
     fire_webhook('task.created', { id: task.id, title: task.title }).catch(() => {});
+    log_activity({
+      user_id: req.user.id, action: 'CREATE', entity_type: 'project', entity_id: req.params.projectId,
+      description: `Created task "${task.title}"`,
+    }).catch(() => {});
     return ok(res, task, 'Task created', 201);
   } catch (err) { next(err); }
 }
@@ -69,6 +74,12 @@ export async function update_task_ctrl(req, res, next) {
         send_task_assigned_email(assignee.email, assignee.first_name || 'Team Member', updated.title, project?.title || 'Unknown Project').catch(() => {});
       }
     }
+    if (req.body.status !== undefined && req.body.status !== task.status) {
+      log_activity({
+        user_id: req.user.id, action: 'UPDATE', entity_type: 'project', entity_id: req.params.projectId,
+        description: `Task "${updated.title}" status changed to ${updated.status}`,
+      }).catch(() => {});
+    }
     return ok(res, updated, 'Task updated');
   } catch (err) { next(err); }
 }
@@ -76,7 +87,14 @@ export async function update_task_ctrl(req, res, next) {
 // DELETE /project/:projectId/tasks/:taskId
 export async function delete_task_ctrl(req, res, next) {
   try {
+    const existing = await find_task_by_id(req.params.taskId);
     await delete_task(req.params.taskId);
+    if (existing) {
+      log_activity({
+        user_id: req.user.id, action: 'DELETE', entity_type: 'project', entity_id: req.params.projectId,
+        description: `Deleted task "${existing.title}"`,
+      }).catch(() => {});
+    }
     return ok(res, null, 'Task deleted');
   } catch (err) { next(err); }
 }

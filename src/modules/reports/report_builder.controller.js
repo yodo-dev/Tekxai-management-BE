@@ -4,9 +4,12 @@ function fail(res,m,s=400){return res.status(s).json({success:false,message:m});
 
 const ENTITY_MAP={
   users:{fields:{id:true,first_name:true,last_name:true,email:true,role_name:true,created_at:true,designation:true,salary:true},filters:['role_name','created_at','designation']},
-  projects:{fields:{id:true,title:true,status:true,budget:true,budget_spent:true,created_at:true,deadline:true},filters:['status','created_at']},
-  tasks:{fields:{id:true,title:true,status:true,priority:true,created_at:true,due_date:true},filters:['status','priority','created_at']},
-  expenses:{fields:{id:true,amount:true,currency:true,category:true,status:true,created_at:true},filters:['status','category','created_at']},
+  // NOTE: 'deadline' was previously listed here but projects has no such column (it's
+  // 'end_date') — selecting it made every default projects report throw. Fixed.
+  projects:{fields:{id:true,title:true,status:true,client_name:true,dev_status:true,progress:true,budget:true,budget_spent:true,owner_id:true,created_at:true,end_date:true},filters:['status','created_at','client_name','owner_id']},
+  tasks:{fields:{id:true,title:true,status:true,priority:true,project_id:true,milestone_id:true,assigned_to:true,created_at:true,due_date:true},filters:['status','priority','created_at','project_id','assigned_to']},
+  milestones:{fields:{id:true,project_id:true,title:true,due_date:true,completed:true,blocked:true,created_at:true},filters:['project_id','completed','blocked','created_at']},
+  expense_transactions:{fields:{id:true,total_amount:true,transaction_type:true,category_id:true,date:true,title:true,paid_to:true,created_at:true},filters:['transaction_type','category_id','created_at']},
   payroll_entries:{fields:{id:true,base_salary:true,gross_amount:true,net_amount:true,tax_amount:true,present_days:true,working_days:true,status:true},filters:['status']},
 };
 

@@ -1,0 +1,64 @@
+import prisma from '../../../shared/database/client.js';
+
+const DEFAULTS = {
+  point_of_communication: 'EMAIL',
+  progress_shared_to_client: false,
+  progress_shared_status: 'NOT_SHARED',
+  progress_shared_date: null,
+  git_access_status: 'NOT_APPLICABLE',
+  server_access_status: 'NOT_APPLICABLE',
+  domain_access_status: 'NOT_APPLICABLE',
+  email_smtp_access_status: 'NOT_APPLICABLE',
+  aws_access_status: 'NOT_APPLICABLE',
+  devops_remarks: null,
+};
+
+// Access fields that count toward the "access completion score" (out of 6).
+export const ACCESS_SCORE_FIELDS = [
+  'git_access_status', 'server_access_status', 'domain_access_status',
+  'email_smtp_access_status', 'aws_access_status',
+];
+
+export async function find_devops_access_by_project(project_id) {
+  const record = await prisma.devops_access_tracking.findUnique({ where: { project_id } });
+  if (record) return record;
+  return { id: null, project_id, ...DEFAULTS, created_at: null, updated_at: null };
+}
+
+export async function upsert_devops_access(project_id, data) {
+  const {
+    point_of_communication, progress_shared_to_client, progress_shared_status, progress_shared_date,
+    git_access_status, server_access_status, domain_access_status,
+    email_smtp_access_status, aws_access_status, devops_remarks,
+  } = data;
+
+  const payload = {};
+  if (point_of_communication !== undefined) payload.point_of_communication = point_of_communication;
+  if (progress_shared_status !== undefined) {
+    payload.progress_shared_status = progress_shared_status;
+    // Keep the legacy boolean in sync so older consumers of progress_shared_to_client still work.
+    payload.progress_shared_to_client = progress_shared_status !== 'NOT_SHARED';
+  } else if (progress_shared_to_client !== undefined) {
+    payload.progress_shared_to_client = Boolean(progress_shared_to_client);
+    payload.progress_shared_status = progress_shared_to_client ? 'SHARED' : 'NOT_SHARED';
+  }
+  if (progress_shared_date !== undefined) payload.progress_shared_date = progress_shared_date ? new Date(progress_shared_date) : null;
+  if (git_access_status !== undefined) payload.git_access_status = git_access_status;
+  if (server_access_status !== undefined) payload.server_access_status = server_access_status;
+  if (domain_access_status !== undefined) payload.domain_access_status = domain_access_status;
+  if (email_smtp_access_status !== undefined) payload.email_smtp_access_status = email_smtp_access_status;
+  if (aws_access_status !== undefined) payload.aws_access_status = aws_access_status;
+  if (devops_remarks !== undefined) payload.devops_remarks = devops_remarks?.trim() || null;
+
+  return prisma.devops_access_tracking.upsert({
+    where: { project_id },
+    update: payload,
+    create: { project_id, ...DEFAULTS, ...payload },
+  });
+}
+
+export function compute_access_completion_score(record) {
+  if (!record) return { granted: 0, total: ACCESS_SCORE_FIELDS.length, percent: 0 };
+  const granted = ACCESS_SCORE_FIELDS.filter((f) => record[f] === 'GRANTED').length;
+  return { granted, total: ACCESS_SCORE_FIELDS.length, percent: Math.round((granted / ACCESS_SCORE_FIELDS.length) * 100) };
+}
