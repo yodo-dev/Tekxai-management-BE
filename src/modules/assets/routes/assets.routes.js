@@ -14,7 +14,9 @@ import {
   get_asset_requests_ctrl,
   get_assets,
   get_categories,
+  get_depreciation_report_ctrl,
   get_disposals_ctrl,
+  get_inventory_report_ctrl,
   get_locations,
   get_vendors,
   reject_asset_request_ctrl,
@@ -228,6 +230,34 @@ router.get('/disposals',        HR,   get_disposals_ctrl);
  *         description: Unauthorized
  */
 router.post('/disposals',       HR,   create_disposal_ctrl);
+
+/**
+ * @swagger
+ * /assets/reports/depreciation:
+ *   get:
+ *     summary: Depreciation report for all non-deleted assets (straight-line, 36-month useful life)
+ *     tags: [Assets]
+ *     responses:
+ *       200:
+ *         description: Depreciation report
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/reports/depreciation', HR, get_depreciation_report_ctrl);
+
+/**
+ * @swagger
+ * /assets/reports/inventory:
+ *   get:
+ *     summary: Inventory report — counts by status/category, warranty-expiry alerts, avg time-in-assignment
+ *     tags: [Assets]
+ *     responses:
+ *       200:
+ *         description: Inventory report
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/reports/inventory',    HR, get_inventory_report_ctrl);
 
 /**
  * @swagger

@@ -8,6 +8,8 @@ import {
   create_disposal,
   delete_asset,
   get_asset,
+  get_depreciation_report,
+  get_inventory_report,
   list_asset_requests,
   list_categories,
   list_disposals,
@@ -141,4 +143,16 @@ export async function create_disposal_ctrl(req, res, next) {
     const disposal = await create_disposal({ ...req.body, disposed_by: req.user.id });
     return res.status(201).json({ success: true, payload: disposal });
   } catch (e) { return next(e); }
+}
+
+// ─── Reporting ──────────────────────────────────────────────────────────────
+
+export async function get_depreciation_report_ctrl(req, res, next) {
+  try { return res.json({ success: true, payload: await get_depreciation_report() }); }
+  catch (e) { return next(e); }
+}
+
+export async function get_inventory_report_ctrl(req, res, next) {
+  try { return res.json({ success: true, payload: await get_inventory_report() }); }
+  catch (e) { return next(e); }
 }

@@ -356,6 +356,153 @@ export async function create_category({ name, description, is_device = false, is
   });
 }
 
+// ─── Reporting: Depreciation & Inventory (Sprint 1 Phase 3 M4) ───────────────
+// NOTE: depreciation is computed on the fly — no schema changes. Uses a simple,
+// uniform straight-line assumption: 36 months (3 years) useful life.
+const DEPRECIATION_MONTHS = 36;
+
+function compute_depreciation(purchase_cost, purchase_date) {
+  if (purchase_cost == null || !purchase_date) {
+    return { current_value: null, depreciation_to_date: null, months_elapsed: null };
+  }
+  const now = new Date();
+  const purchased = new Date(purchase_date);
+  const months_elapsed = Math.max(
+    0,
+    (now.getFullYear() - purchased.getFullYear()) * 12 + (now.getMonth() - purchased.getMonth())
+  );
+  const fraction_remaining = Math.max(0, 1 - months_elapsed / DEPRECIATION_MONTHS);
+  const current_value = Math.round(purchase_cost * fraction_remaining * 100) / 100;
+  const depreciation_to_date = Math.round((purchase_cost - current_value) * 100) / 100;
+  return { current_value, depreciation_to_date, months_elapsed };
+}
+
+export async function get_depreciation_report() {
+  const assets = await prisma.assets.findMany({
+    where: { deleted_at: null },
+    orderBy: { created_at: 'desc' },
+    select: {
+      id: true,
+      name: true,
+      asset_tag: true,
+      category: { select: { id: true, name: true } },
+      status: true,
+      purchase_cost: true,
+      purchase_date: true,
+    },
+  });
+
+  const records = assets.map((a) => {
+    const { current_value, depreciation_to_date, months_elapsed } = compute_depreciation(
+      a.purchase_cost,
+      a.purchase_date
+    );
+    return {
+      id: a.id,
+      name: a.name,
+      asset_tag: a.asset_tag,
+      category: a.category,
+      status: a.status,
+      purchase_cost: a.purchase_cost,
+      purchase_date: a.purchase_date,
+      months_elapsed,
+      current_value,
+      depreciation_to_date,
+    };
+  });
+
+  const total_purchase_cost = records.reduce((sum, r) => sum + (r.purchase_cost || 0), 0);
+  const total_current_value = records.reduce((sum, r) => sum + (r.current_value || 0), 0);
+  const total_depreciation = records.reduce((sum, r) => sum + (r.depreciation_to_date || 0), 0);
+
+  return {
+    records,
+    total: records.length,
+    useful_life_months: DEPRECIATION_MONTHS,
+    total_purchase_cost: Math.round(total_purchase_cost * 100) / 100,
+    total_current_value: Math.round(total_current_value * 100) / 100,
+    total_depreciation: Math.round(total_depreciation * 100) / 100,
+  };
+}
+
+export async function get_inventory_report() {
+  const now = new Date();
+  const in_90_days = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+
+  const [
+    status_groups,
+    category_groups_raw,
+    warranty_assets,
+    completed_assignments,
+  ] = await Promise.all([
+    prisma.assets.groupBy({
+      by: ['status'],
+      where: { deleted_at: null },
+      _count: { _all: true },
+    }),
+    prisma.assets.groupBy({
+      by: ['category_id'],
+      where: { deleted_at: null },
+      _count: { _all: true },
+    }),
+    prisma.assets.findMany({
+      where: {
+        deleted_at: null,
+        warranty_expiry: { lte: in_90_days },
+      },
+      select: {
+        id: true,
+        name: true,
+        asset_tag: true,
+        warranty_expiry: true,
+        status: true,
+        category: { select: { id: true, name: true } },
+      },
+      orderBy: { warranty_expiry: 'asc' },
+    }),
+    prisma.asset_assignments.findMany({
+      where: { returned_at: { not: null } },
+      select: { assigned_at: true, returned_at: true },
+    }),
+  ]);
+
+  const categories = await prisma.asset_categories.findMany({
+    where: { id: { in: category_groups_raw.map((c) => c.category_id) } },
+    select: { id: true, name: true },
+  });
+  const category_name_by_id = Object.fromEntries(categories.map((c) => [c.id, c.name]));
+
+  const by_status = status_groups.map((g) => ({ status: g.status, count: g._count._all }));
+  const by_category = category_groups_raw.map((g) => ({
+    category_id: g.category_id,
+    category_name: category_name_by_id[g.category_id] || 'Unknown',
+    count: g._count._all,
+  }));
+
+  const warranty_alerts = warranty_assets.map((a) => ({
+    ...a,
+    is_expired: new Date(a.warranty_expiry) < now,
+    days_until_expiry: Math.ceil((new Date(a.warranty_expiry) - now) / (24 * 60 * 60 * 1000)),
+  }));
+
+  let average_time_in_assignment_days = null;
+  if (completed_assignments.length > 0) {
+    const total_days = completed_assignments.reduce((sum, a) => {
+      const days = (new Date(a.returned_at) - new Date(a.assigned_at)) / (24 * 60 * 60 * 1000);
+      return sum + Math.max(0, days);
+    }, 0);
+    average_time_in_assignment_days = Math.round((total_days / completed_assignments.length) * 10) / 10;
+  }
+
+  return {
+    by_status,
+    by_category,
+    warranty_alerts,
+    average_time_in_assignment_days,
+    completed_assignments_count: completed_assignments.length,
+  };
+}
+
 export async function list_locations() {
   return prisma.asset_locations.findMany({
   take: 500, orderBy: { office: 'asc' } });
