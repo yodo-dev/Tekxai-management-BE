@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../../../shared/database/client.js';
-import { create_user, find_user_by_id, find_users, soft_delete_user, update_user } from '../repositories/users.repository.js';
+import { create_user, find_user_by_id, find_users, soft_delete_user, update_user, set_employment_status } from '../repositories/users.repository.js';
+import { validate_employment_status } from '../constants/employment-status.js';
 
 function app_error(message, status_code = 400) {
   const e = new Error(message);
@@ -42,6 +43,11 @@ export async function create_new_user(body) {
 
   const user = await create_user({ ...rest, password_hash });
 
+  // Establish employee_profiles.employment_status alongside users.status
+  // through the single write path, so the field never has to be backfilled
+  // later by a separate reconciliation pass.
+  await set_employment_status(user.id, 'ACTIVE');
+
   // Assign to team if provided
   if (team_id) {
     const team = await prisma.teams.findUnique({ where: { id: team_id } });
@@ -58,8 +64,15 @@ export async function create_new_user(body) {
 
 export async function update_existing_user(id, body) {
   await get_user(id); // throws 404 if not found
-  const { team_id, password, ...rest } = body;
+  const { team_id, password, status, ...rest } = body;
   if (password) rest.password_hash = await bcrypt.hash(password, 12);
+
+  if (status !== undefined) {
+    const check = validate_employment_status(status);
+    if (!check.valid) throw app_error(check.message, 422);
+    await set_employment_status(id, status);
+  }
+
   const user = await update_user(id, rest);
 
   // Update team membership if team_id provided

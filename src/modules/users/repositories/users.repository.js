@@ -136,8 +136,11 @@ export async function create_user({ email, password_hash, first_name, last_name,
 }
 
 export async function update_user(id, data) {
-  // Strip relation objects and non-column fields; map department_id correctly
-  const { role_id, password, role, department, division, supervisor, ...rest } = data;
+  // Strip relation objects and non-column fields; map department_id correctly.
+  // `status` is intentionally excluded — Employment Status has exactly one
+  // write path (set_employment_status below), never a generic field patch,
+  // so it can never drift from employee_profiles.employment_status.
+  const { role_id, password, role, department, division, supervisor, status, ...rest } = data;
 
   // If department_id is a string ID use it; otherwise drop it (frontend may send name)
   const update_data = { ...rest, updated_at: new Date() };
@@ -168,8 +171,33 @@ export async function update_user(id, data) {
 }
 
 export async function soft_delete_user(id) {
-  return prisma.users.update({
-    where: { id },
-    data: { deleted_at: new Date(), is_active: false, status: 'INACTIVE' },
+  return prisma.$transaction(async (tx) => {
+    await tx.users.update({
+      where: { id },
+      data: { deleted_at: new Date(), is_active: false, status: 'INACTIVE' },
+    });
+    await tx.employee_profiles.upsert({
+      where: { user_id: id },
+      update: { employment_status: 'INACTIVE' },
+      create: { user_id: id, employment_status: 'INACTIVE' },
+    });
+  });
+}
+
+// Employment Status — the ONE write path for this field. Every caller that
+// wants to change an employee's operational state (HR profile edit, generic
+// user update, future Attendance/Leave automation) must go through this
+// function, never write `users.status` or `employee_profiles.employment_status`
+// directly — that is exactly the drift Milestone 1 (Sprint 1 Phase 2) exists
+// to eliminate. Employee Lifecycle (a separate field, added later) is not
+// touched here.
+export async function set_employment_status(user_id, status) {
+  return prisma.$transaction(async (tx) => {
+    await tx.users.update({ where: { id: user_id }, data: { status } });
+    await tx.employee_profiles.upsert({
+      where: { user_id },
+      update: { employment_status: status },
+      create: { user_id, employment_status: status },
+    });
   });
 }

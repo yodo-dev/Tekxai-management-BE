@@ -1,4 +1,6 @@
 import prisma from '../../../shared/database/client.js';
+import { set_employment_status } from '../../users/repositories/users.repository.js';
+import { validate_employment_status } from '../../users/constants/employment-status.js';
 
 const PROFILE_SELECT = {
   id: true, user_id: true, profile_status: true,
@@ -29,7 +31,7 @@ export async function upsert_hr_profile(user_id, data) {
     'father_name', 'alternate_phone', 'nationality', 'religion', 'blood_group',
     'current_address', 'permanent_address',
     'emergency_contact_name', 'emergency_contact_relation', 'emergency_contact_phone',
-    'employment_type', 'employment_status', 'grade', 'work_mode', 'office_location',
+    'employment_type', 'grade', 'work_mode', 'office_location',
     'work_location', 'office_branch', 'floor_area',
     'working_days', 'weekend', 'work_start', 'work_end',
     'lunch_break_min', 'work_extension', 'work_phone', 'is_remote',
@@ -54,6 +56,19 @@ export async function upsert_hr_profile(user_id, data) {
         clean[key] = data[key];
       }
     }
+  }
+
+  // employment_status has exactly one write path (set_employment_status),
+  // shared with users.service.js, so users.status and
+  // employee_profiles.employment_status can never drift apart.
+  if (data.employment_status !== undefined) {
+    const check = validate_employment_status(data.employment_status);
+    if (!check.valid) {
+      const e = new Error(check.message);
+      e.status_code = 422;
+      throw e;
+    }
+    await set_employment_status(user_id, data.employment_status);
   }
 
   return prisma.employee_profiles.upsert({

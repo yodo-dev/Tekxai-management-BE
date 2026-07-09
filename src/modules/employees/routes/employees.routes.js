@@ -129,14 +129,6 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
       where: { ...baseWhere, hire_date: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } },
     });
 
-    const permanent = await prisma.users.count({
-      where: { ...baseWhere, employee_profile: { employment_status: { equals: 'PERMANENT', mode: 'insensitive' } } },
-    });
-
-    const probation = await prisma.users.count({
-      where: { ...baseWhere, employee_profile: { employment_status: { equals: 'PROBATION', mode: 'insensitive' } } },
-    });
-
     const normalized = records.map(u => ({
       id: u.id, email: u.email,
       full_name: `${u.first_name || ''} ${u.last_name || ''}`.trim(),
@@ -172,8 +164,7 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
           inactive: stat_map['INACTIVE'] || 0,
           on_leave,
           new_this_month,
-          permanent,
-          probation,
+          suspended: stat_map['SUSPENDED'] || 0,
         },
       },
     });
@@ -202,30 +193,26 @@ router.get('/stats', ADMIN_HR, async (req, res, next) => {
     const { business_unit } = req.query;
     const baseWhere = { deleted_at: null, ...(business_unit ? { business_unit } : {}) };
 
-    const [total, inactive, on_leave] = await Promise.all([
+    const [total, active, inactive, on_leave, suspended] = await Promise.all([
       prisma.users.count({ where: baseWhere }),
+      prisma.users.count({ where: { ...baseWhere, status: 'ACTIVE' } }),
       prisma.users.count({ where: { ...baseWhere, status: 'INACTIVE' } }),
       prisma.time_off_requests.count({
         where: { status: 'APPROVED', start_date: { lte: new Date() }, end_date: { gte: new Date() } },
       }),
+      prisma.users.count({ where: { ...baseWhere, status: 'SUSPENDED' } }),
     ]);
 
     const now = new Date();
-    const [new_this_month, permanent, probation] = await Promise.all([
+    const [new_this_month] = await Promise.all([
       prisma.users.count({
         where: { ...baseWhere, hire_date: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } },
-      }),
-      prisma.users.count({
-        where: { ...baseWhere, employee_profile: { employment_status: 'PERMANENT' } },
-      }),
-      prisma.users.count({
-        where: { ...baseWhere, employee_profile: { employment_status: 'PROBATION' } },
       }),
     ]);
 
     return res.json({
       success: true,
-      payload: { total, inactive, on_leave, new_this_month, permanent, probation },
+      payload: { total, active, inactive, on_leave, new_this_month, suspended },
     });
   } catch (err) { next(err); }
 });

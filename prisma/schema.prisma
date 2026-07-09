@@ -25,7 +25,7 @@ model users {
   grade_id       String?
   salary         Float?
   employee_id    String?   @unique
-  status         String    @default("ACTIVE")
+  status         String    @default("ACTIVE") // Employment Status: ACTIVE | INACTIVE | ON_LEAVE | SUSPENDED | TERMINATED | DECEASED — single write path is set_employment_status(), mirrored into employee_profiles.employment_status
   is_active      Boolean   @default(true)
   hire_date      DateTime?
   business_unit  String?   @default("ERP")
@@ -1766,7 +1766,7 @@ model employee_profiles {
   emergency_contact_phone    String?
   // ── Employment ────────────────────────────────────────────────────────
   employment_type            String?   @default("FULL_TIME")
-  employment_status          String?   @default("ACTIVE") // ACTIVE | INACTIVE | PROBATION | ON_LEAVE | TERMINATED
+  employment_status          String?   @default("ACTIVE") // Employment Status: ACTIVE | INACTIVE | ON_LEAVE | SUSPENDED | TERMINATED | DECEASED — mirrors users.status, single write path is set_employment_status(); Employee Lifecycle (a separate journey field) owns Probation/Onboarding/Notice Period/etc.
   grade                      String?
   work_mode                  String?   @default("ONSITE")
   probation_start            DateTime?
