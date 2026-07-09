@@ -91,6 +91,7 @@ model users {
   productivity_sessions       productivity_sessions[]
   file_uploads                file_uploads[]
   onboarding_tasks            onboarding_tasks[]
+  offboarding_tasks           offboarding_tasks[]
   contracts                   contracts[]
   policy_acknowledgements     policy_acknowledgements[]
   employee_profile            employee_profiles?
@@ -1374,6 +1375,28 @@ model offers {
 }
 
 model onboarding_tasks {
+  id           String    @id @default(cuid())
+  user_id      String
+  title        String
+  description  String?
+  category     String    @default("GENERAL")
+  is_completed Boolean   @default(false)
+  completed_at DateTime?
+  due_date     DateTime?
+  assigned_by  String?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+}
+
+// Sprint 1 Phase 4 Milestone 2 — Offboarding checklist. Mirrors
+// onboarding_tasks exactly, but for the exit journey: auto-seeded with a
+// standard checklist by set_lifecycle_stage() when an employee enters
+// EXIT_CLEARANCE (see employee-lifecycle.service.js).
+model offboarding_tasks {
   id           String    @id @default(cuid())
   user_id      String
   title        String

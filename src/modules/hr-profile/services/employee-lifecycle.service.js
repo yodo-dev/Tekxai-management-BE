@@ -5,6 +5,7 @@ import { get_lifecycle_stage, persist_lifecycle_stage } from '../repositories/em
 import { validate_lifecycle_stage, NOTIFY_STAGES, LIFECYCLE_STAGE_LABELS } from '../constants/employee-lifecycle.js';
 import { create_notification } from '../../notifications/services/notifications.service.js';
 import { trigger_employee_confirmed } from '../../automation/services/automation.service.js';
+import { seed_default_offboarding_tasks } from '../../offboarding/services/offboarding.service.js';
 
 function app_error(message, status_code = 400) {
   const e = new Error(message);
@@ -123,6 +124,16 @@ export async function set_lifecycle_stage(user_id, new_stage, actor_user_id) {
     } catch {
       // Never let the asset-flag check break the core lifecycle transition.
     }
+  }
+
+  // Offboarding checklist seed — EXIT_CLEARANCE only (not ARCHIVED). Exit
+  // Clearance is when the exit checklist should start; Archived is the
+  // terminal state after (presumably) that checklist is done. seed_default_
+  // offboarding_tasks() itself no-ops if tasks already exist for this user,
+  // so this is also safe against set_lifecycle_stage being called into
+  // EXIT_CLEARANCE more than once.
+  if (new_stage === 'EXIT_CLEARANCE') {
+    await seed_default_offboarding_tasks(user_id, actor_user_id).catch(() => {});
   }
 
   return { lifecycle_stage: new_stage, changed: true };

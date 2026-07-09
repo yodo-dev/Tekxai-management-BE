@@ -32,6 +32,7 @@ import storage_routes from '../modules/storage/storage.routes.js';
 import reports_routes       from '../modules/reports/routes/reports.routes.js';
 import monitoring_routes    from '../modules/monitoring/routes/monitoring.routes.js';
 import onboarding_routes    from '../modules/onboarding/routes/onboarding.routes.js';
+import offboarding_routes   from '../modules/offboarding/routes/offboarding.routes.js';
 import contracts_routes     from '../modules/contracts/routes/contracts.routes.js';
 import policies_routes      from '../modules/policies/routes/policies.routes.js';
 import crm_routes              from '../modules/crm/routes/crm.routes.js';
@@ -93,6 +94,7 @@ router.use('/leave-balance',     leave_balance_routes);
 router.use('/performance',       performance_routes);
 router.use('/job-description',   jd_routes);
 router.use('/onboarding',        onboarding_routes);
+router.use('/offboarding',       offboarding_routes);
 router.use('/contract',          contracts_routes);
 router.use('/policy',            policies_routes);
 
