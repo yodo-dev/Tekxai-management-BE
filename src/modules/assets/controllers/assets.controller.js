@@ -48,7 +48,7 @@ export async function assign_asset_ctrl(req, res, next) {
 
 export async function return_asset_ctrl(req, res, next) {
   try {
-    await return_asset(req.params.id, req.body);
+    await return_asset(req.params.id, req.body, req.user.id);
     return res.json({ success: true, message: 'Asset returned' });
   } catch (e) { return next(e); }
 }

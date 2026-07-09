@@ -1,4 +1,5 @@
 import prisma from '../../../shared/database/client.js';
+import { log_activity } from '../../activity-logs/repositories/activity.repository.js';
 
 function app_error(m, c = 400) { const e = new Error(m); e.status_code = c; return e; }
 
@@ -91,27 +92,76 @@ export async function assign_asset(asset_id, { user_id, assigned_by, return_date
   const asset = await get_asset(asset_id);
   if (asset.status === 'ASSIGNED') throw app_error('Asset is already assigned', 400);
 
-  return prisma.$transaction(async (tx) => {
+  const assignment = await prisma.$transaction(async (tx) => {
     await tx.asset_assignments.updateMany({
       where: { asset_id, is_active: true },
       data: { is_active: false },
     });
-    const assignment = await tx.asset_assignments.create({
+    const created = await tx.asset_assignments.create({
       data: { asset_id, user_id, assigned_by, return_date, notes, is_active: true },
     });
     await tx.assets.update({ where: { id: asset_id }, data: { status: 'ASSIGNED' } });
-    return assignment;
+    return created;
   });
+
+  const employee = await prisma.users.findUnique({
+    where: { id: user_id },
+    select: { first_name: true, last_name: true },
+  });
+  const employee_name = `${employee?.first_name || ''} ${employee?.last_name || ''}`.trim() || 'the employee';
+
+  await log_activity({
+    user_id: assigned_by || user_id,
+    action: 'UPDATE',
+    entity_type: 'asset',
+    entity_id: asset_id,
+    description: `Asset "${asset.name}" assigned to ${employee_name}`,
+  }).catch(() => {});
+
+  await prisma.notifications.create({
+    data: {
+      user_id,
+      title: 'Asset Assigned',
+      message: `The asset "${asset.name}" has been assigned to you.`,
+      type: 'ASSET',
+    },
+  }).catch(() => null);
+
+  return assignment;
 }
 
-export async function return_asset(asset_id, { returned_condition, notes }) {
-  return prisma.$transaction(async (tx) => {
+export async function return_asset(asset_id, { returned_condition, notes }, actor_user_id) {
+  const asset = await get_asset(asset_id);
+  const active_assignment = asset.assignments?.[0];
+
+  await prisma.$transaction(async (tx) => {
     await tx.asset_assignments.updateMany({
       where: { asset_id, is_active: true },
       data: { is_active: false, returned_at: new Date(), returned_condition, notes },
     });
     await tx.assets.update({ where: { id: asset_id }, data: { status: 'AVAILABLE' } });
   });
+
+  const assigned_user_id = active_assignment?.user_id || active_assignment?.user?.id;
+
+  await log_activity({
+    user_id: actor_user_id || assigned_user_id,
+    action: 'UPDATE',
+    entity_type: 'asset',
+    entity_id: asset_id,
+    description: `Asset "${asset.name}" returned${returned_condition ? ` in ${returned_condition} condition` : ''}`,
+  }).catch(() => {});
+
+  if (assigned_user_id) {
+    await prisma.notifications.create({
+      data: {
+        user_id: assigned_user_id,
+        title: 'Asset Return Recorded',
+        message: `The return of asset "${asset.name}" has been recorded.`,
+        type: 'ASSET',
+      },
+    }).catch(() => null);
+  }
 }
 
 export async function add_maintenance(asset_id, data) {
