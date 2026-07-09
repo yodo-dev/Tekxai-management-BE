@@ -113,7 +113,7 @@ function normalize_project(p, { is_saved = false, portal = null } = {}) {
   };
 }
 
-export async function find_projects({ search, page = 1, limit = 20, status, user_id, member_only = false } = {}) {
+export async function find_projects({ search, page = 1, limit = 20, status, client_name, owner_id, overdue, user_id, member_only = false } = {}) {
   page = +page || 1; limit = +limit || 20;
   const skip = (page - 1) * limit;
   const where = { deleted_at: null };
@@ -130,6 +130,12 @@ export async function find_projects({ search, page = 1, limit = 20, status, user
     ];
   }
   if (status) where.status = status;
+  if (client_name) where.client_name = { contains: client_name, mode: 'insensitive' };
+  if (owner_id) where.owner_id = owner_id;
+  if (overdue === true || overdue === 'true') {
+    where.end_date = { lt: new Date() };
+    if (!status) where.status = { notIn: TERMINAL_STATUSES };
+  }
 
   const [total, records] = await Promise.all([
     prisma.projects.count({ where }),
@@ -169,7 +175,7 @@ export async function find_project_by_id(id, user_id = null) {
   return normalize_project(p, { is_saved, portal: portal_map.get(id) || null });
 }
 
-export async function create_project({ title, description, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, progress_mode, member_ids = [] }) {
+export async function create_project({ title, description, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, progress_mode, budget, budget_currency, member_ids = [] }) {
   // NOTE: the final read must happen *after* the transaction commits — calling
   // find_project_by_id (which uses the outer `prisma` client) from inside the
   // transaction callback reads via a separate connection that can't see the
@@ -188,6 +194,8 @@ export async function create_project({ title, description, start_date, end_date,
         client_name: client_name || null,
         dev_status: dev_status || null,
         progress_mode: progress_mode || 'MANUAL',
+        budget: budget !== undefined && budget !== null && budget !== '' ? +budget : null,
+        budget_currency: budget_currency || undefined,
       },
     });
 
@@ -204,7 +212,7 @@ export async function create_project({ title, description, start_date, end_date,
   return find_project_by_id(project_id);
 }
 
-export async function update_project(id, { title, description, status, progress, progress_mode, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, member_ids }) {
+export async function update_project(id, { title, description, status, progress, progress_mode, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, budget, budget_currency, budget_spent, member_ids }) {
   // See create_project note above — read-after-write must happen post-commit.
   await prisma.$transaction(async (tx) => {
     const data = {};
@@ -220,6 +228,9 @@ export async function update_project(id, { title, description, status, progress,
     if (leader_id !== undefined) data.leader_id = leader_id || null;
     if (client_name !== undefined) data.client_name = client_name || null;
     if (dev_status !== undefined) data.dev_status = dev_status || null;
+    if (budget !== undefined) data.budget = budget === null || budget === '' ? null : +budget;
+    if (budget_currency !== undefined) data.budget_currency = budget_currency;
+    if (budget_spent !== undefined) data.budget_spent = +budget_spent;
 
     await tx.projects.update({ where: { id }, data });
 
@@ -311,4 +322,48 @@ export async function get_dashboard_stats() {
   };
 
   return stats;
+}
+
+const EXTENSION_INCLUDE = {
+  requester: { select: { id: true, first_name: true, last_name: true, avatar: true } },
+  reviewer:  { select: { id: true, first_name: true, last_name: true, avatar: true } },
+  project:   { select: { id: true, title: true } },
+};
+
+export async function create_extension_request({ project_id, requested_by, current_deadline, proposed_deadline, reason }) {
+  return prisma.extension_requests.create({
+    data: {
+      project_id,
+      requested_by,
+      current_deadline: current_deadline ? new Date(current_deadline) : null,
+      proposed_deadline: new Date(proposed_deadline),
+      reason,
+    },
+    include: EXTENSION_INCLUDE,
+  });
+}
+
+export async function find_extension_requests(project_id) {
+  return prisma.extension_requests.findMany({
+    where: { project_id },
+    include: EXTENSION_INCLUDE,
+    orderBy: { created_at: 'desc' },
+  });
+}
+
+export async function find_extension_request_by_id(id) {
+  return prisma.extension_requests.findUnique({ where: { id }, include: EXTENSION_INCLUDE });
+}
+
+export async function review_extension_request(id, { status, reviewed_by, review_reason }) {
+  return prisma.$transaction(async (tx) => {
+    const request = await tx.extension_requests.update({
+      where: { id },
+      data: { status, reviewed_by, review_reason: review_reason || null, reviewed_at: new Date() },
+    });
+    if (status === 'APPROVED') {
+      await tx.projects.update({ where: { id: request.project_id }, data: { end_date: request.proposed_deadline } });
+    }
+    return request;
+  }).then(() => find_extension_request_by_id(id));
 }

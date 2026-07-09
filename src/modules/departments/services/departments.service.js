@@ -46,7 +46,35 @@ export async function list_divisions(department_id) {
   });
 }
 
+const DIVISION_INCLUDE = {
+  department: { select: { id: true, name: true } },
+  _count: { select: { users: true } },
+};
+
 export async function create_division(department_id, data) {
   await get_department(department_id);
-  return prisma.divisions.create({ data: { ...data, department_id } });
+  return prisma.divisions.create({ data: { ...data, department_id }, include: DIVISION_INCLUDE });
+}
+
+export async function list_all_divisions({ search, department_id } = {}) {
+  const where = { deleted_at: null };
+  if (search) where.name = { contains: search, mode: 'insensitive' };
+  if (department_id) where.department_id = department_id;
+  return prisma.divisions.findMany({ take: 500, where, include: DIVISION_INCLUDE, orderBy: { name: 'asc' } });
+}
+
+export async function get_division(id) {
+  const d = await prisma.divisions.findFirst({ where: { id, deleted_at: null }, include: DIVISION_INCLUDE });
+  if (!d) throw app_error('Division not found', 404);
+  return d;
+}
+
+export async function update_division(id, data) {
+  await get_division(id);
+  return prisma.divisions.update({ where: { id }, data, include: DIVISION_INCLUDE });
+}
+
+export async function delete_division(id) {
+  await get_division(id);
+  return prisma.divisions.update({ where: { id }, data: { deleted_at: new Date() } });
 }

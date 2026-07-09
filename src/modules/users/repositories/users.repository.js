@@ -10,6 +10,8 @@ const USER_SELECT = {
   department: true,
   position: true,
   designation: true,
+  designation_ref: { select: { id: true, name: true } },
+  grade: { select: { id: true, name: true, level: true } },
   business_unit: true,
   supervisor_id: true,
   supervisor: { select: { id: true, first_name: true, last_name: true } },
@@ -34,6 +36,10 @@ function normalize_user(user) {
     department: user.department,
     position: user.position,
     designation: user.designation,
+    designation_id: user.designation_ref?.id || null,
+    designation_ref: user.designation_ref || null,
+    grade_id: user.grade?.id || null,
+    grade: user.grade || null,
     business_unit: user.business_unit || 'ERP',
     supervisor_id: user.supervisor_id,
     supervisor: user.supervisor,
@@ -94,7 +100,7 @@ export async function find_user_by_id(id) {
   return user ? normalize_user(user) : null;
 }
 
-export async function create_user({ email, password_hash, first_name, last_name, phone, department_id, division_id, position, designation, role_id, avatar, business_unit, supervisor_id, hire_date, employee_id }) {
+export async function create_user({ email, password_hash, first_name, last_name, phone, department_id, division_id, position, designation, designation_id, grade_id, role_id, avatar, business_unit, supervisor_id, hire_date, employee_id }) {
   return prisma.$transaction(async (tx) => {
     const user = await tx.users.create({
       data: {
@@ -105,6 +111,8 @@ export async function create_user({ email, password_hash, first_name, last_name,
         phone,
         ...(department_id ? { department_id } : {}),
         ...(division_id   ? { division_id }   : {}),
+        ...(designation_id ? { designation_id } : {}),
+        ...(grade_id       ? { grade_id }       : {}),
         ...(supervisor_id  ? { supervisor_id }  : {}),
         ...(employee_id    ? { employee_id }    : {}),
         ...(hire_date      ? { hire_date: new Date(hire_date) } : {}),
@@ -134,6 +142,8 @@ export async function update_user(id, data) {
   // If department_id is a string ID use it; otherwise drop it (frontend may send name)
   const update_data = { ...rest, updated_at: new Date() };
   if (rest.department_id === null || rest.department_id === '') delete update_data.department_id;
+  if (rest.designation_id === null || rest.designation_id === '') update_data.designation_id = null;
+  if (rest.grade_id === null || rest.grade_id === '') update_data.grade_id = null;
 
   await prisma.users.update({
     where: { id },

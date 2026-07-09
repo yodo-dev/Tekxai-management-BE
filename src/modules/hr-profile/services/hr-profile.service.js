@@ -74,6 +74,9 @@ export async function get_full_employee_record(user_id) {
     select: {
       id: true, email: true, first_name: true, last_name: true, phone: true, avatar: true,
       department: true, division: true, position: true, designation: true, employee_id: true,
+      designation_ref: { select: { id: true, name: true } },
+      grade: { select: { id: true, name: true, level: true } },
+      supervisor: { select: { id: true, first_name: true, last_name: true } },
       status: true, is_active: true, hire_date: true, created_at: true,
       roles: { include: { role: { select: { id: true, name: true } } } },
       team_memberships: { include: { team: { select: { id: true, name: true } } } },

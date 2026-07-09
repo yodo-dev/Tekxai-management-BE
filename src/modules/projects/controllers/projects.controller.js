@@ -9,15 +9,43 @@ import {
   toggle_save_project,
   update_existing_project,
 } from '../services/projects.service.js';
-import { validate_create_project, validate_update_project } from '../validators/projects.validation.js';
+import {
+  validate_create_project,
+  validate_update_project,
+  validate_budget_update,
+  validate_extension_request,
+  validate_extension_review,
+} from '../validators/projects.validation.js';
 import { log_activity } from '../../activity-logs/repositories/activity.repository.js';
+import {
+  create_extension_request,
+  find_extension_requests,
+  find_extension_request_by_id,
+  review_extension_request,
+} from '../repositories/projects.repository.js';
+
+const ADMIN_ONLY_ROLES = ['ADMIN', 'SUPER_ADMIN'];
+
+// Reviewing an extension request is gated to ADMIN/SUPER_ADMIN or the project's own owner/leader.
+export async function admin_or_project_owner(req, res, next) {
+  try {
+    if (req.user.roles?.some((r) => ADMIN_ONLY_ROLES.includes(r))) return next();
+    const project = await prisma.projects.findFirst({
+      where: { id: req.params.id, deleted_at: null },
+      select: { owner_id: true, leader_id: true },
+    });
+    if (!project) return res.status(404).json({ success: false, message: 'Project not found' });
+    if (project.owner_id === req.user.id || project.leader_id === req.user.id) return next();
+    return res.status(403).json({ success: false, message: 'Insufficient permissions' });
+  } catch (e) { next(e); }
+}
 
 export async function get_projects(req, res, next) {
   try {
-    const { search, page, limit, status } = req.query;
+    const { search, page, limit, status, client_name, owner_id, overdue } = req.query;
     const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN', 'HR', 'MARKETING'];
     const member_only = !req.user?.roles?.some((r) => ADMIN_ROLES.includes(r));
-    const result = await list_projects({ search, page: +page || 1, limit: +limit || 20, status, member_only }, req.user.id);
+    const result = await list_projects({ search, page: +page || 1, limit: +limit || 20, status, client_name, owner_id, overdue, member_only }, req.user.id);
     return res.json({ success: true, payload: result });
   } catch (e) { return next(e); }
 }
@@ -111,45 +139,109 @@ export async function unsave_project_ctrl(req, res, next) {
 
 export async function update_budget(req, res, next) {
   try {
+    const { valid, message } = validate_budget_update(req.body);
+    if (!valid) return res.status(400).json({ success: false, message });
+
     const { budget, budget_currency, budget_spent } = req.body;
     const project = await prisma.projects.update({
       where: { id: req.params.id },
       data: {
-        ...(budget !== undefined && { budget: +budget }),
+        ...(budget !== undefined && { budget: budget === null || budget === '' ? null : +budget }),
         ...(budget_currency && { budget_currency }),
         ...(budget_spent !== undefined && { budget_spent: +budget_spent }),
       },
     });
+
+    log_activity({
+      user_id: req.user.id, action: 'UPDATE', entity_type: 'project', entity_id: req.params.id,
+      description: `Updated budget: ${project.budget_currency} ${project.budget ?? 'n/a'} (spent: ${project.budget_spent})`,
+    }).catch(() => {});
+
     return res.json({ success: true, message: 'Budget updated', payload: project });
   } catch (e) { next(e); }
 }
 
 export async function request_extension_ctrl(req, res, next) {
   try {
+    const { valid, message } = validate_extension_request(req.body);
+    if (!valid) return res.status(400).json({ success: false, message });
+
     const { proposed_deadline, reason } = req.body;
-    if (!proposed_deadline || !reason?.trim()) {
-      return res.status(400).json({ success: false, message: 'proposed_deadline and reason are required' });
-    }
-    // Store extension request as a project note/comment for admin review
-    // For now we notify by updating a meta field — admins see it in approvals
     const project = await prisma.projects.findUnique({ where: { id: req.params.id } });
     if (!project) return res.status(404).json({ success: false, message: 'Project not found' });
 
-    // Create an approval/notification record
-    await prisma.notifications.create({
-      data: {
-        user_id: req.user.id,
-        title: `Deadline Extension Request — ${project.title}`,
-        message: `Requested new deadline: ${new Date(proposed_deadline).toLocaleDateString()}. Reason: ${reason}`,
-        type: 'PROJECT',
-      },
-    }).catch(() => null); // graceful — if notifications table missing just skip
+    const request = await create_extension_request({
+      project_id: req.params.id,
+      requested_by: req.user.id,
+      current_deadline: project.end_date,
+      proposed_deadline,
+      reason,
+    });
+
+    // Notify admin/owner/leader that a review is needed.
+    const recipients = [...new Set([project.owner_id, project.leader_id].filter((id) => id && id !== req.user.id))];
+    for (const user_id of recipients) {
+      prisma.notifications.create({
+        data: {
+          user_id,
+          title: `Deadline Extension Requested — ${project.title}`,
+          message: `${req.user.email} requested a new deadline: ${new Date(proposed_deadline).toLocaleDateString()}. Reason: ${reason}`,
+          type: 'PROJECT',
+        },
+      }).catch(() => null);
+    }
 
     log_activity({
-      user_id: req.user.id, action: 'UPDATE', entity_type: 'project', entity_id: req.params.id,
+      user_id: req.user.id, action: 'CREATE', entity_type: 'project', entity_id: req.params.id,
       description: `Requested deadline extension to ${new Date(proposed_deadline).toLocaleDateString()}: ${reason}`,
     }).catch(() => {});
 
-    return res.json({ success: true, message: 'Extension request submitted' });
+    return res.status(201).json({ success: true, message: 'Extension request submitted', payload: request });
+  } catch (e) { return next(e); }
+}
+
+export async function list_extension_requests_ctrl(req, res, next) {
+  try {
+    const requests = await find_extension_requests(req.params.id);
+    return res.json({ success: true, payload: requests });
+  } catch (e) { return next(e); }
+}
+
+export async function review_extension_request_ctrl(req, res, next) {
+  try {
+    const { valid, message } = validate_extension_review(req.body);
+    if (!valid) return res.status(400).json({ success: false, message });
+
+    const existing = await find_extension_request_by_id(req.params.requestId);
+    if (!existing || existing.project_id !== req.params.id) {
+      return res.status(404).json({ success: false, message: 'Extension request not found' });
+    }
+    if (existing.status !== 'PENDING') {
+      return res.status(400).json({ success: false, message: `Request already ${existing.status.toLowerCase()}` });
+    }
+
+    const { status, review_reason } = req.body;
+    const reviewed = await review_extension_request(req.params.requestId, {
+      status, reviewed_by: req.user.id, review_reason,
+    });
+
+    const decision = status === 'APPROVED' ? 'approved' : 'rejected';
+    prisma.notifications.create({
+      data: {
+        user_id: existing.requested_by,
+        title: `Extension Request ${decision === 'approved' ? 'Approved' : 'Rejected'} — ${existing.project?.title || ''}`,
+        message: decision === 'approved'
+          ? `Your deadline extension to ${new Date(existing.proposed_deadline).toLocaleDateString()} was approved.`
+          : `Your deadline extension request was rejected. Reason: ${review_reason}`,
+        type: 'PROJECT',
+      },
+    }).catch(() => null);
+
+    log_activity({
+      user_id: req.user.id, action: 'UPDATE', entity_type: 'project', entity_id: req.params.id,
+      description: `${decision === 'approved' ? 'Approved' : 'Rejected'} deadline extension request${review_reason ? `: ${review_reason}` : ''}`,
+    }).catch(() => {});
+
+    return res.json({ success: true, message: `Extension request ${decision}`, payload: reviewed });
   } catch (e) { return next(e); }
 }

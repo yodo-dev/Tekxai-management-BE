@@ -12,6 +12,9 @@ import {
   update_project_ctrl,
   update_budget,
   request_extension_ctrl,
+  list_extension_requests_ctrl,
+  review_extension_request_ctrl,
+  admin_or_project_owner,
 } from '../controllers/projects.controller.js';
 
 const router = Router();
@@ -232,6 +235,59 @@ router.delete('/:id/save',    unsave_project_ctrl);
  *         description: Unauthorized
  */
 router.post('/:id/extension', request_extension_ctrl);
+
+/**
+ * @swagger
+ * /projects/{id}/extension:
+ *   get:
+ *     summary: List deadline extension requests for a project
+ *     tags: [Projects]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Extension requests list
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/:id/extension', list_extension_requests_ctrl);
+
+/**
+ * @swagger
+ * /projects/{id}/extension/{requestId}:
+ *   patch:
+ *     summary: Approve or reject a deadline extension request
+ *     tags: [Projects]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status: { type: string, enum: [APPROVED, REJECTED] }
+ *               review_reason: { type: string }
+ *     responses:
+ *       200:
+ *         description: Extension request reviewed
+ *       403:
+ *         description: Insufficient permissions
+ *       401:
+ *         description: Unauthorized
+ */
+router.patch('/:id/extension/:requestId', admin_or_project_owner, review_extension_request_ctrl);
 
 /**
  * @swagger

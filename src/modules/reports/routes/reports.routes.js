@@ -319,12 +319,12 @@ router.get('/bonus', MANAGER, async (req, res, next) => {
 
 router.get('/projects', MANAGER, async (req, res, next) => {
   try {
-    const { status, format = 'json' } = req.query;
+    const { status, client_name, overdue, format = 'json' } = req.query;
     // Reuses the same list_projects() the Project Management UI uses, so this
     // report (Project Summary / Delivery Report / Project Health Report) always
     // reflects the same client_name, dev_status, health_status, and access-score
     // computed fields — no separate/duplicated query logic to drift out of sync.
-    const { records: projects } = await list_projects({ status, limit: 500, member_only: false }, null);
+    const { records: projects } = await list_projects({ status, client_name, overdue, limit: 500, member_only: false }, null);
 
     const rows = projects.map((p) => ({
       title:        p.title,
@@ -341,6 +341,10 @@ router.get('/projects', MANAGER, async (req, res, next) => {
       health_status: p.health_status,
       access_score: `${p.access_completion_score.percent}%`,
       owner:        p.owner ? `${p.owner.first_name} ${p.owner.last_name}` : '',
+      budget_currency: p.budget_currency,
+      budget:          p.budget ?? '',
+      budget_spent:    p.budget_spent,
+      budget_remaining: p.budget != null ? (p.budget - p.budget_spent) : '',
     }));
 
     if (format === 'csv') {
@@ -359,6 +363,10 @@ router.get('/projects', MANAGER, async (req, res, next) => {
         { label: 'Health',        key: 'health_status' },
         { label: 'Access Score',  key: 'access_score' },
         { label: 'Owner',         key: 'owner' },
+        { label: 'Currency',      key: 'budget_currency' },
+        { label: 'Budget',        key: 'budget' },
+        { label: 'Budget Spent',  key: 'budget_spent' },
+        { label: 'Budget Remaining', key: 'budget_remaining' },
       ];
       return send_csv(res, `projects_report.csv`, to_csv(rows, cols));
     }
