@@ -111,13 +111,11 @@ export async function set_lifecycle_stage(user_id, new_stage, actor_user_id) {
         });
         if (employee?.supervisor_id) {
           const employee_name = `${employee.first_name || ''} ${employee.last_name || ''}`.trim() || 'The employee';
-          await prisma.notifications.create({
-            data: {
-              user_id: employee.supervisor_id,
-              title: 'Outstanding Assets — Exit Clearance',
-              message: `${employee_name} still has ${active_assignments.length} asset(s) assigned that need to be returned: ${asset_names.join(', ')}.`,
-              type: 'HR',
-            },
+          await create_notification({
+            user_id: employee.supervisor_id,
+            title: 'Outstanding Assets — Exit Clearance',
+            message: `${employee_name} still has ${active_assignments.length} asset(s) assigned that need to be returned: ${asset_names.join(', ')}.`,
+            type: 'HR',
           }).catch(() => null);
         }
       }

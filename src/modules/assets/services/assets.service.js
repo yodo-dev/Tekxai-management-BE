@@ -1,5 +1,6 @@
 import prisma from '../../../shared/database/client.js';
 import { log_activity } from '../../activity-logs/repositories/activity.repository.js';
+import { create_notification } from '../../notifications/services/notifications.service.js';
 
 function app_error(m, c = 400) { const e = new Error(m); e.status_code = c; return e; }
 
@@ -118,13 +119,11 @@ export async function assign_asset(asset_id, { user_id, assigned_by, return_date
     description: `Asset "${asset.name}" assigned to ${employee_name}`,
   }).catch(() => {});
 
-  await prisma.notifications.create({
-    data: {
-      user_id,
-      title: 'Asset Assigned',
-      message: `The asset "${asset.name}" has been assigned to you.`,
-      type: 'ASSET',
-    },
+  await create_notification({
+    user_id,
+    title: 'Asset Assigned',
+    message: `The asset "${asset.name}" has been assigned to you.`,
+    type: 'ASSET',
   }).catch(() => null);
 
   return assignment;
@@ -153,13 +152,11 @@ export async function return_asset(asset_id, { returned_condition, notes }, acto
   }).catch(() => {});
 
   if (assigned_user_id) {
-    await prisma.notifications.create({
-      data: {
-        user_id: assigned_user_id,
-        title: 'Asset Return Recorded',
-        message: `The return of asset "${asset.name}" has been recorded.`,
-        type: 'ASSET',
-      },
+    await create_notification({
+      user_id: assigned_user_id,
+      title: 'Asset Return Recorded',
+      message: `The return of asset "${asset.name}" has been recorded.`,
+      type: 'ASSET',
     }).catch(() => null);
   }
 }
@@ -246,13 +243,11 @@ export async function approve_asset_request(id, { asset_id, reviewed_by, notes }
     description: `Asset request approved and asset assigned`,
   }).catch(() => {});
 
-  await prisma.notifications.create({
-    data: {
-      user_id: request.user_id,
-      title: 'Asset Request Approved',
-      message: `Your asset request for "${request.category?.name}" has been approved.`,
-      type: 'ASSET',
-    },
+  await create_notification({
+    user_id: request.user_id,
+    title: 'Asset Request Approved',
+    message: `Your asset request for "${request.category?.name}" has been approved.`,
+    type: 'ASSET',
   }).catch(() => null);
 
   return updated;
@@ -276,13 +271,11 @@ export async function reject_asset_request(id, { reviewed_by, rejection_reason }
     description: `Asset request rejected${rejection_reason ? `: ${rejection_reason}` : ''}`,
   }).catch(() => {});
 
-  await prisma.notifications.create({
-    data: {
-      user_id: request.user_id,
-      title: 'Asset Request Rejected',
-      message: `Your asset request for "${request.category?.name}" was rejected${rejection_reason ? `: ${rejection_reason}` : ''}.`,
-      type: 'ASSET',
-    },
+  await create_notification({
+    user_id: request.user_id,
+    title: 'Asset Request Rejected',
+    message: `Your asset request for "${request.category?.name}" was rejected${rejection_reason ? `: ${rejection_reason}` : ''}.`,
+    type: 'ASSET',
   }).catch(() => null);
 
   return updated;
