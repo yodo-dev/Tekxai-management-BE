@@ -1,10 +1,12 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../../../shared/database/client.js';
-import { create_user, find_user_by_id, find_users, soft_delete_user, update_user, set_employment_status } from '../repositories/users.repository.js';
+import { create_user, find_user_by_id, find_users, soft_delete_user, update_user, set_employment_status, record_designation_change } from '../repositories/users.repository.js';
 import { validate_employment_status } from '../constants/employment-status.js';
 import { set_lifecycle_stage } from '../../hr-profile/services/employee-lifecycle.service.js';
 import { validate_lifecycle_stage } from '../../hr-profile/constants/employee-lifecycle.js';
 import { trigger_employee_created } from '../../automation/services/automation.service.js';
+import { log_activity } from '../../activity-logs/repositories/activity.repository.js';
+import { create_notification } from '../../notifications/services/notifications.service.js';
 
 function app_error(message, status_code = 400) {
   const e = new Error(message);
@@ -109,6 +111,72 @@ export async function update_existing_user(id, body, actor_user_id) {
   }
 
   return user;
+}
+
+const CHANGE_TYPE_LABELS = {
+  PROMOTION: 'Promotion',
+  TRANSFER: 'Transfer',
+  PROMOTION_AND_TRANSFER: 'Promotion & Transfer',
+};
+
+// Promotion / Transfer — direct HR/Admin action (no multi-step approval
+// workflow, matching how this happens in this codebase today). Delegates
+// the actual write to record_designation_change(), the single write path
+// for designation_id/grade_id/department_id, then layers on Timeline
+// logging and notifications the generic update_existing_user() never had.
+export async function change_user_designation(id, body, actor_user_id) {
+  await get_user(id); // throws 404 if not found
+
+  const { designation_id, grade_id, department_id, reason, effective_date } = body;
+  if (designation_id === undefined && grade_id === undefined && department_id === undefined) {
+    const e = new Error('At least one of designation_id, grade_id, department_id is required');
+    e.status_code = 422;
+    throw e;
+  }
+
+  const { user, history } = await record_designation_change(
+    id,
+    { designation_id, grade_id, department_id, reason, effective_date },
+    actor_user_id
+  );
+
+  const label = CHANGE_TYPE_LABELS[history.change_type] || 'Designation change';
+
+  await log_activity({
+    user_id: actor_user_id || id,
+    action: 'UPDATE',
+    entity_type: 'employee',
+    entity_id: id,
+    description: `${label} recorded for ${user.first_name || ''} ${user.last_name || ''}`.trim()
+      + (reason ? ` — ${reason}` : ''),
+  }).catch(() => {});
+
+  await create_notification({
+    user_id: id,
+    title: label,
+    message: `Your ${label.toLowerCase()} has been recorded${reason ? `: ${reason}` : '.'}`,
+    type: 'HR',
+  }).catch(() => null);
+
+  // Notify the NEW manager if the department changed — the department's
+  // manager_id, not the user's own supervisor_id (which may be unrelated).
+  if (department_id !== undefined && department_id) {
+    const new_department = await prisma.departments.findUnique({
+      where: { id: department_id },
+      select: { manager_id: true, name: true },
+    });
+    if (new_department?.manager_id && new_department.manager_id !== id) {
+      const employee_name = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'An employee';
+      await create_notification({
+        user_id: new_department.manager_id,
+        title: 'New Team Member — Transfer',
+        message: `${employee_name} has been transferred into ${new_department.name || 'your department'}.`,
+        type: 'HR',
+      }).catch(() => null);
+    }
+  }
+
+  return { user, history };
 }
 
 export async function delete_user(id) {

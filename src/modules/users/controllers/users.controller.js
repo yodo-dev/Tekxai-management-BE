@@ -1,4 +1,4 @@
-import { create_new_user, delete_user, get_user, list_users, update_existing_user } from '../services/users.service.js';
+import { create_new_user, delete_user, get_user, list_users, update_existing_user, change_user_designation } from '../services/users.service.js';
 
 export async function get_users(req, res, next) {
   try {
@@ -49,6 +49,15 @@ export async function bulk_delete_users_ctrl(req, res, next) {
     }
     await Promise.all(ids.map(id => delete_user(id)));
     return res.json({ success: true, message: `${ids.length} user(s) deleted` });
+  } catch (e) { return next(e); }
+}
+
+// POST /users/:id/designation-change — Promotion / Transfer (direct HR/Admin
+// action, single write path via record_designation_change()).
+export async function change_user_designation_ctrl(req, res, next) {
+  try {
+    const result = await change_user_designation(req.params.id, req.body, req.user.id);
+    return res.status(201).json({ success: true, payload: result });
   } catch (e) { return next(e); }
 }
 

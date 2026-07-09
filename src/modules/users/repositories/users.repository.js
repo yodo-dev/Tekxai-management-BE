@@ -201,3 +201,63 @@ export async function set_employment_status(user_id, status) {
     });
   });
 }
+
+// Promotion / Transfer — the ONE write path for designation_id, grade_id and
+// department_id changes. Every caller that wants to record a promotion or
+// transfer (the new /user/:id/designation-change endpoint today, any future
+// bulk HR tool) must go through this function, never patch these three
+// columns via the generic update_user() — that generic edit path is exactly
+// the silent, un-audited drift this milestone exists to eliminate.
+//
+// `changes` may include any subset of { designation_id, grade_id, department_id }.
+// change_type is derived: designation_id/grade_id => PROMOTION,
+// department_id => TRANSFER, both => PROMOTION_AND_TRANSFER.
+export async function record_designation_change(user_id, changes, changed_by) {
+  const { designation_id, grade_id, department_id, reason, effective_date } = changes;
+
+  return prisma.$transaction(async (tx) => {
+    const current = await tx.users.findUnique({
+      where: { id: user_id },
+      select: { designation_id: true, grade_id: true, department_id: true },
+    });
+    if (!current) {
+      const e = new Error('User not found');
+      e.status_code = 404;
+      throw e;
+    }
+
+    const update_data = { updated_at: new Date() };
+    if (designation_id !== undefined) update_data.designation_id = designation_id || null;
+    if (grade_id !== undefined) update_data.grade_id = grade_id || null;
+    if (department_id !== undefined) update_data.department_id = department_id || null;
+
+    await tx.users.update({ where: { id: user_id }, data: update_data });
+
+    const is_promotion = designation_id !== undefined || grade_id !== undefined;
+    const is_transfer = department_id !== undefined;
+    const change_type = is_promotion && is_transfer
+      ? 'PROMOTION_AND_TRANSFER'
+      : is_transfer
+        ? 'TRANSFER'
+        : 'PROMOTION';
+
+    const history = await tx.designation_history.create({
+      data: {
+        user_id,
+        previous_designation_id: current.designation_id,
+        new_designation_id: designation_id !== undefined ? (designation_id || null) : current.designation_id,
+        previous_grade_id: current.grade_id,
+        new_grade_id: grade_id !== undefined ? (grade_id || null) : current.grade_id,
+        previous_department_id: current.department_id,
+        new_department_id: department_id !== undefined ? (department_id || null) : current.department_id,
+        change_type,
+        effective_date: effective_date ? new Date(effective_date) : new Date(),
+        reason: reason || null,
+        changed_by,
+      },
+    });
+
+    const user = await tx.users.findUnique({ where: { id: user_id }, select: USER_SELECT });
+    return { user: normalize_user(user), history };
+  });
+}

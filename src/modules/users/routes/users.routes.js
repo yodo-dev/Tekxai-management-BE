@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate, authorize, can_or_role } from '../../../shared/middleware/authenticate.js';
-import { create_user_ctrl, delete_user_ctrl, bulk_delete_users_ctrl, get_user_by_id, get_users, update_my_profile, get_my_activity, update_user_ctrl } from '../controllers/users.controller.js';
+import { create_user_ctrl, delete_user_ctrl, bulk_delete_users_ctrl, get_user_by_id, get_users, update_my_profile, get_my_activity, update_user_ctrl, change_user_designation_ctrl } from '../controllers/users.controller.js';
 import prisma from '../../../shared/database/client.js';
 
 const router = Router();
@@ -184,6 +184,44 @@ router.post('/',           ADMIN_HR, create_user_ctrl);
  *         description: Unauthorized
  */
 router.put('/:id',         ADMIN_HR, update_user_ctrl);
+
+/**
+ * @swagger
+ * /users/{id}/designation-change:
+ *   post:
+ *     summary: Record a promotion and/or transfer for a user (designation/grade/department change)
+ *     description: >
+ *       Direct HR/Admin action — no multi-step approval workflow. Writes to
+ *       the designation_history table via the single record_designation_change
+ *       write path, replacing the old silent generic field edit. change_type
+ *       is derived server-side as PROMOTION (designation_id/grade_id),
+ *       TRANSFER (department_id), or PROMOTION_AND_TRANSFER (both).
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               designation_id: { type: string, nullable: true }
+ *               grade_id: { type: string, nullable: true }
+ *               department_id: { type: string, nullable: true }
+ *               reason: { type: string }
+ *               effective_date: { type: string, format: date }
+ *     responses:
+ *       201:
+ *         description: Designation change recorded
+ *       404:
+ *         description: User not found
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/:id/designation-change', ADMIN_HR, change_user_designation_ctrl);
 
 /**
  * @swagger

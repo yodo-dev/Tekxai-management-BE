@@ -109,6 +109,8 @@ model users {
   emergency_contacts          emergency_contacts[]
   salary_increments           salary_increments[]
   increments_approved         salary_increments[]           @relation("increment_approver")
+  designation_history         designation_history[]
+  designation_changes_made    designation_history[]         @relation("designation_history_actor")
   overtime_requests           overtime_requests[]
   overtime_approved           overtime_requests[]           @relation("overtime_approver")
   expense_account             expense_accounts?
@@ -245,6 +247,9 @@ model departments {
   assets       assets[]
   requisitions requisitions[] @relation("dept_requisitions")
   designations designations[]
+
+  designation_history_previous designation_history[] @relation("designation_history_previous_department")
+  designation_history_new      designation_history[] @relation("designation_history_new_department")
 }
 
 model divisions {
@@ -276,6 +281,9 @@ model designations {
   department departments? @relation(fields: [department_id], references: [id], onDelete: SetNull)
   users      users[]
 
+  designation_history_previous designation_history[] @relation("designation_history_previous_designation")
+  designation_history_new      designation_history[] @relation("designation_history_new_designation")
+
   @@index([department_id])
 }
 
@@ -290,6 +298,9 @@ model grades {
   deleted_at  DateTime?
 
   users users[]
+
+  designation_history_previous designation_history[] @relation("designation_history_previous_grade")
+  designation_history_new      designation_history[] @relation("designation_history_new_grade")
 
   @@index([level])
 }
@@ -2038,6 +2049,41 @@ model salary_increments {
   @@index([user_id])
   @@index([review_year])
   @@index([status])
+}
+
+// ─── Designation History (Sprint 1 Phase 4 Milestone 1) ───────────────────────
+// Promotion/Transfer audit trail. Modeled on salary_increments above: one
+// record per change, before/after value pair(s), effective date, actor.
+// The single write path is record_designation_change() in
+// users.repository.js — a designation/grade/department change must never
+// go through the generic update_existing_user() field patch again.
+model designation_history {
+  id                      String    @id @default(cuid())
+  user_id                 String
+  previous_designation_id String?
+  new_designation_id      String?
+  previous_grade_id       String?
+  new_grade_id            String?
+  previous_department_id  String?
+  new_department_id       String?
+  change_type             String // PROMOTION | TRANSFER | PROMOTION_AND_TRANSFER
+  effective_date          DateTime?
+  reason                  String?
+  changed_by              String
+  created_at              DateTime  @default(now())
+
+  user                 users         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  actor                users         @relation("designation_history_actor", fields: [changed_by], references: [id], onDelete: Cascade)
+  previous_designation designations? @relation("designation_history_previous_designation", fields: [previous_designation_id], references: [id], onDelete: SetNull)
+  new_designation      designations? @relation("designation_history_new_designation", fields: [new_designation_id], references: [id], onDelete: SetNull)
+  previous_grade       grades?       @relation("designation_history_previous_grade", fields: [previous_grade_id], references: [id], onDelete: SetNull)
+  new_grade            grades?       @relation("designation_history_new_grade", fields: [new_grade_id], references: [id], onDelete: SetNull)
+  previous_department  departments?  @relation("designation_history_previous_department", fields: [previous_department_id], references: [id], onDelete: SetNull)
+  new_department       departments?  @relation("designation_history_new_department", fields: [new_department_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([change_type])
+  @@index([effective_date])
 }
 
 // ─── Overtime Requests ────────────────────────────────────────────────────────
