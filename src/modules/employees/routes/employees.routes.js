@@ -96,6 +96,28 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
       ];
     }
 
+    // Data-access scoping: ADMIN/SUPER_ADMIN/HR see everyone (unchanged).
+    // DIVISION_MANAGER is restricted to their own department; TEAM_LEAD is
+    // restricted to employees on the team(s) they manage. Any other role
+    // that somehow holds hr.employees.view is left unscoped (safe default).
+    if (req.user.roles.includes('DIVISION_MANAGER')) {
+      const requester = await prisma.users.findUnique({
+        where: { id: req.user.id },
+        select: { department_id: true },
+      });
+      where.department_id = requester?.department_id || '__none__';
+    } else if (req.user.roles.includes('TEAM_LEAD')) {
+      const led_team_filter = { team_memberships: { some: { team: { manager_id: req.user.id } } } };
+      // Combine with any existing team_id filter instead of clobbering it,
+      // so a team_id query param still narrows within the led teams.
+      if (where.team_memberships) {
+        where.AND = [...(where.AND || []), { team_memberships: where.team_memberships }, led_team_filter];
+        delete where.team_memberships;
+      } else {
+        Object.assign(where, led_team_filter);
+      }
+    }
+
     const SORTABLE = { name: 'first_name', hire_date: 'hire_date', designation: 'designation', email: 'email', status: 'status' };
     const orderField = SORTABLE[sort_by] || 'hire_date';
     const orderDir   = sort_dir === 'asc' ? 'asc' : 'desc';
