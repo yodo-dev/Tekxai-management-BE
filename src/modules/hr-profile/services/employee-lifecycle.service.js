@@ -3,6 +3,8 @@ import { log_activity } from '../../activity-logs/repositories/activity.reposito
 import { set_employment_status } from '../../users/repositories/users.repository.js';
 import { get_lifecycle_stage, persist_lifecycle_stage } from '../repositories/employee-profiles.repository.js';
 import { validate_lifecycle_stage, NOTIFY_STAGES, LIFECYCLE_STAGE_LABELS } from '../constants/employee-lifecycle.js';
+import { create_notification } from '../../notifications/services/notifications.service.js';
+import { trigger_employee_confirmed } from '../../automation/services/automation.service.js';
 
 function app_error(message, status_code = 400) {
   const e = new Error(message);
@@ -59,15 +61,23 @@ export async function set_lifecycle_stage(user_id, new_stage, actor_user_id) {
     });
     if (employee?.supervisor_id) {
       const employee_name = `${employee.first_name || ''} ${employee.last_name || ''}`.trim() || 'The employee';
-      await prisma.notifications.create({
-        data: {
-          user_id: employee.supervisor_id,
-          title: `Employee Lifecycle — ${LIFECYCLE_STAGE_LABELS[new_stage]}`,
-          message: `${employee_name} is now at the "${LIFECYCLE_STAGE_LABELS[new_stage]}" stage.`,
-          type: 'HR',
-        },
+      await create_notification({
+        user_id: employee.supervisor_id,
+        title: `Employee Lifecycle — ${LIFECYCLE_STAGE_LABELS[new_stage]}`,
+        message: `${employee_name} is now at the "${LIFECYCLE_STAGE_LABELS[new_stage]}" stage.`,
+        type: 'HR',
       }).catch(() => null);
     }
+  }
+
+  // Automation Engine seed — Rulebook Section A #2 "Employee Confirmed".
+  // ACTIVE_EMPLOYMENT is the closest existing Lifecycle stage to the
+  // Rulebook's "Confirmation" concept. The NOTIFY_STAGES block above already
+  // sends the supervisor a lifecycle notification for this stage, so this
+  // only adds a distinct `employee.confirmed` Timeline entry marking that
+  // Automation also ran — it does not send a second notification.
+  if (new_stage === 'ACTIVE_EMPLOYMENT') {
+    await trigger_employee_confirmed(user_id, actor_user_id).catch(() => {});
   }
 
   // Exit-clearance asset flag — not a gate. EXIT_CLEARANCE and ARCHIVED (in

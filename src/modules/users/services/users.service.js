@@ -4,6 +4,7 @@ import { create_user, find_user_by_id, find_users, soft_delete_user, update_user
 import { validate_employment_status } from '../constants/employment-status.js';
 import { set_lifecycle_stage } from '../../hr-profile/services/employee-lifecycle.service.js';
 import { validate_lifecycle_stage } from '../../hr-profile/constants/employee-lifecycle.js';
+import { trigger_employee_created } from '../../automation/services/automation.service.js';
 
 function app_error(message, status_code = 400) {
   const e = new Error(message);
@@ -50,6 +51,11 @@ export async function create_new_user(body, actor_user_id) {
   // establishes employee_profiles.employment_status alongside users.status
   // — no separate direct set_employment_status call needed here.
   await set_lifecycle_stage(user.id, 'ONBOARDING', actor_user_id || user.id);
+
+  // Automation Engine seed — Rulebook Section A #1 "Employee Created".
+  // Fires once the user and their ONBOARDING lifecycle stage are both
+  // established above.
+  await trigger_employee_created(user.id, actor_user_id || user.id).catch(() => {});
 
   // Assign to team if provided
   if (team_id) {
