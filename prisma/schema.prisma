@@ -1767,6 +1767,7 @@ model employee_profiles {
   // ── Employment ────────────────────────────────────────────────────────
   employment_type            String?   @default("FULL_TIME")
   employment_status          String?   @default("ACTIVE") // Employment Status: ACTIVE | INACTIVE | ON_LEAVE | SUSPENDED | TERMINATED | DECEASED — mirrors users.status, single write path is set_employment_status(); Employee Lifecycle (a separate journey field) owns Probation/Onboarding/Notice Period/etc.
+  lifecycle_stage            String? // Employee Lifecycle: ONBOARDING | PROBATION | ACTIVE_EMPLOYMENT | NOTICE_PERIOD | EXIT_CLEARANCE | ARCHIVED — People-owned journey field, independent from employment_status. No DB default: new hires get ONBOARDING set explicitly by employee-lifecycle.service.js, not fabricated for pre-existing rows. Single write path is set_lifecycle_stage().
   grade                      String?
   work_mode                  String?   @default("ONSITE")
   probation_start            DateTime?

@@ -22,14 +22,14 @@ export async function get_user_by_id(req, res, next) {
 
 export async function create_user_ctrl(req, res, next) {
   try {
-    const user = await create_new_user(req.body);
+    const user = await create_new_user(req.body, req.user.id);
     return res.status(201).json({ success: true, payload: user });
   } catch (e) { return next(e); }
 }
 
 export async function update_user_ctrl(req, res, next) {
   try {
-    const user = await update_existing_user(req.params.id, req.body);
+    const user = await update_existing_user(req.params.id, req.body, req.user.id);
     return res.json({ success: true, payload: user });
   } catch (e) { return next(e); }
 }
@@ -60,7 +60,7 @@ export async function update_my_profile(req, res, next) {
     for (const f of allowed_fields) {
       if (req.body[f] !== undefined) data[f] = req.body[f];
     }
-    const user = await update_existing_user(req.user.id, data);
+    const user = await update_existing_user(req.user.id, data, req.user.id);
     return res.json({ success: true, message: 'Profile updated', payload: user });
   } catch (e) { return next(e); }
 }

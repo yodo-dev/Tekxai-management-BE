@@ -21,7 +21,7 @@ export async function get_profile_ctrl(req, res, next) {
 export async function upsert_profile_ctrl(req, res, next) {
   try {
     const user_id = await resolve_user_id(req.params.userId);
-    const profile = await upsert_hr_profile(user_id, req.body);
+    const profile = await upsert_hr_profile(user_id, req.body, req.user.id);
     return res.json({ success: true, payload: profile });
   } catch (e) { return next(e); }
 }

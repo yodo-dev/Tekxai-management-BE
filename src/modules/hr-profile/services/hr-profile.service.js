@@ -1,9 +1,10 @@
 import prisma from '../../../shared/database/client.js';
 import { set_employment_status } from '../../users/repositories/users.repository.js';
 import { validate_employment_status } from '../../users/constants/employment-status.js';
+import { set_lifecycle_stage } from './employee-lifecycle.service.js';
 
 const PROFILE_SELECT = {
-  id: true, user_id: true, profile_status: true,
+  id: true, user_id: true, profile_status: true, lifecycle_stage: true,
   personal_email: true, cnic: true, dob: true, gender: true, marital_status: true,
   father_name: true, alternate_phone: true, nationality: true, religion: true, blood_group: true,
   current_address: true, permanent_address: true,
@@ -24,7 +25,7 @@ export async function get_hr_profile(user_id) {
   return prisma.employee_profiles.findUnique({ where: { user_id }, select: PROFILE_SELECT });
 }
 
-export async function upsert_hr_profile(user_id, data) {
+export async function upsert_hr_profile(user_id, data, actor_user_id) {
   const allowed = [
     'profile_status',
     'personal_email', 'cnic', 'dob', 'gender', 'marital_status',
@@ -69,6 +70,13 @@ export async function upsert_hr_profile(user_id, data) {
       throw e;
     }
     await set_employment_status(user_id, data.employment_status);
+  }
+
+  // lifecycle_stage has exactly one write path (set_lifecycle_stage) — it is
+  // deliberately never added to `allowed` above, so a generic profile patch
+  // can never touch it by accident.
+  if (data.lifecycle_stage !== undefined) {
+    await set_lifecycle_stage(user_id, data.lifecycle_stage, actor_user_id || user_id);
   }
 
   return prisma.employee_profiles.upsert({

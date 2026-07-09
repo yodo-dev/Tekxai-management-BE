@@ -1,6 +1,7 @@
 import { OAuth2Client } from 'google-auth-library';
 import prisma from '../../../shared/database/client.js';
 import { sign_jwt_for_user } from '../services/auth.service.js';
+import { set_lifecycle_stage } from '../../hr-profile/services/employee-lifecycle.service.js';
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -43,6 +44,12 @@ export async function google_login(req, res, next) {
       if (employee_role) {
         await prisma.user_roles.create({ data: { user_id: user.id, role_id: employee_role.id } });
       }
+
+      // Same single write path every other user-creation flow uses — without
+      // this, employee_profiles is never created for Google-SSO-provisioned
+      // accounts, leaving both employment_status and lifecycle_stage
+      // silently missing.
+      await set_lifecycle_stage(user.id, 'ONBOARDING', user.id);
     } else if (!user.google_id) {
       user = await prisma.users.update({ where: { id: user.id }, data: { google_id, avatar: user.avatar || picture || null } });
     }

@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../../../shared/database/client.js';
 import { send_invite_email } from '../../email/email.service.js';
+import { set_lifecycle_stage } from '../../hr-profile/services/employee-lifecycle.service.js';
 import {
   create_invite,
   delete_invite,
@@ -102,6 +103,11 @@ export async function redeem_invite({ token, first_name, last_name, password }) 
     await tx.user_settings.create({ data: { user_id: u.id } });
     return u;
   });
+
+  // Same single write path every other user-creation flow uses — without
+  // this, employee_profiles is never created for invite-redeemed accounts,
+  // leaving both employment_status and lifecycle_stage silently missing.
+  await set_lifecycle_stage(user.id, 'ONBOARDING', user.id);
 
   await mark_invite_used(inv.id, user.id);
   return { message: 'Account created successfully', user_id: user.id };

@@ -1,0 +1,12 @@
+-- People OS Phase 2 Milestone 2 — Employee Lifecycle Foundation
+-- Additive only. Employee Lifecycle (ONBOARDING | PROBATION |
+-- ACTIVE_EMPLOYMENT | NOTICE_PERIOD | EXIT_CLEARANCE | ARCHIVED) is a new,
+-- independent journey field on employee_profiles — never merged with
+-- employment_status (Milestone 1), never placed on users.
+--
+-- No backfill. The system does not know each existing employee's true
+-- lifecycle stage, so historical rows are intentionally left NULL rather
+-- than fabricated as ACTIVE_EMPLOYMENT. HR performs a one-time manual
+-- reconciliation later. New hires get ONBOARDING set explicitly by
+-- employee-lifecycle.service.js at creation time, not by a database default.
+ALTER TABLE "employee_profiles" ADD COLUMN IF NOT EXISTS "lifecycle_stage" TEXT;

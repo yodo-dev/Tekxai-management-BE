@@ -2,6 +2,8 @@ import bcrypt from 'bcryptjs';
 import prisma from '../../../shared/database/client.js';
 import { create_user, find_user_by_id, find_users, soft_delete_user, update_user, set_employment_status } from '../repositories/users.repository.js';
 import { validate_employment_status } from '../constants/employment-status.js';
+import { set_lifecycle_stage } from '../../hr-profile/services/employee-lifecycle.service.js';
+import { validate_lifecycle_stage } from '../../hr-profile/constants/employee-lifecycle.js';
 
 function app_error(message, status_code = 400) {
   const e = new Error(message);
@@ -29,7 +31,7 @@ async function generate_employee_id() {
   return `TXI-${String(next).padStart(4, '0')}`;
 }
 
-export async function create_new_user(body) {
+export async function create_new_user(body, actor_user_id) {
   const existing = await prisma.users.findUnique({ where: { email: body.email } });
   if (existing) throw app_error('Email already in use', 409);
 
@@ -43,10 +45,11 @@ export async function create_new_user(body) {
 
   const user = await create_user({ ...rest, password_hash });
 
-  // Establish employee_profiles.employment_status alongside users.status
-  // through the single write path, so the field never has to be backfilled
-  // later by a separate reconciliation pass.
-  await set_employment_status(user.id, 'ACTIVE');
+  // Every new hire starts at ONBOARDING. This is the one place Lifecycle's
+  // frozen ONBOARDING->ACTIVE sync rule fires, which is also what
+  // establishes employee_profiles.employment_status alongside users.status
+  // — no separate direct set_employment_status call needed here.
+  await set_lifecycle_stage(user.id, 'ONBOARDING', actor_user_id || user.id);
 
   // Assign to team if provided
   if (team_id) {
@@ -62,15 +65,26 @@ export async function create_new_user(body) {
   return user;
 }
 
-export async function update_existing_user(id, body) {
+export async function update_existing_user(id, body, actor_user_id) {
   await get_user(id); // throws 404 if not found
-  const { team_id, password, status, ...rest } = body;
+  // `status` and `lifecycle_stage` are stripped here defensively — users has
+  // no lifecycle_stage column, but the generic /user/:id endpoint must never
+  // be a path that either field can sneak through on (e.g. a combined
+  // organization-update payload), even though update_user() would otherwise
+  // reject an unknown column outright.
+  const { team_id, password, status, lifecycle_stage, ...rest } = body;
   if (password) rest.password_hash = await bcrypt.hash(password, 12);
 
   if (status !== undefined) {
     const check = validate_employment_status(status);
     if (!check.valid) throw app_error(check.message, 422);
     await set_employment_status(id, status);
+  }
+
+  if (lifecycle_stage !== undefined) {
+    const check = validate_lifecycle_stage(lifecycle_stage);
+    if (!check.valid) throw app_error(check.message, 422);
+    await set_lifecycle_stage(id, lifecycle_stage, actor_user_id || id);
   }
 
   const user = await update_user(id, rest);
