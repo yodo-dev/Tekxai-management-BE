@@ -70,6 +70,9 @@ model users {
   deposits_created            deposits[]
   marketing_targets           marketing_targets[]
   asset_assignments           asset_assignments[]
+  asset_requests_made         asset_requests[]              @relation("asset_request_requester")
+  asset_requests_for_me       asset_requests[]              @relation("asset_request_target")
+  asset_requests_reviewed     asset_requests[]              @relation("asset_request_reviewer")
   daily_reports               daily_progress_reports[]
   performance_scores          employee_performance_scores[]
   performance_reviews         performance_reviews[]
@@ -780,7 +783,8 @@ model asset_categories {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
-  assets assets[]
+  assets   assets[]
+  requests asset_requests[]
 }
 
 model asset_vendors {
@@ -896,6 +900,29 @@ model asset_disposals {
   asset assets @relation(fields: [asset_id], references: [id], onDelete: Cascade)
 
   @@index([asset_id])
+}
+
+model asset_requests {
+  id                    String    @id @default(cuid())
+  user_id               String
+  requested_for_user_id String?
+  asset_category_id     String
+  reason                String?
+  status                String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewed_by           String?
+  reviewed_at           DateTime?
+  rejection_reason      String?
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @updatedAt
+
+  requester     users            @relation("asset_request_requester", fields: [user_id], references: [id], onDelete: Cascade)
+  requested_for users?           @relation("asset_request_target", fields: [requested_for_user_id], references: [id], onDelete: SetNull)
+  reviewer      users?           @relation("asset_request_reviewer", fields: [reviewed_by], references: [id], onDelete: SetNull)
+  category      asset_categories @relation(fields: [asset_category_id], references: [id], onDelete: Restrict)
+
+  @@index([status])
+  @@index([user_id])
+  @@index([asset_category_id])
 }
 
 // ─── Performance Management ───────────────────────────────────────────────────

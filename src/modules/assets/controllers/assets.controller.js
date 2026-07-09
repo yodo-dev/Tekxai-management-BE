@@ -1,14 +1,20 @@
 import {
   add_maintenance,
+  approve_asset_request,
   assign_asset,
   create_asset,
+  create_asset_request,
   create_category,
+  create_disposal,
   delete_asset,
   get_asset,
-  list_assets,
+  list_asset_requests,
   list_categories,
+  list_disposals,
+  list_assets,
   list_locations,
   list_vendors,
+  reject_asset_request,
   return_asset,
   update_asset,
 } from '../services/assets.service.js';
@@ -93,4 +99,46 @@ export async function list_all_maintenance_ctrl(req, res, next) {
     });
     return res.json({ success: true, payload: { records: logs, total: logs.length } });
   } catch (err) { next(err); }
+}
+
+// ─── Asset Requests ────────────────────────────────────────────────────────
+
+export async function create_asset_request_ctrl(req, res, next) {
+  try {
+    const request = await create_asset_request(req.user.id, req.body);
+    return res.status(201).json({ success: true, payload: request });
+  } catch (e) { return next(e); }
+}
+
+export async function get_asset_requests_ctrl(req, res, next) {
+  try { return res.json({ success: true, payload: await list_asset_requests(req.query) }); }
+  catch (e) { return next(e); }
+}
+
+export async function approve_asset_request_ctrl(req, res, next) {
+  try {
+    const request = await approve_asset_request(req.params.id, { ...req.body, reviewed_by: req.user.id });
+    return res.json({ success: true, payload: request });
+  } catch (e) { return next(e); }
+}
+
+export async function reject_asset_request_ctrl(req, res, next) {
+  try {
+    const request = await reject_asset_request(req.params.id, { ...req.body, reviewed_by: req.user.id });
+    return res.json({ success: true, payload: request });
+  } catch (e) { return next(e); }
+}
+
+// ─── Asset Disposals ────────────────────────────────────────────────────────
+
+export async function get_disposals_ctrl(req, res, next) {
+  try { return res.json({ success: true, payload: await list_disposals(req.query) }); }
+  catch (e) { return next(e); }
+}
+
+export async function create_disposal_ctrl(req, res, next) {
+  try {
+    const disposal = await create_disposal({ ...req.body, disposed_by: req.user.id });
+    return res.status(201).json({ success: true, payload: disposal });
+  } catch (e) { return next(e); }
 }

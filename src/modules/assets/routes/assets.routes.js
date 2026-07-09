@@ -2,16 +2,22 @@ import { Router } from 'express';
 import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
 import {
   add_maintenance_ctrl,
+  approve_asset_request_ctrl,
   list_all_maintenance_ctrl,
   assign_asset_ctrl,
   create_asset_ctrl,
+  create_asset_request_ctrl,
   create_category_ctrl,
+  create_disposal_ctrl,
   delete_asset_ctrl,
   get_asset_ctrl,
+  get_asset_requests_ctrl,
   get_assets,
   get_categories,
+  get_disposals_ctrl,
   get_locations,
   get_vendors,
+  reject_asset_request_ctrl,
   return_asset_ctrl,
   update_asset_ctrl,
 } from '../controllers/assets.controller.js';
@@ -84,6 +90,144 @@ router.get('/locations',        get_locations);
  *         description: Unauthorized
  */
 router.get('/vendors',          get_vendors);
+
+/**
+ * @swagger
+ * /assets/requests:
+ *   post:
+ *     summary: Create an asset request
+ *     tags: [Assets]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [asset_category_id]
+ *             properties:
+ *               requested_for_user_id: { type: string }
+ *               asset_category_id: { type: string }
+ *               reason: { type: string }
+ *     responses:
+ *       201:
+ *         description: Asset request created
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/requests',        create_asset_request_ctrl);
+
+/**
+ * @swagger
+ * /assets/requests:
+ *   get:
+ *     summary: List asset requests
+ *     tags: [Assets]
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Asset requests list
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/requests',         HR,   get_asset_requests_ctrl);
+
+/**
+ * @swagger
+ * /assets/requests/{id}/approve:
+ *   post:
+ *     summary: Approve an asset request and assign a specific asset
+ *     tags: [Assets]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [asset_id]
+ *             properties:
+ *               asset_id: { type: string }
+ *               notes: { type: string }
+ *     responses:
+ *       200:
+ *         description: Request approved and asset assigned
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/requests/:id/approve', HR, approve_asset_request_ctrl);
+
+/**
+ * @swagger
+ * /assets/requests/{id}/reject:
+ *   post:
+ *     summary: Reject an asset request
+ *     tags: [Assets]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               rejection_reason: { type: string }
+ *     responses:
+ *       200:
+ *         description: Request rejected
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/requests/:id/reject',  HR, reject_asset_request_ctrl);
+
+/**
+ * @swagger
+ * /assets/disposals:
+ *   get:
+ *     summary: List asset disposal records
+ *     tags: [Assets]
+ *     responses:
+ *       200:
+ *         description: Disposals list
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/disposals',        HR,   get_disposals_ctrl);
+
+/**
+ * @swagger
+ * /assets/disposals:
+ *   post:
+ *     summary: Create a disposal record for an asset
+ *     tags: [Assets]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [asset_id, reason]
+ *             properties:
+ *               asset_id: { type: string }
+ *               reason: { type: string }
+ *               disposal_date: { type: string, format: date }
+ *               notes: { type: string }
+ *     responses:
+ *       201:
+ *         description: Disposal recorded
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/disposals',       HR,   create_disposal_ctrl);
 
 /**
  * @swagger

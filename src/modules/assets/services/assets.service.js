@@ -169,6 +169,176 @@ export async function add_maintenance(asset_id, data) {
   return prisma.asset_maintenance_logs.create({ data: { ...data, asset_id } });
 }
 
+// ─── Asset Requests (single-approver request/approval workflow) ──────────────
+
+const REQUEST_INCLUDE = {
+  requester: { select: { id: true, first_name: true, last_name: true, email: true } },
+  requested_for: { select: { id: true, first_name: true, last_name: true, email: true } },
+  reviewer: { select: { id: true, first_name: true, last_name: true, email: true } },
+  category: true,
+};
+
+export async function create_asset_request(user_id, { requested_for_user_id, asset_category_id, reason }) {
+  if (!asset_category_id) throw app_error('asset_category_id is required', 400);
+
+  const request = await prisma.asset_requests.create({
+    data: {
+      user_id,
+      requested_for_user_id: requested_for_user_id || user_id,
+      asset_category_id,
+      reason,
+    },
+    include: REQUEST_INCLUDE,
+  });
+
+  await log_activity({
+    user_id,
+    action: 'CREATE',
+    entity_type: 'asset_request',
+    entity_id: request.id,
+    description: `Asset request created for category "${request.category?.name}"`,
+  }).catch(() => {});
+
+  return request;
+}
+
+export async function list_asset_requests({ status, page = 1, limit = 20 } = {}) {
+  page = +page || 1; limit = +limit || 20;
+  const skip = (page - 1) * limit;
+  const where = {};
+  if (status) where.status = status;
+
+  const [total, records] = await Promise.all([
+    prisma.asset_requests.count({ where }),
+    prisma.asset_requests.findMany({
+      where, skip, take: limit, orderBy: { created_at: 'desc' }, include: REQUEST_INCLUDE,
+    }),
+  ]);
+
+  return { records, total, page, limit, pages: Math.ceil(total / limit) };
+}
+
+export async function get_asset_request(id) {
+  const request = await prisma.asset_requests.findUnique({ where: { id }, include: REQUEST_INCLUDE });
+  if (!request) throw app_error('Asset request not found', 404);
+  return request;
+}
+
+export async function approve_asset_request(id, { asset_id, reviewed_by, notes }) {
+  const request = await get_asset_request(id);
+  if (request.status !== 'PENDING') throw app_error('Only pending requests can be approved', 400);
+  if (!asset_id) throw app_error('asset_id is required to approve a request', 400);
+
+  // Reuse assign_asset for the actual assignment — no duplicated assignment logic.
+  await assign_asset(asset_id, { user_id: request.requested_for_user_id, assigned_by: reviewed_by, notes });
+
+  const updated = await prisma.asset_requests.update({
+    where: { id },
+    data: { status: 'APPROVED', reviewed_by, reviewed_at: new Date() },
+    include: REQUEST_INCLUDE,
+  });
+
+  await log_activity({
+    user_id: reviewed_by,
+    action: 'UPDATE',
+    entity_type: 'asset_request',
+    entity_id: id,
+    description: `Asset request approved and asset assigned`,
+  }).catch(() => {});
+
+  await prisma.notifications.create({
+    data: {
+      user_id: request.user_id,
+      title: 'Asset Request Approved',
+      message: `Your asset request for "${request.category?.name}" has been approved.`,
+      type: 'ASSET',
+    },
+  }).catch(() => null);
+
+  return updated;
+}
+
+export async function reject_asset_request(id, { reviewed_by, rejection_reason }) {
+  const request = await get_asset_request(id);
+  if (request.status !== 'PENDING') throw app_error('Only pending requests can be rejected', 400);
+
+  const updated = await prisma.asset_requests.update({
+    where: { id },
+    data: { status: 'REJECTED', reviewed_by, reviewed_at: new Date(), rejection_reason },
+    include: REQUEST_INCLUDE,
+  });
+
+  await log_activity({
+    user_id: reviewed_by,
+    action: 'UPDATE',
+    entity_type: 'asset_request',
+    entity_id: id,
+    description: `Asset request rejected${rejection_reason ? `: ${rejection_reason}` : ''}`,
+  }).catch(() => {});
+
+  await prisma.notifications.create({
+    data: {
+      user_id: request.user_id,
+      title: 'Asset Request Rejected',
+      message: `Your asset request for "${request.category?.name}" was rejected${rejection_reason ? `: ${rejection_reason}` : ''}.`,
+      type: 'ASSET',
+    },
+  }).catch(() => null);
+
+  return updated;
+}
+
+// ─── Asset Disposals ──────────────────────────────────────────────────────────
+
+export async function list_disposals({ page = 1, limit = 20 } = {}) {
+  page = +page || 1; limit = +limit || 20;
+  const skip = (page - 1) * limit;
+
+  const [total, records] = await Promise.all([
+    prisma.asset_disposals.count(),
+    prisma.asset_disposals.findMany({
+      skip, take: limit, orderBy: { disposal_date: 'desc' },
+      include: { asset: { select: { id: true, name: true, asset_tag: true } } },
+    }),
+  ]);
+
+  return { records, total, page, limit, pages: Math.ceil(total / limit) };
+}
+
+export async function create_disposal(data) {
+  const { asset_id, reason, disposal_date, disposed_by, notes } = data;
+  const asset = await get_asset(asset_id);
+
+  const disposal = await prisma.$transaction(async (tx) => {
+    const created = await tx.asset_disposals.create({
+      data: {
+        asset_id,
+        reason,
+        disposal_date: disposal_date ? new Date(disposal_date) : new Date(),
+        disposed_by,
+        notes,
+      },
+      include: { asset: { select: { id: true, name: true, asset_tag: true } } },
+    });
+    await tx.asset_assignments.updateMany({
+      where: { asset_id, is_active: true },
+      data: { is_active: false, returned_at: new Date() },
+    });
+    await tx.assets.update({ where: { id: asset_id }, data: { status: 'RETIRED', deleted_at: new Date() } });
+    return created;
+  });
+
+  await log_activity({
+    user_id: disposed_by,
+    action: 'UPDATE',
+    entity_type: 'asset',
+    entity_id: asset_id,
+    description: `Asset "${asset.name}" disposed${reason ? `: ${reason}` : ''}`,
+  }).catch(() => {});
+
+  return disposal;
+}
+
 export async function list_categories() {
   return prisma.asset_categories.findMany({
     take: 500,
