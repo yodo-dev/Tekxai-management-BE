@@ -229,6 +229,33 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'hr.performance.view',
     'hr.salary.view',
   ],
+  // Team Lead manages a single team's day-to-day work within a division — a subset
+  // of DIVISION_MANAGER scoped down from division-wide admin to just their own team:
+  //  - Keeps: workspace access, dashboards, team/project visibility, attendance/
+  //    timesheet visibility + approval for their team's members, and team performance
+  //    visibility — mirrors what a Division Manager sees, just narrower in practice
+  //    (enforced by team_id/leader_id scoping at the controller/query level, the same
+  //    pattern EMPLOYEE's erp.projects.view already relies on for member_only scoping).
+  //  - Adds erp.projects.edit beyond DIVISION_MANAGER: a Team Lead is the one actually
+  //    editing their team's project/task details day-to-day (per projects.leader_id in
+  //    the schema), whereas a Division Manager mostly reviews at a higher level.
+  //  - Drops everything division/org-wide that DIVISION_MANAGER has: erp.reports.*,
+  //    erp.operations.view, erp.monitoring.view, erp.departments.view,
+  //    erp.designations.view, erp.grades.view, erp.users.view, and
+  //    erp.requisitions.approve (budget-level sign-off stays with Division Manager).
+  //  - No hr-wide employee editing and no erp.permissions.manage (permission-matrix
+  //    access) — Team Lead is not an HR or admin role.
+  TEAM_LEAD: [
+    'erp.workspace.access', 'erp.dashboard.view',
+    'erp.projects.view', 'erp.projects.edit',
+    'erp.timesheet.view', 'erp.timesheet.approve',
+    'erp.teams.view',
+    'erp.attendance.view',
+    'erp.performance.view',
+    'erp.requisitions.view',
+    'hr.workspace.access',
+    'hr.employees.view',
+  ],
   MARKETING: [
     'crm.workspace.access', 'crm.dashboard.view',
     'crm.pipeline.view', 'crm.pipeline.create', 'crm.pipeline.edit',
@@ -248,4 +275,4 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   ],
 };
 
-export const ALL_ROLE_NAMES = ['ADMIN', 'HR', 'DIVISION_MANAGER', 'MARKETING', 'EMPLOYEE'];
+export const ALL_ROLE_NAMES = ['ADMIN', 'HR', 'DIVISION_MANAGER', 'TEAM_LEAD', 'MARKETING', 'EMPLOYEE'];
