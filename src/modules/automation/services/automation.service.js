@@ -1,6 +1,5 @@
 import prisma from '../../../shared/database/client.js';
 import { log_activity } from '../../activity-logs/repositories/activity.repository.js';
-import { create_notification } from '../../notifications/services/notifications.service.js';
 import { RULES } from '../constants/rules.js';
 
 // Automation Engine — Milestone 1 seed.
@@ -24,23 +23,17 @@ function display_name(employee) {
 }
 
 // Rule #1 — Employee Created. Fires once the new user and their ONBOARDING
-// lifecycle stage are both established. Notifies the supervisor (if set)
-// through the shared create_notification() and writes an
-// `employee.created` Timeline entry via the existing activity_logs
-// infrastructure.
+// lifecycle stage are both established. ONBOARDING is itself one of
+// employee-lifecycle.service.js's NOTIFY_STAGES, so set_lifecycle_stage()
+// already sends the supervisor a lifecycle notification for this exact
+// transition — this function does not send a second one (same no-double-
+// notify design as trigger_employee_confirmed below). It only writes the
+// additional `employee.created` Timeline entry, giving Automation a
+// visible, distinct marker that it ran.
 export async function trigger_employee_created(user_id, actor_user_id) {
   const rule = RULES.EMPLOYEE_CREATED;
   const employee = await get_employee_and_supervisor(user_id);
   const employee_name = display_name(employee);
-
-  if (employee?.supervisor_id) {
-    await create_notification({
-      user_id: employee.supervisor_id,
-      title: 'Employee Created',
-      message: `${employee_name} has been added and is now onboarding.`,
-      type: 'HR',
-    }).catch(() => null);
-  }
 
   await log_activity({
     user_id: actor_user_id || user_id,
