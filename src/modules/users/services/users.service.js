@@ -75,12 +75,15 @@ export async function create_new_user(body, actor_user_id) {
 
 export async function update_existing_user(id, body, actor_user_id) {
   await get_user(id); // throws 404 if not found
-  // `status` and `lifecycle_stage` are stripped here defensively — users has
-  // no lifecycle_stage column, but the generic /user/:id endpoint must never
-  // be a path that either field can sneak through on (e.g. a combined
-  // organization-update payload), even though update_user() would otherwise
-  // reject an unknown column outright.
-  const { team_id, password, status, lifecycle_stage, ...rest } = body;
+  // `status`, `lifecycle_stage`, and designation_id/grade_id/department_id
+  // are all stripped here defensively — each has exactly one write path
+  // (set_employment_status / set_lifecycle_stage / change_user_designation
+  // below) and must never reach the generic update_user() call, which would
+  // otherwise silently bypass the Employment Status sync, the Lifecycle
+  // sync, or the designation_history audit trail. This matters in practice:
+  // the Employee Profile page's Organization card already PUTs designation
+  // changes through this exact generic endpoint.
+  const { team_id, password, status, lifecycle_stage, designation_id, grade_id, department_id, ...rest } = body;
   if (password) rest.password_hash = await bcrypt.hash(password, 12);
 
   if (status !== undefined) {
@@ -93,6 +96,10 @@ export async function update_existing_user(id, body, actor_user_id) {
     const check = validate_lifecycle_stage(lifecycle_stage);
     if (!check.valid) throw app_error(check.message, 422);
     await set_lifecycle_stage(id, lifecycle_stage, actor_user_id || id);
+  }
+
+  if (designation_id !== undefined || grade_id !== undefined || department_id !== undefined) {
+    await change_user_designation(id, { designation_id, grade_id, department_id }, actor_user_id || id);
   }
 
   const user = await update_user(id, rest);
