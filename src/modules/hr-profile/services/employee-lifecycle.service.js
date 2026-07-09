@@ -70,5 +70,50 @@ export async function set_lifecycle_stage(user_id, new_stage, actor_user_id) {
     }
   }
 
+  // Exit-clearance asset flag — not a gate. EXIT_CLEARANCE and ARCHIVED (in
+  // case someone skips straight to Archived) both check the employee's
+  // currently active asset assignments and, if any exist, raise an extra
+  // Timeline event plus an extra supervisor notification listing what's
+  // outstanding. This never blocks or reverses the transition above — a
+  // hard approval gate is a future milestone, not this one.
+  if (new_stage === 'EXIT_CLEARANCE' || new_stage === 'ARCHIVED') {
+    try {
+      const active_assignments = await prisma.asset_assignments.findMany({
+        where: { user_id, is_active: true },
+        include: { asset: true },
+      });
+
+      if (active_assignments.length > 0) {
+        const asset_names = active_assignments.map((a) => a.asset?.name || a.asset?.asset_tag || 'Unnamed asset');
+
+        await log_activity({
+          user_id: actor_user_id || user_id,
+          action: 'UPDATE',
+          entity_type: 'employee',
+          entity_id: user_id,
+          description: `${active_assignments.length} asset(s) still assigned and must be returned before exit clearance can complete: ${asset_names.join(', ')}`,
+        }).catch(() => {});
+
+        const employee = await prisma.users.findUnique({
+          where: { id: user_id },
+          select: { supervisor_id: true, first_name: true, last_name: true },
+        });
+        if (employee?.supervisor_id) {
+          const employee_name = `${employee.first_name || ''} ${employee.last_name || ''}`.trim() || 'The employee';
+          await prisma.notifications.create({
+            data: {
+              user_id: employee.supervisor_id,
+              title: 'Outstanding Assets — Exit Clearance',
+              message: `${employee_name} still has ${active_assignments.length} asset(s) assigned that need to be returned: ${asset_names.join(', ')}.`,
+              type: 'HR',
+            },
+          }).catch(() => null);
+        }
+      }
+    } catch {
+      // Never let the asset-flag check break the core lifecycle transition.
+    }
+  }
+
   return { lifecycle_stage: new_stage, changed: true };
 }
