@@ -1,42 +1,67 @@
 import prisma from '../../../shared/database/client.js';
 
-/** Get the shift for a user (their assigned shift or default) */
-export async function get_user_shift(user_id) {
-  const assigned = await prisma.employee_shifts.findFirst({
-    where: { user_id },
-    include: { shift: true },
-    orderBy: { effective: 'desc' },
-  });
-  if (assigned) return assigned.shift;
+// `shift_schedules` is the one canonical shift model (Sprint 2 Milestone 1) —
+// it's the only one with a real relation (`employee_shifts.shift_id` FKs into
+// it). The orphaned duplicate `shifts` model has been retired. Its DB column
+// is `grace_period_mins` (plural); the API/FE contract predates this fix and
+// uses `grace_period_min` (singular), so every function here normalizes the
+// shape at the boundary rather than touching the contract or the frontend.
+function normalize_shift(shift) {
+  if (!shift) return shift;
+  const { grace_period_mins, ...rest } = shift;
+  return { ...rest, grace_period_min: grace_period_mins };
+}
 
-  return prisma.shifts.findFirst({ where: { is_default: true } });
+/** Get the shift for a user (their currently active assignment, or the default) */
+export async function get_user_shift(user_id) {
+  const now = new Date();
+  const assigned = await prisma.employee_shifts.findFirst({
+    where: {
+      user_id,
+      start_date: { lte: now },
+      OR: [{ end_date: null }, { end_date: { gte: now } }],
+    },
+    include: { shift: true },
+    orderBy: { start_date: 'desc' },
+  });
+  if (assigned) return normalize_shift(assigned.shift);
+
+  const default_shift = await prisma.shift_schedules.findFirst({ where: { is_default: true } });
+  return normalize_shift(default_shift);
 }
 
 /** List all shifts */
 export async function find_all_shifts() {
-  return prisma.shifts.findMany({
+  const shifts = await prisma.shift_schedules.findMany({
   take: 500, orderBy: { name: 'asc' } });
+  return shifts.map(normalize_shift);
 }
 
 /** Create or update a shift */
 export async function upsert_shift({ id, name, start_time, end_time, grace_period_min, is_default }) {
-  if (id) {
-    return prisma.shifts.update({ where: { id }, data: { name, start_time, end_time, grace_period_min: Number(grace_period_min), is_default: Boolean(is_default) } });
-  }
-  return prisma.shifts.create({ data: { name, start_time, end_time, grace_period_min: Number(grace_period_min || 15), is_default: Boolean(is_default) } });
+  const data = {
+    name, start_time, end_time,
+    grace_period_mins: Number(grace_period_min || 15),
+    is_default: Boolean(is_default),
+  };
+  const shift = id
+    ? await prisma.shift_schedules.update({ where: { id }, data })
+    : await prisma.shift_schedules.create({ data });
+  return normalize_shift(shift);
 }
 
 /** Delete a shift */
 export async function delete_shift(id) {
-  return prisma.shifts.delete({ where: { id } });
+  return prisma.shift_schedules.delete({ where: { id } });
 }
 
 /** Assign shift to employee */
 export async function assign_shift(user_id, shift_id) {
-  return prisma.employee_shifts.create({
-    data: { user_id, shift_id, effective: new Date() },
+  const assignment = await prisma.employee_shifts.create({
+    data: { user_id, shift_id, start_date: new Date() },
     include: { shift: true },
   });
+  return { ...assignment, shift: normalize_shift(assignment.shift) };
 }
 
 /** List attendance violations */
@@ -77,17 +102,20 @@ export async function compute_violation(user_id, entry) {
 
   if (late_min <= shift.grace_period_min) return null; // Within grace period
 
+  const date_key = check_in_date.toISOString().split('T')[0];
+  const remarks = `Late check-in by ${late_min} minutes (expected ${shift.start_time}, checked in at `
+    + `${String(check_in_date.getHours()).padStart(2, '0')}:${String(check_in_date.getMinutes()).padStart(2, '0')})`;
+
   return prisma.attendance_violations.upsert({
-    where: { id: `viol_${user_id}_${check_in_date.toISOString().split('T')[0]}` },
-    update: { late_minutes: late_min, actual_check_in: check_in_date, entry_id: entry.id },
+    where: { id: `viol_${user_id}_${date_key}` },
+    update: { late_mins: late_min, remarks, entry_id: entry.id },
     create: {
-      id: `viol_${user_id}_${check_in_date.toISOString().split('T')[0]}`,
+      id: `viol_${user_id}_${date_key}`,
       user_id,
-      date: new Date(check_in_date.toISOString().split('T')[0]),
-      expected_check_in: expected,
-      actual_check_in: check_in_date,
-      late_minutes: late_min,
+      date: new Date(date_key),
       violation_type: 'LATE',
+      late_mins: late_min,
+      remarks,
       entry_id: entry.id,
     },
   });
@@ -110,7 +138,7 @@ export async function attendance_summary(user_id, start_date, end_date) {
 
   const late_count = violations.filter((v) => v.violation_type === 'LATE').length;
   const absent_count = violations.filter((v) => v.violation_type === 'ABSENT').length;
-  const total_late_min = violations.reduce((s, v) => s + (v.late_minutes || 0), 0);
+  const total_late_min = violations.reduce((s, v) => s + (v.late_mins || 0), 0);
 
   return {
     total_working_days: entries,

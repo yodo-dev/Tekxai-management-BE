@@ -104,8 +104,14 @@ export async function clock_in(req, res, next) {
       return fail(res, 'You are already clocked in. Please clock out first.', 409);
     }
     const entry = await repo_clock_in(req.user.id, note);
-    // Async: check for late-coming violation (non-blocking)
-    compute_violation(req.user.id, entry).catch(() => {});
+    // Async: check for late-coming violation. Non-blocking by design (a
+    // violation-computation failure must never fail clock-in itself), but
+    // the error is logged rather than silently discarded — a swallowed
+    // error here previously hid a schema mismatch that meant no violation
+    // was ever recorded (Sprint 2 Milestone 1).
+    compute_violation(req.user.id, entry).catch((err) => {
+      console.error('[attendance] compute_violation failed for user', req.user.id, err);
+    });
     return ok(res, entry, 'Clocked in successfully', 201);
   } catch (err) { next(err); }
 }

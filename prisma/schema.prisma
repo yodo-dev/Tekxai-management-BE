@@ -1152,19 +1152,6 @@ model activity_logs {
   @@index([created_at])
 }
 
-// ─── Shift Management ─────────────────────────────────────────────────────────
-
-model shifts {
-  id               String   @id @default(cuid())
-  name             String
-  start_time       String
-  end_time         String
-  grace_period_min Int      @default(15)
-  is_default       Boolean  @default(false)
-  created_at       DateTime @default(now())
-  updated_at       DateTime @updatedAt
-}
-
 // ─── Late Coming & Attendance Violations ──────────────────────────────────────
 
 // ─── Leave Balances ────────────────────────────────────────────────────────────
