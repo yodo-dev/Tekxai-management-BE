@@ -1,11 +1,12 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, can_or_role } from '../../../shared/middleware/authenticate.js';
 import { get_designations_ctrl, get_full_record_ctrl, get_profile_ctrl, upsert_profile_ctrl } from '../controllers/hr-profile.controller.js';
 
 const router = Router();
 router.use(authenticate);
 
-const ADMIN_HR = authorize('SUPER_ADMIN', 'ADMIN', 'HR');
+const VIEW = can_or_role('hr.employee_profiles.view', 'SUPER_ADMIN', 'ADMIN', 'HR');
+const EDIT = can_or_role('hr.employee_profiles.edit', 'SUPER_ADMIN', 'ADMIN', 'HR');
 
 /**
  * @swagger
@@ -38,7 +39,7 @@ router.get('/designations',   get_designations_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.get('/:userId',        ADMIN_HR, get_profile_ctrl);
+router.get('/:userId',        VIEW, get_profile_ctrl);
 
 /**
  * @swagger
@@ -69,7 +70,7 @@ router.get('/:userId',        ADMIN_HR, get_profile_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.put('/:userId',        ADMIN_HR, upsert_profile_ctrl);
+router.put('/:userId',        EDIT, upsert_profile_ctrl);
 
 /**
  * @swagger
@@ -88,6 +89,6 @@ router.put('/:userId',        ADMIN_HR, upsert_profile_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.get('/:userId/full',   ADMIN_HR, get_full_record_ctrl);
+router.get('/:userId/full',   VIEW, get_full_record_ctrl);
 
 export default router;
