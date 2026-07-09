@@ -43,6 +43,7 @@ import permissions_routes      from '../modules/permissions/routes/permissions.r
 import employees_routes        from '../modules/employees/routes/employees.routes.js';
 import education_routes        from '../modules/education-records/routes/education-records.routes.js';
 import employment_hist_routes  from '../modules/employment-history/routes/employment-history.routes.js';
+import emergency_contacts_routes from '../modules/emergency-contacts/routes/emergency-contacts.routes.js';
 import increments_routes       from '../modules/increments/routes/increments.routes.js';
 import overtime_routes         from '../modules/overtime/routes/overtime.routes.js';
 import hr_reports_routes       from '../modules/hr-reports/hr-reports.routes.js';
@@ -121,6 +122,7 @@ router.use('/permission',        permissions_routes);
 router.use('/employee',          employees_routes);
 router.use('/education-record',  education_routes);
 router.use('/employment-history',employment_hist_routes);
+router.use('/emergency-contacts',emergency_contacts_routes);
 
 // Increment module
 router.use('/increment',         increments_routes);

@@ -103,6 +103,7 @@ model users {
   messages                    messages[]
   education_records           education_records[]
   employment_history          employment_history[]
+  emergency_contacts          emergency_contacts[]
   salary_increments           salary_increments[]
   increments_approved         salary_increments[]           @relation("increment_approver")
   overtime_requests           overtime_requests[]
@@ -2260,4 +2261,25 @@ model app_usage_logs {
   @@index([user_id])
   @@index([session_id])
   @@index([captured_at])
+}
+
+// ─── Emergency Contacts ────────────────────────────────────────────────────────
+// Sprint 1 Phase 2 Milestone 4. Promotes the old flat single-contact fields on
+// employee_profiles (emergency_contact_name / _relation / _phone) into a proper
+// one-to-many table supporting multiple contacts per employee. The old flat
+// fields are intentionally left untouched on employee_profiles — retiring them
+// is a future decision, not part of this migration.
+model emergency_contacts {
+  id         String   @id @default(cuid())
+  user_id    String
+  name       String
+  relation   String
+  phone      String
+  is_primary Boolean  @default(false)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
 }
