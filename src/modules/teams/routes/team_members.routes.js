@@ -1,10 +1,12 @@
 import prisma from '../../../shared/database/client.js';
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, can_or_role } from '../../../shared/middleware/authenticate.js';
 
 const router = Router({ mergeParams: true });
 router.use(authenticate);
-const MANAGER = authorize('ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
+const MANAGER_CREATE = can_or_role('erp.teams.create', 'ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
+const MANAGER_EDIT   = can_or_role('erp.teams.edit', 'ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
+const MANAGER_DELETE = can_or_role('erp.teams.delete', 'ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
 
 // GET /team/:teamId/members
 router.get('/', async (req, res, next) => {
@@ -22,7 +24,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // POST /team/:teamId/members
-router.post('/', MANAGER, async (req, res, next) => {
+router.post('/', MANAGER_CREATE, async (req, res, next) => {
   try {
     const { user_id, role } = req.body;
     if (!user_id) return res.status(400).json({ success: false, message: 'user_id required' });
@@ -41,7 +43,7 @@ router.post('/', MANAGER, async (req, res, next) => {
 });
 
 // PUT /team/:teamId/members/:userId — update role
-router.put('/:userId', MANAGER, async (req, res, next) => {
+router.put('/:userId', MANAGER_EDIT, async (req, res, next) => {
   try {
     const member = await prisma.team_members.findFirst({
       where: { team_id: req.params.teamId, user_id: req.params.userId },
@@ -58,7 +60,7 @@ router.put('/:userId', MANAGER, async (req, res, next) => {
 });
 
 // DELETE /team/:teamId/members/:userId
-router.delete('/:userId', MANAGER, async (req, res, next) => {
+router.delete('/:userId', MANAGER_DELETE, async (req, res, next) => {
   try {
     const member = await prisma.team_members.findFirst({
       where: { team_id: req.params.teamId, user_id: req.params.userId },

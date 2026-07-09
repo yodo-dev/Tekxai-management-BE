@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, can_or_role } from '../../../shared/middleware/authenticate.js';
 import prisma from '../../../shared/database/client.js';
 
 const router = Router();
 router.use(authenticate);
-const ADMIN_HR = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
+const ADMIN_HR = can_or_role('hr.employees.view', 'ADMIN', 'SUPER_ADMIN', 'HR');
 
 const USER_SELECT = {
   id: true, email: true, first_name: true, last_name: true,

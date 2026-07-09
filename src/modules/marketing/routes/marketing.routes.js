@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, authorize, can_or_role } from '../../../shared/middleware/authenticate.js';
 import {
   create_deal_ctrl, get_deals,
   get_salary_builder_ctrl, get_salary_history, publish_salary_ctrl, upsert_salary_ctrl,
@@ -17,8 +17,29 @@ import { get_targets, upsert_target_ctrl, get_my_report } from '../controllers/t
 
 const router = Router();
 router.use(authenticate);
+// NOTE: publish_salary, deposit-target, upwork/linkedin/email-lead deletes, deposit
+// edit/delete, and the /members dashboard remain on authorize()/MKT/ADMIN — no
+// matching crm.* permission key exists for those specific actions yet
+// (see Sprint 1 Phase 5 Milestone 2 audit).
 const MKT   = authorize('ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
 const ADMIN = authorize('ADMIN', 'SUPER_ADMIN');
+
+const WON_DEALS_VIEW    = can_or_role('crm.won_deals.view', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+const WON_DEALS_CREATE  = can_or_role('crm.won_deals.create', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+const SALARY_VIEW       = can_or_role('crm.salary.view', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+const SALARY_EDIT       = can_or_role('crm.salary.edit', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+const UPWORK_VIEW       = can_or_role('crm.upwork.view', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+const UPWORK_CREATE     = can_or_role('crm.upwork.create', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+const UPWORK_EDIT       = can_or_role('crm.upwork.edit', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+const LINKEDIN_VIEW     = can_or_role('crm.linkedin.view', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+const LINKEDIN_CREATE   = can_or_role('crm.linkedin.create', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+const LINKEDIN_EDIT     = can_or_role('crm.linkedin.edit', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+const EMAIL_LEADS_VIEW  = can_or_role('crm.email_leads.view', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+const EMAIL_LEADS_CREATE= can_or_role('crm.email_leads.create', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+const EMAIL_LEADS_EDIT  = can_or_role('crm.email_leads.edit', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+const DEPOSITS_VIEW     = can_or_role('crm.deposits.view', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+const DEPOSITS_CREATE   = can_or_role('crm.deposits.create', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+const TARGETS_EDIT      = can_or_role('crm.targets.edit', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
 
 // ── Won Deals + Salary ─────────────────────────────────────────────────────
 /**
@@ -33,7 +54,7 @@ const ADMIN = authorize('ADMIN', 'SUPER_ADMIN');
  *       401:
  *         description: Unauthorized
  */
-router.get('/deals',  MKT,   get_deals);
+router.get('/deals',  WON_DEALS_VIEW,   get_deals);
 /**
  * @swagger
  * /marketing/deals:
@@ -57,7 +78,7 @@ router.get('/deals',  MKT,   get_deals);
  *       401:
  *         description: Unauthorized
  */
-router.post('/deals', MKT, create_deal_ctrl);
+router.post('/deals', WON_DEALS_CREATE, create_deal_ctrl);
 
 /**
  * @swagger
@@ -75,7 +96,7 @@ router.post('/deals', MKT, create_deal_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.get('/salary-builder',  MKT, get_salary_builder_ctrl);
+router.get('/salary-builder',  SALARY_VIEW, get_salary_builder_ctrl);
 /**
  * @swagger
  * /marketing/salary-builder:
@@ -101,7 +122,7 @@ router.get('/salary-builder',  MKT, get_salary_builder_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.post('/salary-builder', MKT, upsert_salary_ctrl);
+router.post('/salary-builder', SALARY_EDIT, upsert_salary_ctrl);
 
 /**
  * @swagger
@@ -138,7 +159,7 @@ router.post('/salary-builder/:user_id/:period/publish', ADMIN, publish_salary_ct
  *       401:
  *         description: Unauthorized
  */
-router.get('/salary-history',  MKT, get_salary_history);
+router.get('/salary-history',  SALARY_VIEW, get_salary_history);
 
 /**
  * @swagger
@@ -152,7 +173,7 @@ router.get('/salary-history',  MKT, get_salary_history);
  *       401:
  *         description: Unauthorized
  */
-router.get('/won-deals', MKT, get_won_deals);
+router.get('/won-deals', WON_DEALS_VIEW, get_won_deals);
 
 /**
  * @swagger
@@ -175,8 +196,8 @@ router.get('/won-deals', MKT, get_won_deals);
  *       401:
  *         description: Unauthorized
  */
-router.get('/upwork',         MKT, get_upwork_bids);
-router.post('/upwork',        MKT, post_upwork_bid);
+router.get('/upwork',         UPWORK_VIEW, get_upwork_bids);
+router.post('/upwork',        UPWORK_CREATE, post_upwork_bid);
 
 /**
  * @swagger
@@ -208,7 +229,7 @@ router.post('/upwork',        MKT, post_upwork_bid);
  *       401:
  *         description: Unauthorized
  */
-router.put('/upwork/:id',     MKT, put_upwork_bid);
+router.put('/upwork/:id',     UPWORK_EDIT, put_upwork_bid);
 router.delete('/upwork/:id',  MKT, del_upwork_bid);
 
 /**
@@ -250,9 +271,9 @@ router.delete('/upwork/:id',  MKT, del_upwork_bid);
  *       401:
  *         description: Unauthorized
  */
-router.get('/linkedin',           MKT, get_linkedin_leads);
-router.post('/linkedin',          MKT, post_linkedin_lead);
-router.put('/linkedin/:id',       MKT, put_linkedin_lead);
+router.get('/linkedin',           LINKEDIN_VIEW, get_linkedin_leads);
+router.post('/linkedin',          LINKEDIN_CREATE, post_linkedin_lead);
+router.put('/linkedin/:id',       LINKEDIN_EDIT, put_linkedin_lead);
 router.delete('/linkedin/:id',    MKT, del_linkedin_lead);
 
 /**
@@ -294,9 +315,9 @@ router.delete('/linkedin/:id',    MKT, del_linkedin_lead);
  *       401:
  *         description: Unauthorized
  */
-router.get('/email-leads',        MKT, get_email_leads);
-router.post('/email-leads',       MKT, post_email_lead);
-router.put('/email-leads/:id',    MKT, put_email_lead);
+router.get('/email-leads',        EMAIL_LEADS_VIEW, get_email_leads);
+router.post('/email-leads',       EMAIL_LEADS_CREATE, post_email_lead);
+router.put('/email-leads/:id',    EMAIL_LEADS_EDIT, put_email_lead);
 router.delete('/email-leads/:id', MKT, del_email_lead);
 
 /**
@@ -414,15 +435,15 @@ router.post('/lead-activities',   MKT, post_lead_activity);
  *       401:
  *         description: Unauthorized
  */
-router.get('/deposits',    MKT,   get_deposits);
-router.post('/deposits',   MKT, post_deposit);
+router.get('/deposits',    DEPOSITS_VIEW,   get_deposits);
+router.post('/deposits',   DEPOSITS_CREATE, post_deposit);
 router.put('/deposits/:id', MKT, put_deposit);
 router.delete('/deposits/:id', MKT, del_deposit);
 router.get('/deposit-target',   MKT, get_deposit_target_ctrl);
 router.post('/deposit-target',  ADMIN, upsert_deposit_target_ctrl);
 
 router.get('/targets', get_targets);
-router.post('/targets', MKT, upsert_target_ctrl);
+router.post('/targets', TARGETS_EDIT, upsert_target_ctrl);
 
 // ── Dashboard: marketing team members + salary status ─────────────────────
 router.get('/members', MKT, async (req, res, next) => {

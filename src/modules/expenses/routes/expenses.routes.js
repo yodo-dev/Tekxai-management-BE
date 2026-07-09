@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, can_or_role } from '../../../shared/middleware/authenticate.js';
 import {
   list_accounts, get_account, create_account, update_account,
   list_transactions, add_transaction, update_transaction, delete_transaction,
@@ -10,7 +10,10 @@ import {
 const router = Router();
 router.use(authenticate);
 
-const SA = authorize('SUPER_ADMIN', 'ADMIN');
+const SA_VIEW   = can_or_role('erp.expenses.view', 'SUPER_ADMIN', 'ADMIN');
+const SA_CREATE = can_or_role('erp.expenses.create', 'SUPER_ADMIN', 'ADMIN');
+const SA_EDIT   = can_or_role('erp.expenses.edit', 'SUPER_ADMIN', 'ADMIN');
+const SA_DELETE = can_or_role('erp.expenses.delete', 'SUPER_ADMIN', 'ADMIN');
 
 /**
  * @swagger
@@ -31,7 +34,7 @@ const SA = authorize('SUPER_ADMIN', 'ADMIN');
  *       401:
  *         description: Unauthorized
  */
-router.get('/summary',                    SA, get_summary);
+router.get('/summary',                    SA_VIEW, get_summary);
 
 /**
  * @swagger
@@ -69,7 +72,7 @@ router.get('/categories',                     list_categories);
  *       401:
  *         description: Unauthorized
  */
-router.post('/categories',                SA, create_category);
+router.post('/categories',                SA_CREATE, create_category);
 router.get('/title-suggestions',              title_suggestions);
 
 /**
@@ -84,7 +87,7 @@ router.get('/title-suggestions',              title_suggestions);
  *       401:
  *         description: Unauthorized
  */
-router.get('/accounts',                   SA, list_accounts);
+router.get('/accounts',                   SA_VIEW, list_accounts);
 
 /**
  * @swagger
@@ -108,7 +111,7 @@ router.get('/accounts',                   SA, list_accounts);
  *       401:
  *         description: Unauthorized
  */
-router.post('/accounts',                  SA, create_account);
+router.post('/accounts',                  SA_CREATE, create_account);
 
 /**
  * @swagger
@@ -127,7 +130,7 @@ router.post('/accounts',                  SA, create_account);
  *       401:
  *         description: Unauthorized
  */
-router.get('/accounts/:userId',           SA, get_account);
+router.get('/accounts/:userId',           SA_VIEW, get_account);
 
 /**
  * @swagger
@@ -153,7 +156,7 @@ router.get('/accounts/:userId',           SA, get_account);
  *       401:
  *         description: Unauthorized
  */
-router.put('/accounts/:userId',           SA, update_account);
+router.put('/accounts/:userId',           SA_EDIT, update_account);
 
 /**
  * @swagger
@@ -178,7 +181,7 @@ router.put('/accounts/:userId',           SA, update_account);
  *       401:
  *         description: Unauthorized
  */
-router.get('/accounts/:userId/transactions',    SA, list_transactions);
+router.get('/accounts/:userId/transactions',    SA_VIEW, list_transactions);
 
 /**
  * @swagger
@@ -209,7 +212,7 @@ router.get('/accounts/:userId/transactions',    SA, list_transactions);
  *       401:
  *         description: Unauthorized
  */
-router.post('/accounts/:userId/transactions',   SA, add_transaction);
+router.post('/accounts/:userId/transactions',   SA_CREATE, add_transaction);
 
 /**
  * @swagger
@@ -236,7 +239,7 @@ router.post('/accounts/:userId/transactions',   SA, add_transaction);
  *       401:
  *         description: Unauthorized
  */
-router.put('/transactions/:id',           SA, update_transaction);
+router.put('/transactions/:id',           SA_EDIT, update_transaction);
 
 /**
  * @swagger
@@ -255,7 +258,7 @@ router.put('/transactions/:id',           SA, update_transaction);
  *       401:
  *         description: Unauthorized
  */
-router.delete('/transactions/:id',        SA, delete_transaction);
+router.delete('/transactions/:id',        SA_DELETE, delete_transaction);
 
 /**
  * @swagger

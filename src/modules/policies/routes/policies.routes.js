@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, can_or_role } from '../../../shared/middleware/authenticate.js';
 import { acknowledge_policy, create_policy, get_policy, list_policies, my_acknowledgements, publish_policy, update_policy } from '../controllers/policies.controller.js';
 
 const router = Router();
 router.use(authenticate);
-const HR = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
+const HR = can_or_role('hr.policies.manage', 'ADMIN', 'SUPER_ADMIN', 'HR');
 
 /**
  * @swagger

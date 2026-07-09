@@ -59,13 +59,14 @@ export async function delete_jd_svc(user_id) {
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, can_or_role } from '../../../shared/middleware/authenticate.js';
 
 const router = Router();
 router.use(authenticate);
-const MANAGER = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
+const MANAGER_VIEW   = can_or_role('hr.job_descriptions.view', 'ADMIN', 'SUPER_ADMIN', 'HR');
+const MANAGER_MANAGE = can_or_role('hr.job_descriptions.manage', 'ADMIN', 'SUPER_ADMIN', 'HR');
 
-router.get('/', MANAGER, async (req, res, next) => {
+router.get('/', MANAGER_VIEW, async (req, res, next) => {
   try {
     return res.json({ success: true, payload: await list_jds(req.query) });
   } catch (e) { return next(e); }
@@ -83,21 +84,21 @@ router.get('/:userId', async (req, res, next) => {
   } catch (e) { return next(e); }
 });
 
-router.post('/:userId', MANAGER, async (req, res, next) => {
+router.post('/:userId', MANAGER_MANAGE, async (req, res, next) => {
   try {
     const jd = await save_jd(req.params.userId, req.body);
     return res.status(201).json({ success: true, payload: jd, message: 'JD saved' });
   } catch (e) { return next(e); }
 });
 
-router.put('/:userId', MANAGER, async (req, res, next) => {
+router.put('/:userId', MANAGER_MANAGE, async (req, res, next) => {
   try {
     const jd = await save_jd(req.params.userId, req.body);
     return res.json({ success: true, payload: jd, message: 'JD updated' });
   } catch (e) { return next(e); }
 });
 
-router.delete('/:userId', MANAGER, async (req, res, next) => {
+router.delete('/:userId', MANAGER_MANAGE, async (req, res, next) => {
   try {
     await delete_jd_svc(req.params.userId);
     return res.json({ success: true, message: 'JD deleted' });

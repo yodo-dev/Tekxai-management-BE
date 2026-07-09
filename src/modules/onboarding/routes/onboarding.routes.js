@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, can_or_role } from '../../../shared/middleware/authenticate.js';
 import { accept_offer, complete_task, create_candidate, create_offer, create_task, get_candidate, get_tasks, list_candidates, reject_offer, send_offer } from '../controllers/onboarding.controller.js';
 
 const router = Router();
 router.use(authenticate);
-const HR = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
+const HR_VIEW   = can_or_role('hr.onboarding.view', 'ADMIN', 'SUPER_ADMIN', 'HR');
+const HR_MANAGE = can_or_role('hr.onboarding.manage', 'ADMIN', 'SUPER_ADMIN', 'HR');
 
 /**
  * @swagger
@@ -18,7 +19,7 @@ const HR = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
  *       401:
  *         description: Unauthorized
  */
-router.get('/candidates',         HR,   list_candidates);
+router.get('/candidates',         HR_VIEW,   list_candidates);
 
 /**
  * @swagger
@@ -44,7 +45,7 @@ router.get('/candidates',         HR,   list_candidates);
  *       401:
  *         description: Unauthorized
  */
-router.post('/candidates',        HR, create_candidate);
+router.post('/candidates',        HR_MANAGE, create_candidate);
 
 /**
  * @swagger
@@ -63,7 +64,7 @@ router.post('/candidates',        HR, create_candidate);
  *       401:
  *         description: Unauthorized
  */
-router.get('/candidates/:id',     HR,   get_candidate);
+router.get('/candidates/:id',     HR_VIEW,   get_candidate);
 
 /**
  * @swagger
@@ -88,7 +89,7 @@ router.get('/candidates/:id',     HR,   get_candidate);
  *       401:
  *         description: Unauthorized
  */
-router.post('/offers',            HR, create_offer);
+router.post('/offers',            HR_MANAGE, create_offer);
 
 /**
  * @swagger
@@ -107,7 +108,7 @@ router.post('/offers',            HR, create_offer);
  *       401:
  *         description: Unauthorized
  */
-router.post('/offers/:id/send',   HR, send_offer);
+router.post('/offers/:id/send',   HR_MANAGE, send_offer);
 
 /**
  * @swagger
@@ -164,7 +165,7 @@ router.post('/offers/:id/reject', reject_offer);
  *       401:
  *         description: Unauthorized
  */
-router.get('/tasks/:userId',      HR,   get_tasks);
+router.get('/tasks/:userId',      HR_VIEW,   get_tasks);
 
 /**
  * @swagger
@@ -189,7 +190,7 @@ router.get('/tasks/:userId',      HR,   get_tasks);
  *       401:
  *         description: Unauthorized
  */
-router.post('/tasks',             HR, create_task);
+router.post('/tasks',             HR_MANAGE, create_task);
 
 /**
  * @swagger

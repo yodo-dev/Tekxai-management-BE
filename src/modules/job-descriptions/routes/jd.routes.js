@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, can_or_role } from '../../../shared/middleware/authenticate.js';
 import { get_my_jd, get_user_jd, upsert_jd_ctrl } from '../controllers/jd.controller.js';
 
 const router = Router();
 router.use(authenticate);
-const M = authorize('ADMIN','SUPER_ADMIN','HR','DIVISION_MANAGER');
+const M_VIEW   = can_or_role('hr.job_descriptions.view', 'ADMIN','SUPER_ADMIN','HR','DIVISION_MANAGER');
+const M_MANAGE = can_or_role('hr.job_descriptions.manage', 'ADMIN','SUPER_ADMIN','HR','DIVISION_MANAGER');
 
 /**
  * @swagger
@@ -65,7 +66,7 @@ router.put('/my', upsert_jd_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.get('/:userId', M, get_user_jd);
+router.get('/:userId', M_VIEW, get_user_jd);
 
 /**
  * @swagger
@@ -95,6 +96,6 @@ router.get('/:userId', M, get_user_jd);
  *       401:
  *         description: Unauthorized
  */
-router.put('/:userId', M, upsert_jd_ctrl);
+router.put('/:userId', M_MANAGE, upsert_jd_ctrl);
 
 export default router;

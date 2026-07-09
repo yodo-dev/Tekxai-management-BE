@@ -1,11 +1,16 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, authorize, can_or_role } from '../../../shared/middleware/authenticate.js';
 import { approve_ctrl, create_ctrl, get_ctrl, get_meta_ctrl, list_ctrl, status_ctrl, submit_ctrl, update_ctrl, convert_to_asset_ctrl, update_cost_ctrl, stats_ctrl } from '../controllers/requisitions.controller.js';
 
 const router = Router();
 router.use(authenticate);
 
+// NOTE: status_ctrl, update_cost_ctrl, and convert_to_asset_ctrl remain on authorize()
+// because no matching erp.requisitions.* key exists for those specific actions
+// (only view/create/approve are registered) — see Sprint 1 Phase 5 Milestone 2 audit.
 const ADMIN_HR = authorize('SUPER_ADMIN', 'ADMIN', 'HR');
+const ADMIN_HR_VIEW = can_or_role('erp.requisitions.view', 'SUPER_ADMIN', 'ADMIN', 'HR');
+const ADMIN_HR_APPROVE = can_or_role('erp.requisitions.approve', 'SUPER_ADMIN', 'ADMIN', 'HR');
 
 /**
  * @swagger
@@ -33,7 +38,7 @@ router.get('/meta',                get_meta_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.get('/stats',               ADMIN_HR, stats_ctrl);
+router.get('/stats',               ADMIN_HR_VIEW, stats_ctrl);
 
 /**
  * @swagger
@@ -166,7 +171,7 @@ router.post('/:id/submit',         submit_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.post('/:id/approve',        ADMIN_HR, approve_ctrl);
+router.post('/:id/approve',        ADMIN_HR_APPROVE, approve_ctrl);
 
 /**
  * @swagger

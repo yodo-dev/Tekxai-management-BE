@@ -1,10 +1,12 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, can_or_role } from '../../../shared/middleware/authenticate.js';
 import { create_contract, create_template, get_contract, list_contracts, list_templates, sign_contract, update_contract, update_template } from '../controllers/contracts.controller.js';
 
 const router = Router();
 router.use(authenticate);
-const HR = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
+const HR_VIEW   = can_or_role('hr.contracts.view', 'ADMIN', 'SUPER_ADMIN', 'HR');
+const HR_CREATE = can_or_role('hr.contracts.create', 'ADMIN', 'SUPER_ADMIN', 'HR');
+const HR_EDIT   = can_or_role('hr.contracts.edit', 'ADMIN', 'SUPER_ADMIN', 'HR');
 
 /**
  * @swagger
@@ -18,7 +20,7 @@ const HR = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
  *       401:
  *         description: Unauthorized
  */
-router.get('/templates',     HR, list_templates);
+router.get('/templates',     HR_VIEW, list_templates);
 
 /**
  * @swagger
@@ -42,7 +44,7 @@ router.get('/templates',     HR, list_templates);
  *       401:
  *         description: Unauthorized
  */
-router.post('/templates',    HR, create_template);
+router.post('/templates',    HR_CREATE, create_template);
 
 /**
  * @swagger
@@ -61,7 +63,7 @@ router.post('/templates',    HR, create_template);
  *       401:
  *         description: Unauthorized
  */
-router.put('/templates/:id', HR,   update_template);
+router.put('/templates/:id', HR_EDIT,   update_template);
 
 /**
  * @swagger
@@ -101,7 +103,7 @@ router.get('/',              list_contracts);
  *       401:
  *         description: Unauthorized
  */
-router.post('/',             HR, create_contract);
+router.post('/',             HR_CREATE, create_contract);
 
 /**
  * @swagger
@@ -139,7 +141,7 @@ router.get('/:id',           get_contract);
  *       401:
  *         description: Unauthorized
  */
-router.put('/:id',           HR,   update_contract);
+router.put('/:id',           HR_EDIT,   update_contract);
 
 /**
  * @swagger

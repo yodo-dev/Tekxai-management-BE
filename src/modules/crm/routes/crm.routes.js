@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, authorize, can_or_role } from '../../../shared/middleware/authenticate.js';
 import { create_client, get_client, grant_project_access, list_client_projects, list_clients } from '../controllers/crm.controller.js';
 import { crm_dashboard_ctrl, team_hierarchy_ctrl, assign_supervisor_ctrl } from '../controllers/crm-dashboard.controller.js';
 import {
@@ -10,9 +10,20 @@ import {
 
 const router = Router();
 router.use(authenticate);
+// NOTE: hierarchy, supervisor assignment, handoff/invoice edit, and client CRUD
+// remain on authorize() — no matching crm.* permission key exists for those
+// specific actions yet (see Sprint 1 Phase 5 Milestone 2 audit).
 const M   = authorize('ADMIN', 'SUPER_ADMIN', 'MARKETING');
 const MA  = authorize('ADMIN', 'SUPER_ADMIN');
 const MH  = authorize('ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+
+const M_DASHBOARD_VIEW = can_or_role('crm.dashboard.view', 'ADMIN', 'SUPER_ADMIN', 'MARKETING');
+const M_PIPELINE_VIEW  = can_or_role('crm.pipeline.view', 'ADMIN', 'SUPER_ADMIN', 'MARKETING');
+const M_PIPELINE_EDIT  = can_or_role('crm.pipeline.edit', 'ADMIN', 'SUPER_ADMIN', 'MARKETING');
+const M_HANDOFFS_CREATE = can_or_role('crm.handoffs.create', 'ADMIN', 'SUPER_ADMIN', 'MARKETING');
+const MH_HANDOFFS_VIEW  = can_or_role('crm.handoffs.view', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+const MA_INVOICES_VIEW   = can_or_role('crm.invoices.view', 'ADMIN', 'SUPER_ADMIN');
+const MA_INVOICES_CREATE = can_or_role('crm.invoices.create', 'ADMIN', 'SUPER_ADMIN');
 
 /**
  * @swagger
@@ -26,7 +37,7 @@ const MH  = authorize('ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
  *       401:
  *         description: Unauthorized
  */
-router.get('/dashboard',                  M,    crm_dashboard_ctrl);
+router.get('/dashboard',                  M_DASHBOARD_VIEW,    crm_dashboard_ctrl);
 
 /**
  * @swagger
@@ -82,7 +93,7 @@ router.patch('/users/:userId/supervisor', MA,   assign_supervisor_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.get('/pipeline/meta',              M,    pipeline_meta_ctrl);
+router.get('/pipeline/meta',              M_PIPELINE_VIEW,    pipeline_meta_ctrl);
 
 /**
  * @swagger
@@ -103,7 +114,7 @@ router.get('/pipeline/meta',              M,    pipeline_meta_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.get('/leads',                      M,    leads_list_ctrl);
+router.get('/leads',                      M_PIPELINE_VIEW,    leads_list_ctrl);
 
 /**
  * @swagger
@@ -135,7 +146,7 @@ router.get('/leads',                      M,    leads_list_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.patch('/leads/:source/:id/stage',  M,    lead_stage_ctrl);
+router.patch('/leads/:source/:id/stage',  M_PIPELINE_EDIT,    lead_stage_ctrl);
 
 /**
  * @swagger
@@ -149,7 +160,7 @@ router.patch('/leads/:source/:id/stage',  M,    lead_stage_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.get('/handoffs',                   MH,   handoffs_list_ctrl);
+router.get('/handoffs',                   MH_HANDOFFS_VIEW,   handoffs_list_ctrl);
 
 /**
  * @swagger
@@ -174,7 +185,7 @@ router.get('/handoffs',                   MH,   handoffs_list_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.post('/handoffs',                  M,    handoff_create_ctrl);
+router.post('/handoffs',                  M_HANDOFFS_CREATE,    handoff_create_ctrl);
 
 /**
  * @swagger
@@ -207,7 +218,7 @@ router.put('/handoffs/:id',               MA,   handoff_update_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.get('/invoices',                   MA,   invoices_list_ctrl);
+router.get('/invoices',                   MA_INVOICES_VIEW,   invoices_list_ctrl);
 
 /**
  * @swagger
@@ -232,7 +243,7 @@ router.get('/invoices',                   MA,   invoices_list_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.post('/invoices',                  MA,   invoice_create_ctrl);
+router.post('/invoices',                  MA_INVOICES_CREATE,   invoice_create_ctrl);
 
 /**
  * @swagger

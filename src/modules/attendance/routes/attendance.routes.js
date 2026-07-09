@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, can_or_role } from '../../../shared/middleware/authenticate.js';
 import {
   assign_shift_ctrl, delete_shift_ctrl, get_my_attendance_summary, get_my_shift_ctrl,
   list_shifts_ctrl, list_violations_ctrl, upsert_shift_ctrl,
@@ -7,7 +7,7 @@ import {
 
 const router = Router();
 router.use(authenticate);
-const MANAGER = authorize('ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
+const MANAGER = can_or_role('erp.attendance.edit', 'ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
 
 /**
  * @swagger

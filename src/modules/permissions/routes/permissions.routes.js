@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, can_or_role } from '../../../shared/middleware/authenticate.js';
 import {
   get_definitions,
   get_matrix,
@@ -15,8 +15,8 @@ import {
 const router = Router();
 router.use(authenticate);
 
-const SUPER_ADMIN_ONLY = authorize('SUPER_ADMIN');
-const ADMIN_LEVEL      = authorize('SUPER_ADMIN', 'ADMIN');
+const SUPER_ADMIN_ONLY = can_or_role('erp.permissions.manage', 'SUPER_ADMIN');
+const ADMIN_LEVEL      = can_or_role('erp.permissions.manage', 'SUPER_ADMIN', 'ADMIN');
 
 /**
  * @swagger
