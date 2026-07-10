@@ -2,6 +2,7 @@ import { send_leave_approved_email, send_leave_rejected_email } from '../../emai
 import { compute_violation } from '../../attendance/repositories/attendance.repository.js';
 import { can_manually_record_attendance } from '../../attendance/constants/attendance-status-rules.js';
 import { lifecycle_allows_manual_entry } from '../../attendance/constants/lifecycle-attendance-rules.js';
+import { get_or_create_balance, mark_pending, deduct_leave, restore_leave } from '../../leave-balances/repositories/leave-balances.repository.js';
 import prisma from '../../../shared/database/client.js';
 import {
   clock_in as repo_clock_in,
@@ -280,24 +281,49 @@ export async function get_time_off_policies(req, res, next) {
 }
 
 // POST /timesheet/time-off/request
+//
+// Sprint 2 Milestone 5: reserves the requested days against the requester's
+// leave balance via mark_pending() — the single, canonical write path for
+// leave balances (modules/leave-balances). Does not consume used_days; the
+// request only moves from pending to used on approval (approve_time_off_ctrl).
 export async function time_off_request(req, res, next) {
   try {
     const { policy_id, start_date, end_date, days, reason } = req.body;
     if (!policy_id || !start_date || !end_date || !reason) {
       return fail(res, 'policy_id, start_date, end_date, and reason are required');
     }
+    const day_count = Number(days) || 1;
     const result = await create_time_off_request({
       user_id: req.user.id, policy_id, start_date, end_date,
-      days: Number(days) || 1, reason,
+      days: day_count, reason,
     });
+    await mark_pending(req.user.id, policy_id, day_count);
     return ok(res, result, 'Time-off request submitted', 201);
   } catch (err) { next(err); }
 }
 
 // POST /timesheet/time-off/:id/approve
+//
+// Sprint 2 Milestone 5: hard-blocks approval if it would take the requester's
+// leave balance below zero (checked against the balance's current
+// remaining_days, which is only decremented by an actual approval — see
+// leave-balances.repository.js). Only on passing that check does this call
+// deduct_leave(), the single canonical debit path (pending -> used).
 export async function approve_time_off_ctrl(req, res, next) {
   try {
+    const pending = await prisma.time_off_requests.findUnique({ where: { id: req.params.id } });
+    if (!pending) return fail(res, 'Time-off request not found', 404);
+
+    // Matches the year convention used by mark_pending/deduct_leave/restore_leave
+    // below (current year at call time, not the request's start_date).
+    const balance = await get_or_create_balance(pending.user_id, pending.policy_id, new Date().getFullYear());
+    if (!balance || balance.remaining_days < pending.days) {
+      return fail(res, `Cannot approve: insufficient leave balance (${balance?.remaining_days ?? 0} remaining, ${pending.days} requested).`, 400);
+    }
+
     const result = await update_time_off_status(req.params.id, 'APPROVED', req.body.comment, req.user.id);
+    await deduct_leave(pending.user_id, pending.policy_id, pending.days);
+
     // Send email notification (non-blocking)
     if (result?.user?.email) {
       const name = result.user.first_name || 'Employee';
@@ -310,9 +336,19 @@ export async function approve_time_off_ctrl(req, res, next) {
 }
 
 // POST /timesheet/time-off/:id/reject
+//
+// Sprint 2 Milestone 5: releases the pending reservation via restore_leave()
+// (same function a future Cancel Pending Request action would use — see
+// leave-balances.repository.js). No used_days change, since the request
+// was never approved.
 export async function reject_time_off_ctrl(req, res, next) {
   try {
+    const pending = await prisma.time_off_requests.findUnique({ where: { id: req.params.id } });
+    if (!pending) return fail(res, 'Time-off request not found', 404);
+
     const result = await update_time_off_status(req.params.id, 'REJECTED', req.body.comment, req.user.id);
+    await restore_leave(pending.user_id, pending.policy_id, pending.days);
+
     if (result?.user?.email) {
       const name = result.user.first_name || 'Employee';
       const policy = result.policy?.name || 'Leave';
