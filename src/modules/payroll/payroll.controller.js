@@ -118,8 +118,24 @@ export async function calculate_run(req, res, next) {
 
     const entries = [];
     let total_gross = 0, total_net = 0, total_deductions = 0;
+    let aborted_status = null;
 
     for (const emp of employees) {
+      // Sprint 3 Milestone 4: re-check the run is still eligible right
+      // before committing each employee's entry. No transaction/row lock is
+      // introduced (out of scope) -- this is a cheap point-in-time guard
+      // against the run being advanced to COMPLETED/PAID by a concurrent
+      // request while this calculation is still in progress. If it has,
+      // stop immediately and write nothing further; entries already
+      // committed earlier in this same call are not rolled back (no
+      // transaction redesign, per approved scope), but the response makes
+      // the abort explicit rather than silently claiming success.
+      const current_run = await prisma.payroll_runs.findUnique({ where: { id: req.params.id }, select: { status: true } });
+      if (!current_run || LOCKED_STATUSES.includes(current_run.status)) {
+        aborted_status = current_run?.status || 'UNKNOWN';
+        break;
+      }
+
       // Employee Profile (canonical) first, users.salary (legacy) as fallback only.
       const base_salary = emp.employee_profile?.base_salary || emp.salary || 0;
       if (base_salary === 0) continue;
@@ -181,10 +197,13 @@ export async function calculate_run(req, res, next) {
       total_net += net_amount;
       total_deductions += deductions;
 
-      // Upsert entry
-      const existing_entry = await prisma.payroll_entries.findFirst({ where: { run_id: req.params.id, user_id: emp.id } });
+      // Upsert entry. Sprint 3 Milestone 4: the canonical write path is the
+      // (run_id, user_id) compound unique key, enforced at the database
+      // level (see schema.prisma) -- not a findFirst()-then-upsert-by-id
+      // lookup, which could race under concurrent calculate requests and
+      // create duplicate rows for the same employee in the same run.
       const entry = await prisma.payroll_entries.upsert({
-        where: { id: existing_entry?.id || 'new_entry_placeholder' },
+        where: { run_id_user_id: { run_id: req.params.id, user_id: emp.id } },
         create: {
           run_id: req.params.id, user_id: emp.id,
           base_salary, working_days, present_days,
@@ -206,6 +225,14 @@ export async function calculate_run(req, res, next) {
         },
       });
       entries.push({ ...entry, employee: { first_name: emp.first_name, last_name: emp.last_name, email: emp.email } });
+    }
+
+    if (aborted_status) {
+      return fail(
+        res,
+        `Payroll run became ${aborted_status} while this calculation was in progress. Stopped safely after ${entries.length} of ${employees.length} employee(s) -- completed/paid runs are immutable. Create a new payroll run if further correction is needed.`,
+        409
+      );
     }
 
     // Update run totals

@@ -2310,6 +2310,13 @@ model payroll_entries {
   run  payroll_runs @relation(fields: [run_id], references: [id], onDelete: Cascade)
   user users        @relation("payroll_entries", fields: [user_id], references: [id])
 
+  // Sprint 3 Milestone 4: an employee may appear only once per payroll run.
+  // Enforced at the database level (not just in application code) so two
+  // concurrent "Calculate" requests on the same run can never both create a
+  // row for the same employee. This is the canonical upsert key --
+  // calculate_run() upserts by this compound key directly, not by a
+  // findFirst()-then-upsert-by-id lookup.
+  @@unique([run_id, user_id])
   @@index([run_id])
   @@index([user_id])
 }
