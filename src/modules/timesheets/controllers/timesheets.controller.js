@@ -306,24 +306,28 @@ export async function time_off_request(req, res, next) {
 // POST /timesheet/time-off/:id/approve
 //
 // Sprint 2 Milestone 5: hard-blocks approval if it would take the requester's
-// leave balance below zero (checked against the balance's current
-// remaining_days, which is only decremented by an actual approval — see
-// leave-balances.repository.js). Only on passing that check does this call
-// deduct_leave(), the single canonical debit path (pending -> used).
+// leave balance below zero.
+//
+// Sprint 2 close-out fix: the balance check and the debit are now the same
+// atomic conditional UPDATE inside deduct_leave() (see leave-balances
+// repository), called BEFORE the request's status is flipped to APPROVED —
+// not a separate read-then-write. This closes a race where two concurrent
+// approvals against the same balance could both read a stale "sufficient"
+// balance and both deduct, overdrawing it. If the atomic deduct fails
+// (insufficient balance), the request is left PENDING, not silently
+// approved without a debit.
 export async function approve_time_off_ctrl(req, res, next) {
   try {
     const pending = await prisma.time_off_requests.findUnique({ where: { id: req.params.id } });
     if (!pending) return fail(res, 'Time-off request not found', 404);
 
-    // Matches the year convention used by mark_pending/deduct_leave/restore_leave
-    // below (current year at call time, not the request's start_date).
-    const balance = await get_or_create_balance(pending.user_id, pending.policy_id, new Date().getFullYear());
-    if (!balance || balance.remaining_days < pending.days) {
+    const deducted = await deduct_leave(pending.user_id, pending.policy_id, pending.days);
+    if (!deducted) {
+      const balance = await get_or_create_balance(pending.user_id, pending.policy_id, new Date().getFullYear());
       return fail(res, `Cannot approve: insufficient leave balance (${balance?.remaining_days ?? 0} remaining, ${pending.days} requested).`, 400);
     }
 
     const result = await update_time_off_status(req.params.id, 'APPROVED', req.body.comment, req.user.id);
-    await deduct_leave(pending.user_id, pending.policy_id, pending.days);
 
     // Send email notification (non-blocking)
     if (result?.user?.email) {
@@ -466,10 +470,24 @@ export async function delete_entry_ctrl(req, res, next) {
 }
 
 // POST /timesheet/entry/:id/request
+//
+// Sprint 2 close-out fix: verifies the requester owns the target entry
+// before creating the edit request — previously any authenticated user
+// could submit an edit request against ANY entry_id. Mirrors the same
+// ownership check update_entry_ctrl already uses (admin/manager roles may
+// act on any entry; a regular employee only on their own).
 export async function request_entry_edit(req, res, next) {
   try {
     const { new_check_in, new_check_out, reason } = req.body;
     if (!reason) return fail(res, 'reason is required');
+    const existing = await find_entry_by_id(req.params.id);
+    if (!existing) return fail(res, 'Entry not found', 404);
+    const is_admin = req.user.roles.some((r) =>
+      ['ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER'].includes(r)
+    );
+    if (!is_admin && existing.user_id !== req.user.id) {
+      return fail(res, 'Forbidden', 403);
+    }
     const result = await create_edit_request({
       entry_id: req.params.id,
       user_id: req.user.id,

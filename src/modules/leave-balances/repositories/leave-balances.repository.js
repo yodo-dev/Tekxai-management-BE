@@ -35,13 +35,23 @@ export async function get_user_balances(user_id, year) {
 // reversed. This is the invariant the approved lifecycle spec's field list
 // implies (Create/Reject/Cancel never mention remaining_days changing;
 // only Approve does) and it's what this function already implemented.
+//
+// Sprint 2 close-out fix: the insufficient-balance check and the decrement
+// are done in ONE conditional UPDATE (`remaining_days: { gte: days }` in the
+// WHERE clause) rather than as a separate read-then-write. Two concurrent
+// approvals against the same balance can no longer both pass a stale
+// "sufficient balance" read and both deduct — the second UPDATE's WHERE
+// clause re-evaluates against the row as the first UPDATE left it, so it
+// simply matches zero rows and fails closed. Returns `true` iff the
+// decrement was actually applied.
 export async function deduct_leave(user_id, policy_id, days) {
   const year = new Date().getFullYear();
   await get_or_create_balance(user_id, policy_id, year);
-  return prisma.leave_balances.updateMany({
-    where: { user_id, policy_id, year },
+  const result = await prisma.leave_balances.updateMany({
+    where: { user_id, policy_id, year, remaining_days: { gte: days } },
     data: { used_days: { increment: days }, remaining_days: { decrement: days }, pending_days: { decrement: days } },
   });
+  return result.count > 0;
 }
 
 // Create Request: reserves `days` against pending_days only. remaining_days

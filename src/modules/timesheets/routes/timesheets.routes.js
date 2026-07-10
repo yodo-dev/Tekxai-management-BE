@@ -48,6 +48,8 @@ const APPROVE = can_or_role('erp.timesheet.approve', 'ADMIN', 'SUPER_ADMIN', 'HR
  *         description: Clocked in successfully
  *       401:
  *         description: Unauthorized
+ *       403:
+ *         description: Clock-in not available for the current employment status or lifecycle stage
  */
 router.post('/clock-in',                       require_clock_in_eligible, clock_in);
 
@@ -224,6 +226,8 @@ router.get('/time-off',                        MANAGER, list_time_off_ctrl);
  *         description: Validation error
  *       401:
  *         description: Unauthorized
+ *       403:
+ *         description: New time-off requests not available for the current employment status or lifecycle stage
  */
 router.post('/time-off/request',               require_time_off_request_eligible, time_off_request);
 
@@ -248,6 +252,8 @@ router.post('/time-off/request',               require_time_off_request_eligible
  *     responses:
  *       200:
  *         description: Request approved
+ *       400:
+ *         description: Insufficient leave balance
  *       401:
  *         description: Unauthorized
  */
@@ -303,6 +309,8 @@ router.post('/time-off/:id/reject',            APPROVE, reject_time_off_ctrl);
  *         description: Validation error
  *       401:
  *         description: Unauthorized
+ *       403:
+ *         description: Cannot create an attendance entry for the current employment status or lifecycle stage
  */
 router.post('/entry',                          APPROVE, create_entry_ctrl);
 
@@ -330,6 +338,8 @@ router.post('/entry',                          APPROVE, create_entry_ctrl);
  *         description: Entry updated
  *       401:
  *         description: Unauthorized
+ *       403:
+ *         description: Cannot modify an attendance entry for the current employment status or lifecycle stage
  */
 router.put('/entry/:id',                       APPROVE, update_entry_ctrl);
 
@@ -375,6 +385,10 @@ router.delete('/entry/:id',                    APPROVE, delete_entry_ctrl);
  *         description: Edit request submitted
  *       401:
  *         description: Unauthorized
+ *       403:
+ *         description: Forbidden — the requester does not own this entry
+ *       404:
+ *         description: Entry not found
  */
 router.post('/entry/:id/request',              request_entry_edit);
 
@@ -394,6 +408,8 @@ router.post('/entry/:id/request',              request_entry_edit);
  *         description: Edit request approved
  *       401:
  *         description: Unauthorized
+ *       403:
+ *         description: Cannot modify an attendance entry for the current employment status or lifecycle stage
  */
 router.post('/edit-request/:id/approve',       APPROVE, approve_edit);
 
