@@ -2301,6 +2301,16 @@ model payroll_entries {
   late_violation_count Int  @default(0)
   late_deduction      Float @default(0)
   absence_penalty     Float @default(0)
+  // Sprint 3 Milestone 5: Negative Payroll Validation. `net_amount` is never
+  // stored below zero -- `calculated_net_amount` retains the true computed
+  // value (which may be negative) for audit/validation purposes.
+  // validation_status: PASSED | FAILED. A FAILED entry blocks its run from
+  // advancing to COMPLETED/PAID (see update_run_status in payroll.controller.js)
+  // until corrected and recalculated, but does not stop other employees in
+  // the same run from being calculated normally.
+  calculated_net_amount Float   @default(0)
+  validation_status     String  @default("PASSED")
+  validation_reason     String?
   status          String   @default("PENDING")
   payslip_url     String?
   notes           String?

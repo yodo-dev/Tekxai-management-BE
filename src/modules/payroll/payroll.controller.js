@@ -191,7 +191,20 @@ export async function calculate_run(req, res, next) {
       const gross_amount = earned + overtime_amount + bonus_amount;
       const tax_amount = gross_amount > 50000 ? gross_amount * 0.05 : 0;
       const deductions = tax_amount + late_deduction + absence_penalty;
-      const net_amount = gross_amount - deductions;
+      const calculated_net_amount = gross_amount - deductions;
+
+      // Sprint 3 Milestone 5: Negative Payroll Validation. net_amount is
+      // never stored below zero -- the true calculated value is retained
+      // in calculated_net_amount for audit, and the entry is marked FAILED
+      // so this run cannot advance to COMPLETED/PAID until corrected (see
+      // update_run_status below). One employee failing validation does not
+      // stop the loop -- every other employee still gets calculated
+      // normally in this same run.
+      const validation_status = calculated_net_amount < 0 ? 'FAILED' : 'PASSED';
+      const validation_reason = calculated_net_amount < 0
+        ? `Calculated net pay is ${Math.round(calculated_net_amount)} (negative). Net pay cannot be finalized below zero -- this payroll run is blocked from completion until corrected.`
+        : null;
+      const net_amount = Math.max(0, calculated_net_amount);
 
       total_gross += gross_amount;
       total_net += net_amount;
@@ -212,6 +225,8 @@ export async function calculate_run(req, res, next) {
           absence_penalty: Math.round(absence_penalty),
           overtime_hours, overtime_amount, bonus_amount,
           gross_amount: Math.round(gross_amount), net_amount: Math.round(net_amount),
+          calculated_net_amount: Math.round(calculated_net_amount),
+          validation_status, validation_reason,
           tax_amount: Math.round(tax_amount), deductions: Math.round(deductions),
         },
         update: {
@@ -221,6 +236,8 @@ export async function calculate_run(req, res, next) {
           absence_penalty: Math.round(absence_penalty),
           overtime_hours, overtime_amount, bonus_amount,
           gross_amount: Math.round(gross_amount), net_amount: Math.round(net_amount),
+          calculated_net_amount: Math.round(calculated_net_amount),
+          validation_status, validation_reason,
           tax_amount: Math.round(tax_amount), deductions: Math.round(deductions),
         },
       });
@@ -248,7 +265,12 @@ export async function calculate_run(req, res, next) {
       },
     });
 
-    return ok(res, { run: updated_run, entries, employee_count: entries.length });
+    // Sprint 3 Milestone 5: surface validation failures alongside the run,
+    // without redesigning the existing payload shape (each entry already
+    // carries its own validation_status/validation_reason).
+    const validation_failed_count = entries.filter(e => e.validation_status === 'FAILED').length;
+
+    return ok(res, { run: updated_run, entries, employee_count: entries.length, validation_failed_count });
   } catch (e) { next(e); }
 }
 
@@ -291,6 +313,25 @@ export async function update_run_status(req, res, next) {
           : `Invalid status transition: ${run.status} -> ${status}. ${run.status} is a final status and cannot be changed.`,
         409
       );
+    }
+
+    // Sprint 3 Milestone 5: a run may not advance to COMPLETED or PAID while
+    // any of its entries are still validation-FAILED (e.g. negative
+    // calculated net pay). Checked on every transition into these two
+    // statuses, not just PROCESSING -> COMPLETED, as defense in depth.
+    if (LOCKED_STATUSES.includes(status)) {
+      const failed = await prisma.payroll_entries.findMany({
+        where: { run_id: req.params.id, validation_status: 'FAILED' },
+        select: { user: { select: { first_name: true, last_name: true } }, validation_reason: true },
+      });
+      if (failed.length > 0) {
+        const names = failed.map(f => `${f.user.first_name} ${f.user.last_name}`.trim()).join(', ');
+        return fail(
+          res,
+          `Cannot advance to ${status}: ${failed.length} payroll entry(ies) failed validation (${names}). Recalculate after correcting the underlying attendance/leave/salary data.`,
+          409
+        );
+      }
     }
 
     const updated = await prisma.payroll_runs.update({ where: { id: req.params.id }, data: { status } });
