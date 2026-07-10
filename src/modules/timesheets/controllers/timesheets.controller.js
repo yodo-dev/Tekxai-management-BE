@@ -1,5 +1,7 @@
 import { send_leave_approved_email, send_leave_rejected_email } from '../../email/email.service.js';
 import { compute_violation } from '../../attendance/repositories/attendance.repository.js';
+import { can_manually_record_attendance } from '../../attendance/constants/attendance-status-rules.js';
+import prisma from '../../../shared/database/client.js';
 import {
   clock_in as repo_clock_in,
   clock_out as repo_clock_out,
@@ -331,10 +333,20 @@ export async function reject_time_off_ctrl(req, res, next) {
 // Reuses compute_violation() (the canonical Sprint 2 M1 write path), same
 // as clock_in, so a manually-created entry is never silently exempt from
 // violation detection.
+//
+// Sprint 2 Milestone 3: also checks the TARGET employee's Employment Status
+// (req.user.id — this endpoint always creates for the requester) via the
+// same can_manually_record_attendance() rule the update endpoint below
+// uses, so SUSPENDED/TERMINATED/DECEASED employees cannot have a manual
+// attendance record created for them.
 export async function create_entry_ctrl(req, res, next) {
   try {
     const { check_in, check_out, note } = req.body;
     if (!check_in) return fail(res, 'check_in is required');
+    const requester = await prisma.users.findUnique({ where: { id: req.user.id }, select: { status: true } });
+    if (!can_manually_record_attendance(requester?.status)) {
+      return fail(res, `Cannot create an attendance entry while employment status is ${requester?.status}.`, 403);
+    }
     const entry = await create_entry({ user_id: req.user.id, check_in, check_out, note });
     compute_violation(entry.user_id, entry).catch((err) => {
       console.error('[attendance] compute_violation failed for user', entry.user_id, err);
@@ -346,6 +358,11 @@ export async function create_entry_ctrl(req, res, next) {
 // PUT /timesheet/entry/:id — same manual-correction scope as create_entry_ctrl
 // above (see routes: permission-gated to admin/manager roles). Reuses
 // compute_violation() when check_in changes, for the same reason.
+//
+// Sprint 2 Milestone 3: checks the ENTRY OWNER's Employment Status (not
+// necessarily req.user's — an admin can edit any employee's entry), since
+// the rule is about whose attendance record is being modified, not who is
+// performing the edit.
 export async function update_entry_ctrl(req, res, next) {
   try {
     const existing = await find_entry_by_id(req.params.id);
@@ -355,6 +372,10 @@ export async function update_entry_ctrl(req, res, next) {
     );
     if (!is_admin && existing.user_id !== req.user.id) {
       return fail(res, 'Forbidden', 403);
+    }
+    const owner = await prisma.users.findUnique({ where: { id: existing.user_id }, select: { status: true } });
+    if (!can_manually_record_attendance(owner?.status)) {
+      return fail(res, `Cannot modify an attendance entry while employment status is ${owner?.status}.`, 403);
     }
     const entry = await update_entry(req.params.id, req.body);
     if (req.body.check_in) {
@@ -398,8 +419,28 @@ export async function request_entry_edit(req, res, next) {
 // only flipped the request's own status and never touched the entry at all
 // — approving an edit request had no effect on the underlying attendance
 // record (Sprint 2 Milestone 2 fix).
+//
+// Sprint 2 Milestone 3: this is a manual-attendance-modification path just
+// like update_entry_ctrl above, so it must not become a bypass of the same
+// SUSPENDED/TERMINATED/DECEASED rule that endpoint enforces. Checked BEFORE
+// the request is marked APPROVED, so a blocked attempt leaves the request
+// PENDING rather than silently marking it approved without applying it —
+// exactly the kind of no-op this milestone exists to avoid reintroducing.
 export async function approve_edit(req, res, next) {
   try {
+    const pending = await prisma.timesheet_edit_requests.findUnique({ where: { id: req.params.id } });
+    if (!pending) return fail(res, 'Edit request not found', 404);
+
+    if (pending.entry_id) {
+      const target_entry = await find_entry_by_id(pending.entry_id);
+      if (target_entry) {
+        const owner = await prisma.users.findUnique({ where: { id: target_entry.user_id }, select: { status: true } });
+        if (!can_manually_record_attendance(owner?.status)) {
+          return fail(res, `Cannot modify an attendance entry while employment status is ${owner?.status}.`, 403);
+        }
+      }
+    }
+
     const req_data = await update_edit_request_status(req.params.id, 'APPROVED', req.user.id);
 
     if (req_data.entry_id && (req_data.new_check_in || req_data.new_check_out)) {

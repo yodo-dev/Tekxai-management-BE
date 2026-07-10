@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate, authorize, can_or_role } from '../../../shared/middleware/authenticate.js';
+import { require_clock_in_eligible, require_time_off_request_eligible } from '../../attendance/middleware/attendance-status.middleware.js';
 import {
   approve_edit,
   approve_time_off_ctrl,
@@ -48,7 +49,7 @@ const APPROVE = can_or_role('erp.timesheet.approve', 'ADMIN', 'SUPER_ADMIN', 'HR
  *       401:
  *         description: Unauthorized
  */
-router.post('/clock-in',                       clock_in);
+router.post('/clock-in',                       require_clock_in_eligible, clock_in);
 
 /**
  * @swagger
@@ -224,7 +225,7 @@ router.get('/time-off',                        MANAGER, list_time_off_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.post('/time-off/request',               time_off_request);
+router.post('/time-off/request',               require_time_off_request_eligible, time_off_request);
 
 /**
  * @swagger
