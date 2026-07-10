@@ -1,4 +1,12 @@
 import prisma from '../../shared/database/client.js';
+import {
+  compute_leave_days,
+  expand_leave_day_set,
+  count_absent_days,
+  compute_late_deduction,
+  compute_absence_penalty,
+  to_day_key,
+} from './payroll-attendance.helper.js';
 function ok(res,p,m='OK',s=200){return res.status(s).json({success:true,message:m,payload:p});}
 function fail(res,m,s=400){return res.status(s).json({success:false,message:m});}
 
@@ -74,9 +82,13 @@ export async function calculate_run(req, res, next) {
 
     // Working days in month (Mon-Fri)
     let working_days = 0;
+    const working_day_keys = [];
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const day = d.getDay();
-      if (day !== 0 && day !== 6) working_days++;
+      if (day !== 0 && day !== 6) {
+        working_days++;
+        working_day_keys.push(to_day_key(d));
+      }
     }
 
     const entries = [];
@@ -86,14 +98,30 @@ export async function calculate_run(req, res, next) {
       const base_salary = emp.salary || 0;
       if (base_salary === 0) continue;
 
-      // Count distinct present days
-      const present_days = new Set(
-        emp.timesheet_entries.map(e => new Date(e.check_in).toISOString().split('T')[0])
-      ).size;
+      // Count distinct present days. Uses to_day_key() (local calendar date,
+      // not toISOString()) so it's consistent with working_day_keys/
+      // leave_day_set below — toISOString() would roll a midnight-local
+      // date back a day in this server's timezone (UTC+5), silently
+      // mismatching day-keys at week boundaries.
+      const clocked_in_day_set = new Set(
+        emp.timesheet_entries.map(e => to_day_key(e.check_in))
+      );
+      const present_days = clocked_in_day_set.size;
 
       // Daily rate
       const daily_rate = base_salary / working_days;
-      const earned = daily_rate * Math.min(present_days, working_days);
+
+      // Sprint 3: Payroll x Attendance/Leave integration. paid_leave_days
+      // (approved ANNUAL leave, capped at 12/year) count toward earned pay
+      // alongside actual clocked-in days; unpaid leave and true absences
+      // both fall outside this and are simply not paid for, same as today.
+      const { paid_leave_days, unpaid_leave_days, leave_requests } =
+        await compute_leave_days(emp.id, start, end, period_year);
+      const leave_day_set = expand_leave_day_set(leave_requests, start, end);
+      const absent_days = count_absent_days(working_day_keys, clocked_in_day_set, leave_day_set);
+
+      const days_paid_for = present_days + paid_leave_days;
+      const earned = daily_rate * Math.min(days_paid_for, working_days);
 
       // Overtime — use approved_amount if set, otherwise calculate
       let overtime_hours = 0, overtime_amount = 0;
@@ -111,10 +139,16 @@ export async function calculate_run(req, res, next) {
       // Bonus
       const bonus_amount = bonus_map[emp.id] || 0;
 
+      // Sprint 3: LATE violations (2x-punitive prorated deduction) and
+      // unexcused-absence penalty (one extra day's rate per absent day).
+      const { late_violation_count, late_deduction } =
+        await compute_late_deduction(emp.id, start, end, daily_rate);
+      const absence_penalty = compute_absence_penalty(absent_days, daily_rate);
+
       // Simple tax (flat 5% if > 50000 PKR)
       const gross_amount = earned + overtime_amount + bonus_amount;
       const tax_amount = gross_amount > 50000 ? gross_amount * 0.05 : 0;
-      const deductions = tax_amount;
+      const deductions = tax_amount + late_deduction + absence_penalty;
       const net_amount = gross_amount - deductions;
 
       total_gross += gross_amount;
@@ -128,12 +162,18 @@ export async function calculate_run(req, res, next) {
         create: {
           run_id: req.params.id, user_id: emp.id,
           base_salary, working_days, present_days,
+          paid_leave_days, unpaid_leave_days, absent_days,
+          late_violation_count, late_deduction: Math.round(late_deduction),
+          absence_penalty: Math.round(absence_penalty),
           overtime_hours, overtime_amount, bonus_amount,
           gross_amount: Math.round(gross_amount), net_amount: Math.round(net_amount),
           tax_amount: Math.round(tax_amount), deductions: Math.round(deductions),
         },
         update: {
           base_salary, working_days, present_days,
+          paid_leave_days, unpaid_leave_days, absent_days,
+          late_violation_count, late_deduction: Math.round(late_deduction),
+          absence_penalty: Math.round(absence_penalty),
           overtime_hours, overtime_amount, bonus_amount,
           gross_amount: Math.round(gross_amount), net_amount: Math.round(net_amount),
           tax_amount: Math.round(tax_amount), deductions: Math.round(deductions),

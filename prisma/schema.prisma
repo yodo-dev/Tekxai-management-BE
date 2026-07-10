@@ -2288,6 +2288,19 @@ model payroll_entries {
   gross_amount    Float    @default(0)
   net_amount      Float    @default(0)
   tax_amount      Float    @default(0)
+  // Sprint 3: Payroll x Attendance/Leave integration. paid_leave_days counts
+  // toward earned pay (present_days + paid_leave_days, capped at working_days);
+  // unpaid_leave_days and absent_days are informational breakdowns only —
+  // unpaid leave's cost is already reflected in reduced earned pay (it's
+  // simply not added to paid_leave_days), it has no separate deduction line.
+  // late_deduction and absence_penalty ARE separate deduction line items,
+  // folded into `deductions` alongside tax_amount.
+  paid_leave_days     Int   @default(0)
+  unpaid_leave_days   Int   @default(0)
+  absent_days         Int   @default(0)
+  late_violation_count Int  @default(0)
+  late_deduction      Float @default(0)
+  absence_penalty     Float @default(0)
   status          String   @default("PENDING")
   payslip_url     String?
   notes           String?
