@@ -1,4 +1,5 @@
 import prisma from '../../../shared/database/client.js';
+import { create_notification } from '../../notifications/services/notifications.service.js';
 
 // `shift_schedules` is the one canonical shift model (Sprint 2 Milestone 1) —
 // it's the only one with a real relation (`employee_shifts.shift_id` FKs into
@@ -106,11 +107,17 @@ export async function compute_violation(user_id, entry) {
   const remarks = `Late check-in by ${late_min} minutes (expected ${shift.start_time}, checked in at `
     + `${String(check_in_date.getHours()).padStart(2, '0')}:${String(check_in_date.getMinutes()).padStart(2, '0')})`;
 
-  return prisma.attendance_violations.upsert({
-    where: { id: `viol_${user_id}_${date_key}` },
+  const violation_id = `viol_${user_id}_${date_key}`;
+  // Sprint 2 Milestone 6: only notify the first time this day's violation is
+  // created, not on every subsequent recompute (e.g. a second late clock-in
+  // the same day would otherwise re-run this upsert and re-notify).
+  const already_existed = await prisma.attendance_violations.findUnique({ where: { id: violation_id } });
+
+  const violation = await prisma.attendance_violations.upsert({
+    where: { id: violation_id },
     update: { late_mins: late_min, remarks, entry_id: entry.id },
     create: {
-      id: `viol_${user_id}_${date_key}`,
+      id: violation_id,
       user_id,
       date: new Date(date_key),
       violation_type: 'LATE',
@@ -119,6 +126,17 @@ export async function compute_violation(user_id, entry) {
       entry_id: entry.id,
     },
   });
+
+  if (!already_existed) {
+    create_notification({
+      user_id,
+      title: 'Late Check-In Recorded',
+      message: `You checked in late by ${late_min} minutes (expected ${shift.start_time}).`,
+      type: 'ATTENDANCE',
+    }).catch(() => null);
+  }
+
+  return violation;
 }
 
 /** Attendance summary for a user (used in reports) */

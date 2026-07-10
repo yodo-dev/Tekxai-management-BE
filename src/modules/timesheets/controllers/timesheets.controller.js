@@ -3,6 +3,7 @@ import { compute_violation } from '../../attendance/repositories/attendance.repo
 import { can_manually_record_attendance } from '../../attendance/constants/attendance-status-rules.js';
 import { lifecycle_allows_manual_entry } from '../../attendance/constants/lifecycle-attendance-rules.js';
 import { get_or_create_balance, mark_pending, deduct_leave, restore_leave } from '../../leave-balances/repositories/leave-balances.repository.js';
+import { create_notification } from '../../notifications/services/notifications.service.js';
 import prisma from '../../../shared/database/client.js';
 import {
   clock_in as repo_clock_in,
@@ -331,6 +332,13 @@ export async function approve_time_off_ctrl(req, res, next) {
       const range = `${new Date(result.start_date).toLocaleDateString()} – ${new Date(result.end_date).toLocaleDateString()}`;
       send_leave_approved_email(result.user.email, name, policy, range).catch(() => {});
     }
+    // Sprint 2 Milestone 6: in-app notification, additive to the existing email above.
+    create_notification({
+      user_id: result.user_id,
+      title: 'Leave Request Approved',
+      message: `Your ${result.policy?.name || 'leave'} request has been approved.`,
+      type: 'ATTENDANCE',
+    }).catch(() => null);
     return ok(res, result, 'Time-off request approved');
   } catch (err) { next(err); }
 }
@@ -355,6 +363,13 @@ export async function reject_time_off_ctrl(req, res, next) {
       const range = `${new Date(result.start_date).toLocaleDateString()} – ${new Date(result.end_date).toLocaleDateString()}`;
       send_leave_rejected_email(result.user.email, name, policy, range, req.body.comment).catch(() => {});
     }
+    // Sprint 2 Milestone 6: in-app notification, additive to the existing email above.
+    create_notification({
+      user_id: result.user_id,
+      title: 'Leave Request Rejected',
+      message: `Your ${result.policy?.name || 'leave'} request was rejected${req.body.comment ? `: ${req.body.comment}` : '.'}`,
+      type: 'ATTENDANCE',
+    }).catch(() => null);
     return ok(res, result, 'Time-off request rejected');
   } catch (err) { next(err); }
 }
@@ -520,6 +535,14 @@ export async function approve_edit(req, res, next) {
       }
     }
 
+    // Sprint 2 Milestone 6: notify the requester (timesheet_edit_requests.user_id).
+    create_notification({
+      user_id: pending.user_id,
+      title: 'Timesheet Edit Request Approved',
+      message: 'Your timesheet edit request has been approved.',
+      type: 'ATTENDANCE',
+    }).catch(() => null);
+
     return ok(res, req_data, 'Edit request approved');
   } catch (err) { next(err); }
 }
@@ -530,6 +553,13 @@ export async function approve_edit(req, res, next) {
 export async function reject_edit(req, res, next) {
   try {
     const req_data = await update_edit_request_status(req.params.id, 'REJECTED', req.user.id);
+    // Sprint 2 Milestone 6: notify the requester (timesheet_edit_requests.user_id).
+    create_notification({
+      user_id: req_data.user_id,
+      title: 'Timesheet Edit Request Rejected',
+      message: 'Your timesheet edit request was rejected.',
+      type: 'ATTENDANCE',
+    }).catch(() => null);
     return ok(res, req_data, 'Edit request rejected');
   } catch (err) { next(err); }
 }
