@@ -84,6 +84,10 @@ router.get('/:id',                           HR_ADMIN, get_run);
  *         description: Payroll calculated
  *       401:
  *         description: Unauthorized
+ *       404:
+ *         description: Run not found
+ *       409:
+ *         description: Run is COMPLETED or PAID — completed/paid runs are immutable and cannot be recalculated
  */
 router.post('/:id/calculate',               HR_ADMIN, calculate_run);
 
@@ -91,7 +95,7 @@ router.post('/:id/calculate',               HR_ADMIN, calculate_run);
  * @swagger
  * /payroll/{id}/status:
  *   patch:
- *     summary: Update payroll run status
+ *     summary: Advance a payroll run's status (forward-only, single step — DRAFT -> PROCESSING -> COMPLETED -> PAID)
  *     tags: [Payroll]
  *     parameters:
  *       - in: path
@@ -106,12 +110,18 @@ router.post('/:id/calculate',               HR_ADMIN, calculate_run);
  *             type: object
  *             required: [status]
  *             properties:
- *               status: { type: string, enum: [DRAFT, APPROVED, PAID] }
+ *               status: { type: string, enum: [DRAFT, PROCESSING, COMPLETED, PAID] }
  *     responses:
  *       200:
  *         description: Status updated
+ *       400:
+ *         description: status is not one of DRAFT, PROCESSING, COMPLETED, PAID
  *       401:
  *         description: Unauthorized
+ *       404:
+ *         description: Run not found
+ *       409:
+ *         description: Invalid transition — only a single forward step is allowed (no skipping, no reverse, no change once PAID)
  */
 router.patch('/:id/status',                 HR_ADMIN, update_run_status);
 

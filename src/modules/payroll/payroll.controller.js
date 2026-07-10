@@ -10,6 +10,17 @@ import {
 function ok(res,p,m='OK',s=200){return res.status(s).json({success:true,message:m,payload:p});}
 function fail(res,m,s=400){return res.status(s).json({success:false,message:m});}
 
+// Sprint 3 Milestone 3: Payroll Run Locking. `status` is the single source
+// of truth (no separate `locked` column, per approved scope) — a run may
+// only ever move one step forward along this chain, never skip a step and
+// never move backward. Once a run is COMPLETED or PAID it is immutable:
+// no unlock action and no force-recalculate escape hatch exist anywhere in
+// this module, by design. Correcting a mistake requires creating a new
+// payroll run, not reopening this one.
+const PAYROLL_STATUSES = ['DRAFT', 'PROCESSING', 'COMPLETED', 'PAID'];
+const NEXT_STATUS = { DRAFT: 'PROCESSING', PROCESSING: 'COMPLETED', COMPLETED: 'PAID' };
+const LOCKED_STATUSES = ['COMPLETED', 'PAID'];
+
 // GET /payroll — list runs
 export async function list_runs(req, res, next) {
   try {
@@ -42,6 +53,9 @@ export async function calculate_run(req, res, next) {
   try {
     const run = await prisma.payroll_runs.findUnique({ where: { id: req.params.id } });
     if (!run) return fail(res, 'Run not found', 404);
+    if (LOCKED_STATUSES.includes(run.status)) {
+      return fail(res, `Cannot recalculate a payroll run that is already ${run.status}. Completed and paid runs are immutable — create a new payroll run instead.`, 409);
+    }
 
     const { period_month, period_year } = run;
     const start = new Date(period_year, period_month - 1, 1);
@@ -229,13 +243,31 @@ export async function get_run(req, res, next) {
 }
 
 // PATCH /payroll/:id/status
+// Sprint 3 Milestone 3: forward-only, single-step transitions only
+// (DRAFT -> PROCESSING -> COMPLETED -> PAID). No skipping a step, no
+// reverse transition, no arbitrary jump to an unrelated valid status.
 export async function update_run_status(req, res, next) {
   try {
     const { status } = req.body;
-    const valid = ['DRAFT','PROCESSING','COMPLETED','PAID'];
-    if (!valid.includes(status)) return fail(res, `status must be one of: ${valid.join(', ')}`);
-    const run = await prisma.payroll_runs.update({ where: { id: req.params.id }, data: { status } });
-    return ok(res, run, 'Status updated');
+    if (!PAYROLL_STATUSES.includes(status)) {
+      return fail(res, `status must be one of: ${PAYROLL_STATUSES.join(', ')}`);
+    }
+    const run = await prisma.payroll_runs.findUnique({ where: { id: req.params.id } });
+    if (!run) return fail(res, 'Run not found', 404);
+
+    const allowed_next = NEXT_STATUS[run.status];
+    if (status !== allowed_next) {
+      return fail(
+        res,
+        allowed_next
+          ? `Invalid status transition: ${run.status} -> ${status}. Only ${run.status} -> ${allowed_next} is allowed.`
+          : `Invalid status transition: ${run.status} -> ${status}. ${run.status} is a final status and cannot be changed.`,
+        409
+      );
+    }
+
+    const updated = await prisma.payroll_runs.update({ where: { id: req.params.id }, data: { status } });
+    return ok(res, updated, 'Status updated');
   } catch (e) { next(e); }
 }
 
