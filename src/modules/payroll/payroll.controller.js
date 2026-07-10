@@ -47,13 +47,24 @@ export async function calculate_run(req, res, next) {
     const start = new Date(period_year, period_month - 1, 1);
     const end   = new Date(period_year, period_month, 0, 23, 59, 59);
 
-    // Get all active employees with their salary info
+    // Get all active employees with their salary info.
+    //
+    // Sprint 3 Milestone 2: resolved Employee ID -> Employee Profile ->
+    // Payroll. `employee_profiles.base_salary` is the canonical, actively
+    // maintained compensation field (e.g. increments.service.js's approved
+    // salary raises write here) -- `users.salary` is a legacy duplicate that
+    // nothing in the codebase currently writes, so a raise approved through
+    // the increments workflow never reached payroll before this fix. Kept
+    // `users.salary` as a fallback (not removed, per backward-compatibility
+    // requirement) only for the rare pre-existing user with no profile row
+    // or a null base_salary, so nobody silently drops out of a payroll run.
     const employees = await prisma.users.findMany({
       take: 500,
       where: { deleted_at: null },
       select: {
         id: true, first_name: true, last_name: true, email: true,
         salary: true,
+        employee_profile: { select: { base_salary: true } },
         timesheet_entries: {
           where: { check_in: { gte: start, lte: end }, deleted_at: null },
           select: { check_in: true, check_out: true, duration_sec: true },
@@ -95,7 +106,8 @@ export async function calculate_run(req, res, next) {
     let total_gross = 0, total_net = 0, total_deductions = 0;
 
     for (const emp of employees) {
-      const base_salary = emp.salary || 0;
+      // Employee Profile (canonical) first, users.salary (legacy) as fallback only.
+      const base_salary = emp.employee_profile?.base_salary || emp.salary || 0;
       if (base_salary === 0) continue;
 
       // Count distinct present days. Uses to_day_key() (local calendar date,
