@@ -87,7 +87,14 @@ router.get('/:id',                           HR_ADMIN, get_run);
  *       404:
  *         description: Run not found
  *       409:
- *         description: Run is COMPLETED or PAID — completed/paid runs are immutable and cannot be recalculated
+ *         description: >
+ *           Two distinct causes share this status. (1) The run is already COMPLETED or PAID at
+ *           the start of the request — completed/paid runs are immutable and cannot be
+ *           recalculated. (2) The run became COMPLETED or PAID via a concurrent
+ *           PATCH /:id/status request while this calculation was still in progress or finishing —
+ *           the calculation stops immediately, any entries already saved earlier in the same
+ *           request are kept (not rolled back), and the response states how many of how many
+ *           employees were processed before stopping.
  */
 router.post('/:id/calculate',               HR_ADMIN, calculate_run);
 
@@ -121,7 +128,14 @@ router.post('/:id/calculate',               HR_ADMIN, calculate_run);
  *       404:
  *         description: Run not found
  *       409:
- *         description: Invalid transition — only a single forward step is allowed (no skipping, no reverse, no change once PAID)
+ *         description: >
+ *           Three distinct causes share this status. (1) Invalid transition — only a single
+ *           forward step is allowed (no skipping, no reverse, no change once PAID).
+ *           (2) Transitioning into COMPLETED or PAID while one or more of the run's entries are
+ *           still validation-FAILED (e.g. negative calculated net pay) — the response names every
+ *           failed employee. (3) The run's status changed concurrently between this request
+ *           reading it and writing it (e.g. a simultaneous calculate/status-advance request won
+ *           the race) — refresh and retry.
  */
 router.patch('/:id/status',                 HR_ADMIN, update_run_status);
 

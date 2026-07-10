@@ -252,9 +252,19 @@ export async function calculate_run(req, res, next) {
       );
     }
 
-    // Update run totals
-    const updated_run = await prisma.payroll_runs.update({
-      where: { id: req.params.id },
+    // Sprint 3 close-out fix: the per-employee re-check inside the loop
+    // above closes the race for each individual entry, but the loop can
+    // finish (or have zero eligible employees to iterate) with no race
+    // detected, and then a concurrent PATCH /:id/status could still land in
+    // the narrow window between the last per-employee check and this final
+    // write -- which would otherwise unconditionally reset status back to
+    // PROCESSING, silently reverting a run a concurrent request had just
+    // advanced to COMPLETED/PAID. Guarded the same way as every other
+    // conditional write in this sprint: fold the eligibility check into the
+    // WHERE clause of the update itself, so the database resolves it
+    // atomically instead of a separate read-then-write.
+    const totals_update = await prisma.payroll_runs.updateMany({
+      where: { id: req.params.id, status: { notIn: LOCKED_STATUSES } },
       data: {
         status: 'PROCESSING',
         total_gross: Math.round(total_gross),
@@ -264,6 +274,17 @@ export async function calculate_run(req, res, next) {
         processed_at: new Date(),
       },
     });
+
+    if (totals_update.count === 0) {
+      const current = await prisma.payroll_runs.findUnique({ where: { id: req.params.id }, select: { status: true } });
+      return fail(
+        res,
+        `Payroll run became ${current?.status} while this calculation was finishing. Entries for ${entries.length} of ${employees.length} employee(s) were already saved -- completed/paid runs are immutable. Create a new payroll run if further correction is needed.`,
+        409
+      );
+    }
+
+    const updated_run = await prisma.payroll_runs.findUnique({ where: { id: req.params.id } });
 
     // Sprint 3 Milestone 5: surface validation failures alongside the run,
     // without redesigning the existing payload shape (each entry already
@@ -315,26 +336,52 @@ export async function update_run_status(req, res, next) {
       );
     }
 
-    // Sprint 3 Milestone 5: a run may not advance to COMPLETED or PAID while
-    // any of its entries are still validation-FAILED (e.g. negative
-    // calculated net pay). Checked on every transition into these two
-    // statuses, not just PROCESSING -> COMPLETED, as defense in depth.
-    if (LOCKED_STATUSES.includes(status)) {
-      const failed = await prisma.payroll_entries.findMany({
-        where: { run_id: req.params.id, validation_status: 'FAILED' },
-        select: { user: { select: { first_name: true, last_name: true } }, validation_reason: true },
-      });
-      if (failed.length > 0) {
-        const names = failed.map(f => `${f.user.first_name} ${f.user.last_name}`.trim()).join(', ');
-        return fail(
-          res,
-          `Cannot advance to ${status}: ${failed.length} payroll entry(ies) failed validation (${names}). Recalculate after correcting the underlying attendance/leave/salary data.`,
-          409
-        );
+    // Sprint 3 close-out fix: a run may not advance to COMPLETED or PAID
+    // while any of its entries are still validation-FAILED (Milestone 5),
+    // and that check must not be a separate read followed by a separate
+    // write -- a concurrent calculate_run() call could mark an entry
+    // FAILED in between the two, letting a run complete despite a failure
+    // that existed at the moment of completion. Folded into the WHERE
+    // clause of the same conditional UPDATE used for the forward-only
+    // transition guard (the `entries: { none: ... } }` relational filter is
+    // resolved by the database as part of one atomic statement), matching
+    // the pattern already established for the Sprint 2 leave-balance race.
+    const transition_update = await prisma.payroll_runs.updateMany({
+      where: {
+        id: req.params.id,
+        status: run.status,
+        ...(LOCKED_STATUSES.includes(status) ? { entries: { none: { validation_status: 'FAILED' } } } : {}),
+      },
+      data: { status },
+    });
+
+    if (transition_update.count === 0) {
+      // Nothing was written -- figure out which of the two guards actually
+      // blocked it, for an accurate error message only (not for the
+      // decision itself, which the atomic update above already made).
+      if (LOCKED_STATUSES.includes(status)) {
+        const failed = await prisma.payroll_entries.findMany({
+          where: { run_id: req.params.id, validation_status: 'FAILED' },
+          select: { user: { select: { first_name: true, last_name: true } } },
+        });
+        if (failed.length > 0) {
+          const names = failed.map(f => `${f.user.first_name} ${f.user.last_name}`.trim()).join(', ');
+          return fail(
+            res,
+            `Cannot advance to ${status}: ${failed.length} payroll entry(ies) failed validation (${names}). Recalculate after correcting the underlying attendance/leave/salary data.`,
+            409
+          );
+        }
       }
+      const current = await prisma.payroll_runs.findUnique({ where: { id: req.params.id }, select: { status: true } });
+      return fail(
+        res,
+        `Invalid status transition: the run's status changed concurrently (now ${current?.status}). Refresh and try again.`,
+        409
+      );
     }
 
-    const updated = await prisma.payroll_runs.update({ where: { id: req.params.id }, data: { status } });
+    const updated = await prisma.payroll_runs.findUnique({ where: { id: req.params.id } });
     return ok(res, updated, 'Status updated');
   } catch (e) { next(e); }
 }
