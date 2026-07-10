@@ -1,6 +1,7 @@
 import { send_leave_approved_email, send_leave_rejected_email } from '../../email/email.service.js';
 import { compute_violation } from '../../attendance/repositories/attendance.repository.js';
 import { can_manually_record_attendance } from '../../attendance/constants/attendance-status-rules.js';
+import { lifecycle_allows_manual_entry } from '../../attendance/constants/lifecycle-attendance-rules.js';
 import prisma from '../../../shared/database/client.js';
 import {
   clock_in as repo_clock_in,
@@ -339,13 +340,22 @@ export async function reject_time_off_ctrl(req, res, next) {
 // same can_manually_record_attendance() rule the update endpoint below
 // uses, so SUSPENDED/TERMINATED/DECEASED employees cannot have a manual
 // attendance record created for them.
+//
+// Sprint 2 Milestone 4: also checks the same target's Lifecycle Stage
+// ("most restrictive wins" — Employment Status is checked first).
 export async function create_entry_ctrl(req, res, next) {
   try {
     const { check_in, check_out, note } = req.body;
     if (!check_in) return fail(res, 'check_in is required');
-    const requester = await prisma.users.findUnique({ where: { id: req.user.id }, select: { status: true } });
+    const requester = await prisma.users.findUnique({
+      where: { id: req.user.id },
+      select: { status: true, employee_profile: { select: { lifecycle_stage: true } } },
+    });
     if (!can_manually_record_attendance(requester?.status)) {
       return fail(res, `Cannot create an attendance entry while employment status is ${requester?.status}.`, 403);
+    }
+    if (!lifecycle_allows_manual_entry(requester?.employee_profile?.lifecycle_stage)) {
+      return fail(res, `Cannot create an attendance entry while lifecycle stage is ${requester?.employee_profile?.lifecycle_stage}.`, 403);
     }
     const entry = await create_entry({ user_id: req.user.id, check_in, check_out, note });
     compute_violation(entry.user_id, entry).catch((err) => {
@@ -363,6 +373,9 @@ export async function create_entry_ctrl(req, res, next) {
 // necessarily req.user's — an admin can edit any employee's entry), since
 // the rule is about whose attendance record is being modified, not who is
 // performing the edit.
+//
+// Sprint 2 Milestone 4: also checks the same owner's Lifecycle Stage
+// ("most restrictive wins" — Employment Status is checked first).
 export async function update_entry_ctrl(req, res, next) {
   try {
     const existing = await find_entry_by_id(req.params.id);
@@ -373,9 +386,15 @@ export async function update_entry_ctrl(req, res, next) {
     if (!is_admin && existing.user_id !== req.user.id) {
       return fail(res, 'Forbidden', 403);
     }
-    const owner = await prisma.users.findUnique({ where: { id: existing.user_id }, select: { status: true } });
+    const owner = await prisma.users.findUnique({
+      where: { id: existing.user_id },
+      select: { status: true, employee_profile: { select: { lifecycle_stage: true } } },
+    });
     if (!can_manually_record_attendance(owner?.status)) {
       return fail(res, `Cannot modify an attendance entry while employment status is ${owner?.status}.`, 403);
+    }
+    if (!lifecycle_allows_manual_entry(owner?.employee_profile?.lifecycle_stage)) {
+      return fail(res, `Cannot modify an attendance entry while lifecycle stage is ${owner?.employee_profile?.lifecycle_stage}.`, 403);
     }
     const entry = await update_entry(req.params.id, req.body);
     if (req.body.check_in) {
@@ -426,6 +445,10 @@ export async function request_entry_edit(req, res, next) {
 // the request is marked APPROVED, so a blocked attempt leaves the request
 // PENDING rather than silently marking it approved without applying it —
 // exactly the kind of no-op this milestone exists to avoid reintroducing.
+//
+// Sprint 2 Milestone 4: also checks the same owner's Lifecycle Stage
+// ("most restrictive wins" — Employment Status is checked first), same
+// PENDING-not-silently-approved guarantee.
 export async function approve_edit(req, res, next) {
   try {
     const pending = await prisma.timesheet_edit_requests.findUnique({ where: { id: req.params.id } });
@@ -434,9 +457,15 @@ export async function approve_edit(req, res, next) {
     if (pending.entry_id) {
       const target_entry = await find_entry_by_id(pending.entry_id);
       if (target_entry) {
-        const owner = await prisma.users.findUnique({ where: { id: target_entry.user_id }, select: { status: true } });
+        const owner = await prisma.users.findUnique({
+          where: { id: target_entry.user_id },
+          select: { status: true, employee_profile: { select: { lifecycle_stage: true } } },
+        });
         if (!can_manually_record_attendance(owner?.status)) {
           return fail(res, `Cannot modify an attendance entry while employment status is ${owner?.status}.`, 403);
+        }
+        if (!lifecycle_allows_manual_entry(owner?.employee_profile?.lifecycle_stage)) {
+          return fail(res, `Cannot modify an attendance entry while lifecycle stage is ${owner?.employee_profile?.lifecycle_stage}.`, 403);
         }
       }
     }
