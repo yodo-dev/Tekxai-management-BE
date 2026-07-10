@@ -303,7 +303,7 @@ router.post('/time-off/:id/reject',            APPROVE, reject_time_off_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.post('/entry',                          create_entry_ctrl);
+router.post('/entry',                          APPROVE, create_entry_ctrl);
 
 /**
  * @swagger
@@ -330,7 +330,7 @@ router.post('/entry',                          create_entry_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.put('/entry/:id',                       update_entry_ctrl);
+router.put('/entry/:id',                       APPROVE, update_entry_ctrl);
 
 /**
  * @swagger
@@ -349,7 +349,7 @@ router.put('/entry/:id',                       update_entry_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.delete('/entry/:id',                    delete_entry_ctrl);
+router.delete('/entry/:id',                    APPROVE, delete_entry_ctrl);
 
 /**
  * @swagger

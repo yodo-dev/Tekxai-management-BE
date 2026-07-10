@@ -320,17 +320,32 @@ export async function reject_time_off_ctrl(req, res, next) {
   } catch (err) { next(err); }
 }
 
-// POST /timesheet/entry
+// POST /timesheet/entry — manual admin correction, not a self-service path.
+// Real-time clock-in already exists (POST /timesheet/clock-in); a
+// retroactive correction for an existing entry goes through
+// request_entry_edit + approve_edit below. This endpoint is now
+// permission-gated (see routes) so it can only be reached by the same
+// roles that can approve time-off/edit requests — it is not a second
+// self-service attendance path.
+//
+// Reuses compute_violation() (the canonical Sprint 2 M1 write path), same
+// as clock_in, so a manually-created entry is never silently exempt from
+// violation detection.
 export async function create_entry_ctrl(req, res, next) {
   try {
     const { check_in, check_out, note } = req.body;
     if (!check_in) return fail(res, 'check_in is required');
     const entry = await create_entry({ user_id: req.user.id, check_in, check_out, note });
+    compute_violation(entry.user_id, entry).catch((err) => {
+      console.error('[attendance] compute_violation failed for user', entry.user_id, err);
+    });
     return ok(res, entry, 'Entry created', 201);
   } catch (err) { next(err); }
 }
 
-// PUT /timesheet/entry/:id
+// PUT /timesheet/entry/:id — same manual-correction scope as create_entry_ctrl
+// above (see routes: permission-gated to admin/manager roles). Reuses
+// compute_violation() when check_in changes, for the same reason.
 export async function update_entry_ctrl(req, res, next) {
   try {
     const existing = await find_entry_by_id(req.params.id);
@@ -342,6 +357,11 @@ export async function update_entry_ctrl(req, res, next) {
       return fail(res, 'Forbidden', 403);
     }
     const entry = await update_entry(req.params.id, req.body);
+    if (req.body.check_in) {
+      compute_violation(entry.user_id, entry).catch((err) => {
+        console.error('[attendance] compute_violation failed for user', entry.user_id, err);
+      });
+    }
     return ok(res, entry, 'Entry updated');
   } catch (err) { next(err); }
 }
@@ -369,14 +389,38 @@ export async function request_entry_edit(req, res, next) {
 }
 
 // POST /timesheet/edit-request/:id/approve
+//
+// Approval is the canonical modification path for a disputed entry — this
+// is the only place a timesheet_edit_requests row is allowed to result in a
+// timesheet_entries change. It reuses update_entry() (the same function the
+// manual-correction endpoints above use), not a separate raw Prisma call, so
+// there is exactly one place that updates timesheet_entries. Previously this
+// only flipped the request's own status and never touched the entry at all
+// — approving an edit request had no effect on the underlying attendance
+// record (Sprint 2 Milestone 2 fix).
 export async function approve_edit(req, res, next) {
   try {
     const req_data = await update_edit_request_status(req.params.id, 'APPROVED', req.user.id);
+
+    if (req_data.entry_id && (req_data.new_check_in || req_data.new_check_out)) {
+      const updated_entry = await update_entry(req_data.entry_id, {
+        check_in: req_data.new_check_in || undefined,
+        check_out: req_data.new_check_out || undefined,
+      });
+      if (req_data.new_check_in) {
+        compute_violation(updated_entry.user_id, updated_entry).catch((err) => {
+          console.error('[attendance] compute_violation failed for user', updated_entry.user_id, err);
+        });
+      }
+    }
+
     return ok(res, req_data, 'Edit request approved');
   } catch (err) { next(err); }
 }
 
-// POST /timesheet/edit-request/:id/reject
+// POST /timesheet/edit-request/:id/reject — intentionally touches only the
+// request's own status; the underlying timesheet_entries row is never
+// modified on rejection.
 export async function reject_edit(req, res, next) {
   try {
     const req_data = await update_edit_request_status(req.params.id, 'REJECTED', req.user.id);
