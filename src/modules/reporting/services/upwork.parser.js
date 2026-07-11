@@ -1,12 +1,36 @@
 import ExcelJS from 'exceljs';
 
 /**
+ * Look up a field on a parsed CSV/XLSX row by trying several candidate header
+ * names, case-insensitively — different Upwork export formats use different
+ * casing/wording for the same column (e.g. "Transaction type" vs "Type",
+ * "Amount $" vs "Amount").
+ */
+function get_field(row, names) {
+  for (const name of names) {
+    if (row[name] !== undefined && row[name] !== '') return row[name];
+  }
+  const lower_map = {};
+  for (const k of Object.keys(row)) lower_map[k.toLowerCase()] = row[k];
+  for (const name of names) {
+    const v = lower_map[name.toLowerCase()];
+    if (v !== undefined && v !== '') return v;
+  }
+  return undefined;
+}
+
+const TYPE_FIELDS = ['Type', 'Transaction Type', 'Transaction type'];
+const AMOUNT_FIELDS = ['Amount', 'Amount $', 'Debit', 'Credit'];
+const DESC_FIELDS = ['Description', 'Transaction summary', 'Title', 'Memo'];
+const DATE_FIELDS = ['Date', 'Transaction Date'];
+
+/**
  * Classify a single Upwork transaction row into a category.
  */
 export function classify_transaction(row) {
-  const rawType = String(row.Type || row.type || row['Transaction Type'] || '').toLowerCase();
-  const desc = String(row.Description || row.description || row.Title || row.Memo || '').toLowerCase();
-  const amount = parseFloat(String(row.Amount || row.amount || row.Debit || row.Credit || '0').replace(/[^0-9.\-]/g, '')) || 0;
+  const rawType = String(get_field(row, TYPE_FIELDS) || '').toLowerCase();
+  const desc = String(get_field(row, DESC_FIELDS) || '').toLowerCase();
+  const amount = parseFloat(String(get_field(row, AMOUNT_FIELDS) || '0').replace(/[^0-9.\-]/g, '')) || 0;
 
   if (rawType.includes('service fee') || desc.includes('service fee')) return 'SERVICE_FEE';
   if (rawType.includes('membership') || rawType.includes('subscription') || desc.includes('subscription') || desc.includes('membership')) return 'SUBSCRIPTION';
@@ -89,9 +113,9 @@ export function classify_all(rows) {
   return rows.map(row => ({
     ...row,
     _type: classify_transaction(row),
-    _amount: parseFloat(String(row.Amount || row.amount || row.Debit || row.Credit || '0').replace(/[^0-9.\-]/g, '')) || 0,
-    _date: row.Date || row.date || row['Transaction Date'] || '',
-    _desc: row.Description || row.description || row.Title || row.Memo || '',
+    _amount: parseFloat(String(get_field(row, AMOUNT_FIELDS) || '0').replace(/[^0-9.\-]/g, '')) || 0,
+    _date: get_field(row, DATE_FIELDS) || '',
+    _desc: get_field(row, DESC_FIELDS) || '',
   }));
 }
 
