@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authenticate, authorize, can_or_role } from '../../../shared/middleware/authenticate.js';
 import { create_client, get_client, grant_project_access, list_client_projects, list_clients } from '../controllers/crm.controller.js';
-import { crm_dashboard_ctrl, team_hierarchy_ctrl, assign_supervisor_ctrl } from '../controllers/crm-dashboard.controller.js';
+import { crm_dashboard_ctrl, post_sales_dashboard_ctrl, team_hierarchy_ctrl, assign_supervisor_ctrl } from '../controllers/crm-dashboard.controller.js';
 import {
   leads_list_ctrl, lead_stage_ctrl, pipeline_meta_ctrl,
   handoffs_list_ctrl, handoff_create_ctrl, handoff_update_ctrl,
@@ -38,6 +38,20 @@ const MA_INVOICES_CREATE = can_or_role('crm.invoices.create', 'ADMIN', 'SUPER_AD
  *         description: Unauthorized
  */
 router.get('/dashboard',                  M_DASHBOARD_VIEW,    crm_dashboard_ctrl);
+
+/**
+ * @swagger
+ * /crm/post-sales-dashboard:
+ *   get:
+ *     summary: Get the Post-Sales CRM dashboard (project delivery, client success, resourcing)
+ *     tags: [CRM]
+ *     responses:
+ *       200:
+ *         description: Post-Sales CRM dashboard data
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/post-sales-dashboard',       M_DASHBOARD_VIEW,    post_sales_dashboard_ctrl);
 
 /**
  * @swagger

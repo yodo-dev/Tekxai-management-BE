@@ -1,4 +1,5 @@
 import { get_crm_dashboard, get_team_hierarchy, assign_supervisor } from '../services/crm-dashboard.service.js';
+import { get_post_sales_dashboard } from '../services/post-sales-dashboard.service.js';
 
 export async function crm_dashboard_ctrl(req, res) {
   try {
@@ -7,6 +8,16 @@ export async function crm_dashboard_ctrl(req, res) {
   } catch (err) {
     console.error('crm_dashboard error', err);
     res.status(500).json({ message: 'Failed to load CRM dashboard' });
+  }
+}
+
+export async function post_sales_dashboard_ctrl(req, res) {
+  try {
+    const data = await get_post_sales_dashboard();
+    res.json(data);
+  } catch (err) {
+    console.error('post_sales_dashboard error', err);
+    res.status(500).json({ message: 'Failed to load Post-Sales CRM dashboard' });
   }
 }
 
