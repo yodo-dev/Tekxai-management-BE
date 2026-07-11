@@ -26,7 +26,6 @@ const project_summary = (p) => ({
 export async function get_post_sales_dashboard() {
   const now = new Date();
   const week_from_now = new Date(now.getTime() + 7 * 86400000);
-  const week_ago = new Date(now.getTime() - 7 * 86400000);
 
   const { records: projects } = await list_projects({ page: 1, limit: 1000 }, null);
   const active_projects = projects.filter((p) => !TERMINAL_STATUSES.includes(p.status));
@@ -34,31 +33,30 @@ export async function get_post_sales_dashboard() {
   // ── Top KPIs ──────────────────────────────────────────────────────────────
   const active_client_names = new Set(active_projects.filter((p) => p.client_name).map((p) => p.client_name));
   const due_this_week = active_projects.filter((p) => p.end_date && new Date(p.end_date) >= now && new Date(p.end_date) <= week_from_now);
+  const critical = active_projects.filter((p) => p.health_status === 'CRITICAL');
 
   const top_kpis = {
     active_clients: active_client_names.size,
     active_projects: active_projects.length,
     queued_projects: projects.filter((p) => QUEUED_STATUSES.includes(p.status)).length,
-    completed_projects: projects.filter((p) => COMPLETED_STATUSES.includes(p.status)).length,
     overdue_projects: projects.filter((p) => p.is_overdue).length,
     projects_due_this_week: due_this_week.length,
+    critical_projects: critical.length,
   };
 
   // ── Project Health ───────────────────────────────────────────────────────
-  const critical = active_projects.filter((p) => p.health_status === 'CRITICAL');
   const blocked = active_projects.filter((p) => p.status === 'BLOCKED' || p.milestone_breakdown.blocked > 0);
   const missing_team = active_projects.filter((p) => p.member_count === 0);
-  const missing_milestones = active_projects.filter((p) => p.milestones.length === 0);
   const missing_pm = active_projects.filter((p) => !p.leader_id);
+  const missing_milestones = active_projects.filter((p) => p.milestones.length === 0);
   const waiting_on_client = active_projects.filter((p) => p.status === 'CLIENT_REVIEW');
 
   const project_health = {
-    critical_projects: { count: critical.length, projects: critical.slice(0, 10).map(project_summary) },
     blocked_projects: { count: blocked.length, projects: blocked.slice(0, 10).map(project_summary) },
+    waiting_for_client: { count: waiting_on_client.length, projects: waiting_on_client.slice(0, 10).map(project_summary) },
     missing_team_members: { count: missing_team.length, projects: missing_team.slice(0, 10).map(project_summary) },
-    missing_milestones: { count: missing_milestones.length, projects: missing_milestones.slice(0, 10).map(project_summary) },
     missing_project_manager: { count: missing_pm.length, projects: missing_pm.slice(0, 10).map(project_summary) },
-    waiting_for_client_response: { count: waiting_on_client.length, projects: waiting_on_client.slice(0, 10).map(project_summary) },
+    missing_milestones: { count: missing_milestones.length, projects: missing_milestones.slice(0, 10).map(project_summary) },
   };
 
   // ── Project Status Distribution ──────────────────────────────────────────
@@ -76,33 +74,26 @@ export async function get_post_sales_dashboard() {
     .sort((a, b) => new Date(a.end_date) - new Date(b.end_date))
     .slice(0, 10)
     .map(project_summary);
-  const no_activity = active_projects
-    .filter((p) => new Date(p.updated_at) < week_ago)
-    .sort((a, b) => new Date(a.updated_at) - new Date(b.updated_at))
+  // "Recently completed" uses updated_at as a proxy for completion date — there is
+  // no dedicated completed_at timestamp on projects yet.
+  const recently_completed = projects
+    .filter((p) => COMPLETED_STATUSES.includes(p.status))
+    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
     .slice(0, 10)
-    .map((p) => ({ ...project_summary(p), last_updated: p.updated_at }));
+    .map((p) => ({ ...project_summary(p), completed_at: p.updated_at }));
 
-  const [upcoming_milestones, overdue_milestones] = await Promise.all([
-    prisma.milestones.findMany({
-      where: { completed: false, due_date: { gte: now }, project: { deleted_at: null } },
-      orderBy: { due_date: 'asc' },
-      take: 10,
-      include: { project: { select: { id: true, title: true, client_name: true } } },
-    }),
-    prisma.milestones.findMany({
-      where: { completed: false, due_date: { lt: now }, project: { deleted_at: null } },
-      orderBy: { due_date: 'asc' },
-      take: 10,
-      include: { project: { select: { id: true, title: true, client_name: true } } },
-    }),
-  ]);
+  const upcoming_milestones = await prisma.milestones.findMany({
+    where: { completed: false, due_date: { gte: now }, project: { deleted_at: null } },
+    orderBy: { due_date: 'asc' },
+    take: 10,
+    include: { project: { select: { id: true, title: true, client_name: true } } },
+  });
 
   const timeline = {
     upcoming_due_dates: upcoming_due,
     overdue_due_dates: overdue_due,
     upcoming_milestones: upcoming_milestones.map((m) => ({ id: m.id, title: m.title, due_date: m.due_date, project: m.project })),
-    overdue_milestones: overdue_milestones.map((m) => ({ id: m.id, title: m.title, due_date: m.due_date, project: m.project })),
-    projects_with_no_activity: no_activity,
+    recently_completed_projects: recently_completed,
   };
 
   // ── Resource Overview (generic — no role-specific terminology) ──────────────
@@ -165,9 +156,8 @@ export async function get_post_sales_dashboard() {
   });
 
   const client_success = {
-    clients_with_active_projects: active_client_names.size,
+    active_clients: active_client_names.size,
     clients_waiting_for_feedback: new Set(waiting_on_client.filter((p) => p.client_name).map((p) => p.client_name)).size,
-    projects_waiting_for_client: waiting_on_client.length,
     client_satisfaction: null, // no client-satisfaction data source exists in the current schema
     recent_client_activity: recent_client_activity.map((u) => ({
       id: u.id,
