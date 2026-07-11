@@ -8,6 +8,7 @@ import designations_routes  from '../modules/designations/routes/designations.ro
 import grades_routes        from '../modules/grades/routes/grades.routes.js';
 import business_activities_routes from '../modules/business-activities/routes/business-activities.routes.js';
 import business_unit_rules_routes from '../modules/business-unit-rules/routes/business-unit-rules.routes.js';
+import enterprise_performance_routes from '../modules/enterprise-performance/routes/enterprise-performance.routes.js';
 import divisions_routes     from '../modules/departments/routes/divisions.routes.js';
 import projects_routes      from '../modules/projects/routes/projects.routes.js';
 import tasks_routes         from '../modules/tasks/routes/tasks.routes.js';
@@ -73,6 +74,7 @@ router.use('/department',        departments_routes);
 router.use('/designations',      designations_routes);
 router.use('/business-activities', business_activities_routes);
 router.use('/business-unit-rules', business_unit_rules_routes);
+router.use('/enterprise-performance', enterprise_performance_routes);
 router.use('/grades',            grades_routes);
 router.use('/divisions',         divisions_routes);
 router.use('/project',           projects_routes);
