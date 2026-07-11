@@ -8,7 +8,10 @@ export async function list_time_logs(req,res,next){
       take: 500,
       where:{task_id:req.params.taskId},
       orderBy:{logged_at:'desc'},
-      include:{user:{select:{id:true,first_name:true,last_name:true}}}
+      include:{
+        user:{select:{id:true,first_name:true,last_name:true}},
+        business_activity:{select:{id:true,name:true,default_billable:true,feeds_layer:true}},
+      }
     });
     const total_seconds=logs.reduce((s,l)=>s+l.seconds,0);
     return ok(res,{logs,total_seconds});
@@ -17,10 +20,19 @@ export async function list_time_logs(req,res,next){
 
 export async function log_time(req,res,next){
   try{
-    const{seconds,note,logged_at}=req.body;
+    const{seconds,note,logged_at,business_activity_id,allocation_method}=req.body;
     if(!seconds||+seconds<=0)return fail(res,'seconds must be positive');
+    if(allocation_method&&!['TIME_SHARE','FIXED_SHARE','HEADCOUNT_SHARE'].includes(allocation_method)){
+      return fail(res,'allocation_method must be one of TIME_SHARE, FIXED_SHARE, HEADCOUNT_SHARE');
+    }
     const log=await prisma.task_time_logs.create({
-      data:{task_id:req.params.taskId,user_id:req.user.id,seconds:+seconds,note:note||null,logged_at:logged_at?new Date(logged_at):new Date()}
+      data:{
+        task_id:req.params.taskId,user_id:req.user.id,seconds:+seconds,note:note||null,
+        logged_at:logged_at?new Date(logged_at):new Date(),
+        business_activity_id:business_activity_id||null,
+        allocation_method:allocation_method||'TIME_SHARE',
+      },
+      include:{business_activity:{select:{id:true,name:true,default_billable:true,feeds_layer:true}}},
     });
     return ok(res,log,'Time logged',201);
   }catch(e){next(e);}

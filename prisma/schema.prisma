@@ -288,6 +288,24 @@ model designations {
   @@index([department_id])
 }
 
+// ─── Enterprise Performance Platform ───────────────────────────────────────────
+// Business Activity supersedes the earlier billable/non-billable flag with a
+// generic taxonomy — see Tekxai-Operations-OS/08-Master-Gap-Analysis.md §11.2.
+model business_activities {
+  id               String   @id @default(cuid())
+  name             String   @unique
+  default_billable Boolean  @default(true)
+  feeds_layer      String   @default("REVENUE") // REVENUE | VALUE | COST_ONLY — which attribution layer this activity primarily feeds (§11.1)
+  is_active        Boolean  @default(true)
+  sort_order       Int      @default(0)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  task_time_logs task_time_logs[]
+
+  @@index([feeds_layer])
+}
+
 model grades {
   id          String    @id @default(cuid())
   name        String    @unique
@@ -2241,19 +2259,23 @@ model task_sub_items {
 // ─── Task Time Logs ───────────────────────────────────────────────────────────
 
 model task_time_logs {
-  id         String   @id @default(cuid())
-  task_id    String
-  user_id    String
-  seconds    Int      @default(0)
-  note       String?
-  logged_at  DateTime @default(now())
-  created_at DateTime @default(now())
+  id                   String   @id @default(cuid())
+  task_id              String
+  user_id              String
+  seconds              Int      @default(0)
+  note                 String?
+  business_activity_id String? // Enterprise Performance Platform M2 — see §11.2. Nullable: pre-existing logs have none.
+  allocation_method     String   @default("TIME_SHARE") // TIME_SHARE | FIXED_SHARE | HEADCOUNT_SHARE — see §11.4
+  logged_at            DateTime @default(now())
+  created_at           DateTime @default(now())
 
-  task tasks @relation(fields: [task_id], references: [id], onDelete: Cascade)
-  user users @relation("task_time_logs", fields: [user_id], references: [id])
+  task              tasks                @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  user              users                @relation("task_time_logs", fields: [user_id], references: [id])
+  business_activity business_activities? @relation(fields: [business_activity_id], references: [id], onDelete: SetNull)
 
   @@index([task_id])
   @@index([user_id])
+  @@index([business_activity_id])
 }
 
 // ─── Payroll ──────────────────────────────────────────────────────────────────
