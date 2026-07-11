@@ -306,6 +306,24 @@ model business_activities {
   @@index([feeds_layer])
 }
 
+// Business Unit Rule Engine — promotes `users.business_unit` (a free-string field
+// used today purely as a reporting/routing filter) into a first-class rule
+// container, so a new business unit (e.g. Estimation, Marketing, a future
+// Construction unit) is a configuration row, not a code change. Deliberately not
+// an FK to `users.business_unit` — that field stays free-text so new units can be
+// introduced by adding a row here before any user is ever tagged with it.
+// See Tekxai-Operations-OS/08-Master-Gap-Analysis.md §11.4.
+model business_unit_rules {
+  id                       String   @id @default(cuid())
+  business_unit            String   @unique // matches users.business_unit values, e.g. "ERP", "CRM"
+  default_allocation_method String  @default("TIME_SHARE") // TIME_SHARE | FIXED_SHARE | HEADCOUNT_SHARE
+  revenue_source_type      String   @default("INVOICE") // INVOICE | RETAINER_ALLOCATION | MANUAL_ESTIMATE — this unit's default revenue attribution source (§11.1)
+  performance_weights      Json?    // unit-specific KPI weighting overrides for the Performance Engine (§11.3), null = use platform defaults
+  is_active                Boolean  @default(true)
+  created_at               DateTime @default(now())
+  updated_at               DateTime @updatedAt
+}
+
 model grades {
   id          String    @id @default(cuid())
   name        String    @unique
