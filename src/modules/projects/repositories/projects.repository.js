@@ -75,6 +75,7 @@ function normalize_project(p, { is_saved = false, portal = null } = {}) {
     title: p.title,
     description: p.description,
     status: p.status,
+    project_type: p.project_type,
     progress,
     progress_mode: p.progress_mode,
     total_hours: p.total_hours,
@@ -175,7 +176,7 @@ export async function find_project_by_id(id, user_id = null) {
   return normalize_project(p, { is_saved, portal: portal_map.get(id) || null });
 }
 
-export async function create_project({ title, description, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, progress_mode, budget, budget_currency, member_ids = [] }) {
+export async function create_project({ title, description, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, progress_mode, project_type, budget, budget_currency, member_ids = [] }) {
   // NOTE: the final read must happen *after* the transaction commits — calling
   // find_project_by_id (which uses the outer `prisma` client) from inside the
   // transaction callback reads via a separate connection that can't see the
@@ -194,6 +195,7 @@ export async function create_project({ title, description, start_date, end_date,
         client_name: client_name || null,
         dev_status: dev_status || null,
         progress_mode: progress_mode || 'MANUAL',
+        project_type: project_type || 'CLIENT',
         budget: budget !== undefined && budget !== null && budget !== '' ? +budget : null,
         budget_currency: budget_currency || undefined,
       },
@@ -212,7 +214,7 @@ export async function create_project({ title, description, start_date, end_date,
   return find_project_by_id(project_id);
 }
 
-export async function update_project(id, { title, description, status, progress, progress_mode, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, budget, budget_currency, budget_spent, member_ids }) {
+export async function update_project(id, { title, description, status, progress, progress_mode, project_type, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, budget, budget_currency, budget_spent, member_ids }) {
   // See create_project note above — read-after-write must happen post-commit.
   await prisma.$transaction(async (tx) => {
     const data = {};
@@ -221,6 +223,7 @@ export async function update_project(id, { title, description, status, progress,
     if (status !== undefined) data.status = status;
     if (progress !== undefined) data.progress = progress;
     if (progress_mode !== undefined) data.progress_mode = progress_mode;
+    if (project_type !== undefined) data.project_type = project_type;
     if (start_date !== undefined) data.start_date = start_date ? new Date(start_date) : null;
     if (end_date !== undefined)   data.end_date   = end_date   ? new Date(end_date)   : null;
     if (total_hours !== undefined) data.total_hours = total_hours;

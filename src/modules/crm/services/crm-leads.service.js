@@ -117,10 +117,11 @@ export async function update_handoff(id, data) {
 }
 
 // CRM Invoices
-export async function list_invoices({ client_account_id, status, page = 1, limit = 20 } = {}) {
+export async function list_invoices({ client_account_id, project_id, status, page = 1, limit = 20 } = {}) {
   const p = +page || 1; const l = +limit || 20;
   const where = {};
   if (client_account_id) where.client_account_id = client_account_id;
+  if (project_id) where.project_id = project_id;
   if (status) where.status = status;
   const [total, records] = await Promise.all([
     prisma.crm_invoices.count({ where }),
@@ -129,7 +130,10 @@ export async function list_invoices({ client_account_id, status, page = 1, limit
       orderBy: { created_at: 'desc' },
       skip: (p - 1) * l,
       take: l,
-      include: { client_account: { select: { id: true, name: true, company: true } } },
+      include: {
+        client_account: { select: { id: true, name: true, company: true } },
+        project: { select: { id: true, title: true, project_type: true } },
+      },
     }),
   ]);
   return { records, total, page: p, limit: l };
@@ -139,7 +143,10 @@ export async function create_invoice(data, user_id) {
   const inv_no = data.invoice_number || `INV-${Date.now()}`;
   return prisma.crm_invoices.create({
     data: { ...data, invoice_number: inv_no, created_by: user_id },
-    include: { client_account: { select: { id: true, name: true, company: true } } },
+    include: {
+      client_account: { select: { id: true, name: true, company: true } },
+      project: { select: { id: true, title: true, project_type: true } },
+    },
   });
 }
 

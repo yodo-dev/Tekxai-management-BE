@@ -7,6 +7,9 @@ export const WORKFLOW_STATUSES = [
 ];
 export const ALL_STATUSES = [...LEGACY_STATUSES, ...WORKFLOW_STATUSES];
 export const PROGRESS_MODES = ['MANUAL', 'AUTO'];
+// Enterprise Performance Platform M1 — distinguishes revenue-bearing client work from
+// internal/overhead work. See Tekxai-Operations-OS/08-Master-Gap-Analysis.md §11.5.
+export const PROJECT_TYPES = ['CLIENT', 'INTERNAL'];
 
 function validate_budget_fields(body) {
   if (body.budget !== undefined && body.budget !== null && body.budget !== '' && +body.budget < 0) {
@@ -26,6 +29,9 @@ export function validate_create_project(body) {
   if (body.progress_mode !== undefined && !PROGRESS_MODES.includes(body.progress_mode)) {
     return { valid: false, message: `progress_mode must be one of ${PROGRESS_MODES.join(', ')}` };
   }
+  if (body.project_type !== undefined && !PROJECT_TYPES.includes(body.project_type)) {
+    return { valid: false, message: `project_type must be one of ${PROJECT_TYPES.join(', ')}` };
+  }
   const budget_check = validate_budget_fields(body);
   if (!budget_check.valid) return budget_check;
   return { valid: true };
@@ -38,6 +44,9 @@ export function validate_update_project(body) {
   }
   if (body.progress_mode !== undefined && !PROGRESS_MODES.includes(body.progress_mode)) {
     return { valid: false, message: `progress_mode must be one of ${PROGRESS_MODES.join(', ')}` };
+  }
+  if (body.project_type !== undefined && !PROJECT_TYPES.includes(body.project_type)) {
+    return { valid: false, message: `project_type must be one of ${PROJECT_TYPES.join(', ')}` };
   }
   const budget_check = validate_budget_fields(body);
   if (!budget_check.valid) return budget_check;

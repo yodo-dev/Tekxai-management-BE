@@ -365,6 +365,7 @@ model projects {
   title           String
   description     String?
   status          String    @default("PENDING")
+  project_type    String    @default("CLIENT") // CLIENT | INTERNAL. Enterprise Performance Platform M1 — distinguishes revenue-bearing client work from internal/overhead work. See Tekxai-Operations-OS/08-Master-Gap-Analysis.md §11.5.
   progress        Int       @default(0)
   progress_mode   String    @default("MANUAL") // MANUAL | AUTO (auto = computed from milestone completion)
   total_hours     Int       @default(0)
@@ -396,6 +397,7 @@ model projects {
   weekly_updates     client_weekly_updates[]
   documents          project_documents[]
   extension_requests extension_requests[]
+  invoices           crm_invoices[]
 
   @@index([owner_id])
   @@index([status])
@@ -1962,6 +1964,7 @@ model crm_invoices {
   client_account_id String?
   lead_source       String?
   lead_id           String?
+  project_id        String? // Enterprise Performance Platform M1 — links invoice revenue to a project for attribution. See Tekxai-Operations-OS/08-Master-Gap-Analysis.md §11.5.
   title             String
   amount            Float     @default(0)
   currency          String    @default("USD")
@@ -1976,9 +1979,11 @@ model crm_invoices {
 
   client_account client_accounts? @relation(fields: [client_account_id], references: [id], onDelete: SetNull)
   creator        users?           @relation("invoice_creator", fields: [created_by], references: [id], onDelete: SetNull)
+  project        projects?        @relation(fields: [project_id], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@index([client_account_id])
+  @@index([project_id])
 }
 
 // ─── Education Records ────────────────────────────────────────────────────────

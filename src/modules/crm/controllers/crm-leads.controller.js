@@ -55,8 +55,8 @@ export async function handoff_update_ctrl(req, res, next) {
 // Invoices
 export async function invoices_list_ctrl(req, res, next) {
   try {
-    const { client_account_id, status, page, limit } = req.query;
-    const result = await list_invoices({ client_account_id, status, page, limit });
+    const { client_account_id, project_id, status, page, limit } = req.query;
+    const result = await list_invoices({ client_account_id, project_id, status, page, limit });
     res.json({ success: true, payload: result });
   } catch (e) { next(e); }
 }
