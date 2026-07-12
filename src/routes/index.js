@@ -10,6 +10,7 @@ import business_activities_routes from '../modules/business-activities/routes/bu
 import business_unit_rules_routes from '../modules/business-unit-rules/routes/business-unit-rules.routes.js';
 import enterprise_performance_routes from '../modules/enterprise-performance/routes/enterprise-performance.routes.js';
 import roi_routes           from '../modules/roi/routes/roi.routes.js';
+import executive_analytics_routes from '../modules/executive-analytics/routes/executive-analytics.routes.js';
 import divisions_routes     from '../modules/departments/routes/divisions.routes.js';
 import projects_routes      from '../modules/projects/routes/projects.routes.js';
 import tasks_routes         from '../modules/tasks/routes/tasks.routes.js';
@@ -77,6 +78,7 @@ router.use('/business-activities', business_activities_routes);
 router.use('/business-unit-rules', business_unit_rules_routes);
 router.use('/enterprise-performance', enterprise_performance_routes);
 router.use('/roi', roi_routes);
+router.use('/executive-analytics', executive_analytics_routes);
 router.use('/grades',            grades_routes);
 router.use('/divisions',         divisions_routes);
 router.use('/project',           projects_routes);
