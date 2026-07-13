@@ -58,6 +58,17 @@ const USER_SELECT = {
  *       - in: query
  *         name: sort_dir
  *         schema: { type: string, enum: [asc, desc] }
+ *       - in: query
+ *         name: employee_id
+ *         schema: { type: string }
+ *         description: Partial match on employee ID
+ *       - in: query
+ *         name: role
+ *         schema: { type: string }
+ *         description: Exact role name (e.g. ADMIN, EMPLOYEE)
+ *       - in: query
+ *         name: designation_id
+ *         schema: { type: string }
  *     responses:
  *       200:
  *         description: Paginated employee list with stats
@@ -71,6 +82,7 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
       q, division_id, department_id, team_id, status, employment_status,
       hire_from, page = 1, limit = 20, business_unit,
       sort_by = 'hire_date', sort_dir = 'desc',
+      employee_id, role, designation_id,
     } = req.query;
 
     const take = Math.min(+limit || 20, 100);
@@ -86,6 +98,13 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
     if (employment_status) {
       where.employee_profile = { employment_status: { equals: employment_status, mode: 'insensitive' } };
     }
+    // Dedicated filters (distinct from the fuzzy `q` search below) — added
+    // to replace the Employee Directory's temporary client-side filtering.
+    // All three are optional and compose with every other filter via the
+    // same `where` object, so pagination/count stay accurate.
+    if (employee_id)   where.employee_id = { contains: employee_id, mode: 'insensitive' };
+    if (role)          where.roles = { some: { role: { name: role } } };
+    if (designation_id) where.designation_id = designation_id;
     if (q) {
       where.OR = [
         { first_name: { contains: q, mode: 'insensitive' } },
