@@ -242,12 +242,13 @@ model departments {
   updated_at  DateTime  @updatedAt
   deleted_at  DateTime?
 
-  divisions    divisions[]
-  users        users[]
-  teams        teams[]
-  assets       assets[]
-  requisitions requisitions[] @relation("dept_requisitions")
-  designations designations[]
+  divisions       divisions[]
+  users           users[]
+  teams           teams[]
+  assets          assets[]
+  requisitions    requisitions[] @relation("dept_requisitions")
+  designations    designations[]
+  support_tickets support_tickets[]
 
   designation_history_previous designation_history[] @relation("designation_history_previous_department")
   designation_history_new      designation_history[] @relation("designation_history_new_department")
@@ -746,6 +747,8 @@ model support_tickets {
   ticket_number   String    @unique
   subject         String
   description     String
+  category        String?
+  department_id   String?
   recipient_role  String
   recipient_label String
   recipient_name  String
@@ -757,11 +760,13 @@ model support_tickets {
   created_at      DateTime  @default(now())
   updated_at      DateTime  @updatedAt
 
-  user    users            @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  replies ticket_replies[]
+  user       users            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  department departments?     @relation(fields: [department_id], references: [id], onDelete: SetNull)
+  replies    ticket_replies[]
 
   @@index([user_id])
   @@index([status])
+  @@index([department_id])
 }
 
 model ticket_replies {

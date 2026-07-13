@@ -42,7 +42,7 @@ export async function list_tickets({ user_id, is_admin = false, status, priority
     prisma.support_tickets.findMany({
       where, skip, take: limit,
       orderBy: { created_at: 'desc' },
-      include: { user: { select: USER_SELECT } },
+      include: { user: { select: USER_SELECT }, department: { select: { id: true, name: true } } },
     }),
   ]);
 
@@ -50,7 +50,10 @@ export async function list_tickets({ user_id, is_admin = false, status, priority
 }
 
 export async function get_ticket(id, user_id, is_admin) {
-  const t = await prisma.support_tickets.findUnique({ where: { id }, include: { user: { select: USER_SELECT } } });
+  const t = await prisma.support_tickets.findUnique({
+    where: { id },
+    include: { user: { select: USER_SELECT }, department: { select: { id: true, name: true } } },
+  });
   if (!t) throw app_error('Ticket not found', 404);
   if (!is_admin && t.user_id !== user_id) throw app_error('Forbidden', 403);
   const [attachments, replies] = await Promise.all([get_attachments_for(id), get_replies_for(id)]);
@@ -92,11 +95,14 @@ export async function get_ticket_stats() {
   return { by_status, total: Object.values(by_status).reduce((s, v) => s + v, 0) };
 }
 
-export async function create_ticket({ user_id, subject, description, recipient_role, recipient_label, recipient_name, priority }) {
+export async function create_ticket({ user_id, subject, description, category, department_id, recipient_role, recipient_label, recipient_name, priority }) {
   const ticket_number = await next_ticket_number();
   const ticket = await prisma.support_tickets.create({
-    data: { ticket_number, subject, description, recipient_role, recipient_label, recipient_name, priority, user_id },
-    include: { user: { select: { id: true, first_name: true, last_name: true } } },
+    data: { ticket_number, subject, description, category, department_id, recipient_role, recipient_label, recipient_name, priority, user_id },
+    include: {
+      user: { select: { id: true, first_name: true, last_name: true } },
+      department: { select: { id: true, name: true } },
+    },
   });
   return normalize_ticket(ticket);
 }
@@ -115,6 +121,9 @@ function normalize_ticket(t, attachments = [], replies = []) {
     ticket_number: t.ticket_number,
     subject: t.subject,
     description: t.description,
+    category: t.category,
+    departmentId: t.department_id,
+    department: t.department || null,
     recipientRole: t.recipient_role,
     recipientLabel: t.recipient_label,
     recipientName: t.recipient_name,
