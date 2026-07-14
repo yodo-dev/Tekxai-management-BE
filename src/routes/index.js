@@ -26,6 +26,8 @@ import settings_routes      from '../modules/settings/routes/settings.routes.js'
 import starred_routes       from '../modules/starred/routes/starred.routes.js';
 import notifications_routes from '../modules/notifications/routes/notifications.routes.js';
 import tickets_routes       from '../modules/tickets/routes/tickets.routes.js';
+import ticket_categories_routes from '../modules/ticket-categories/routes/ticket-categories.routes.js';
+import ticket_types_routes  from '../modules/ticket-types/routes/ticket-types.routes.js';
 import marketing_routes     from '../modules/marketing/routes/marketing.routes.js';
 import assets_routes        from '../modules/assets/routes/assets.routes.js';
 import activity_routes      from '../modules/activity-logs/routes/activity.routes.js';
@@ -92,6 +94,8 @@ router.use('/settings',          settings_routes);
 router.use('/starred',           starred_routes);
 router.use('/notification',      notifications_routes);
 router.use('/ticket',            tickets_routes);
+router.use('/ticket-categories', ticket_categories_routes);
+router.use('/ticket-types',      ticket_types_routes);
 router.use('/marketing',         marketing_routes);
 router.use('/asset',             assets_routes);
 

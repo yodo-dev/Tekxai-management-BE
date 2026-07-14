@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
-import { create_ticket_ctrl, get_ticket_ctrl, get_tickets, update_ticket_ctrl, add_attachment_ctrl, stats_ctrl, add_reply_ctrl } from '../controllers/tickets.controller.js';
+import {
+  approve_ctrl, create_ticket_ctrl, get_approvals_ctrl, get_ticket_ctrl, get_tickets,
+  update_ticket_ctrl, add_attachment_ctrl, stats_ctrl, add_reply_ctrl,
+} from '../controllers/tickets.controller.js';
 
 const ADMIN_HR = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
 
@@ -169,5 +172,38 @@ router.post('/:id/attachments', add_attachment_ctrl);
  *         description: Unauthorized
  */
 router.post('/:id/replies', add_reply_ctrl);
+
+/**
+ * @swagger
+ * /tickets/{id}/approvals:
+ *   get:
+ *     summary: Get a ticket's approval history
+ *     tags: [Tickets]
+ *     responses:
+ *       200: { description: Approval log }
+ */
+router.get('/:id/approvals', ADMIN_HR, get_approvals_ctrl);
+
+/**
+ * @swagger
+ * /tickets/{id}/approvals:
+ *   post:
+ *     summary: Approve or reject a ticket at its current (approval-gated) workflow step
+ *     tags: [Tickets]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [action]
+ *             properties:
+ *               action: { type: string, enum: [APPROVE, REJECT] }
+ *               comment: { type: string }
+ *     responses:
+ *       201: { description: Approval recorded }
+ *       400: { description: Invalid approval stage }
+ */
+router.post('/:id/approvals', ADMIN_HR, approve_ctrl);
 
 export default router;
