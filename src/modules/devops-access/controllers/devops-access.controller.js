@@ -47,7 +47,7 @@ function describe_devops_diff(before, after) {
   const changes = Object.keys(DIFF_FIELD_LABELS)
     .filter((f) => before[f] !== after[f])
     .map((f) => `${DIFF_FIELD_LABELS[f]} changed to ${after[f] ?? '—'}`);
-  return changes.length ? changes.join('; ') : 'Updated DevOps access tracking';
+  return changes.length ? changes.join('; ') : null;
 }
 
 export async function update_devops_access_ctrl(req, res, next) {
@@ -56,10 +56,13 @@ export async function update_devops_access_ctrl(req, res, next) {
     if (!valid) return fail(res, message);
     const before = await find_devops_access_by_project(req.params.projectId);
     const record = await upsert_devops_access(req.params.projectId, req.body);
-    log_activity({
-      user_id: req.user.id, action: 'UPDATE', entity_type: 'project', entity_id: req.params.projectId,
-      description: describe_devops_diff(before, record),
-    }).catch(() => {});
+    const description = describe_devops_diff(before, record);
+    if (description) {
+      log_activity({
+        user_id: req.user.id, action: 'UPDATE', entity_type: 'project', entity_id: req.params.projectId,
+        description,
+      }).catch(() => {});
+    }
     return ok(res, record, 'DevOps access updated');
   } catch (err) { next(err); }
 }
