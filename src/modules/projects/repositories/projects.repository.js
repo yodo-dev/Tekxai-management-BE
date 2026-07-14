@@ -3,12 +3,13 @@ import prisma from '../../../shared/database/client.js';
 const PROJECT_INCLUDE = {
   owner: { select: { id: true, first_name: true, last_name: true, avatar: true, email: true } },
   team_leader: { select: { id: true, first_name: true, last_name: true, avatar: true, email: true } },
-  members: { include: { user: { select: { id: true, first_name: true, last_name: true, avatar: true, email: true } } } },
+  members: { select: { role: true, user: { select: { id: true, first_name: true, last_name: true, avatar: true, email: true } } } },
   milestones: { orderBy: { due_date: 'asc' }, select: { id: true, title: true, due_date: true, completed: true, blocked: true } },
   devops_access: {
     select: {
       git_access_status: true, server_access_status: true, domain_access_status: true,
       email_smtp_access_status: true, aws_access_status: true,
+      point_of_communication: true, progress_shared_status: true,
     },
   },
   _count: { select: { members: true } },
@@ -90,8 +91,14 @@ function normalize_project(p, { is_saved = false, portal = null } = {}) {
     dev_status: p.dev_status,
     owner: p.owner,
     team_leader: p.team_leader,
-    members: p.members?.map((m) => m.user) || [],
+    members: p.members?.map((m) => ({ ...m.user, role: m.role })) || [],
     member_count: p._count?.members || 0,
+    // Compact per-role counts for list-view badges (e.g. { FRONTEND: 2, BACKEND: 3, QA: 1 }).
+    member_role_counts: (p.members || []).reduce((acc, m) => {
+      const role = m.role || 'MEMBER';
+      acc[role] = (acc[role] || 0) + 1;
+      return acc;
+    }, {}),
     milestones,
     current_milestone: breakdown.current,
     pending_milestones_count: breakdown.remaining,
@@ -103,6 +110,20 @@ function normalize_project(p, { is_saved = false, portal = null } = {}) {
       current: breakdown.current,
     },
     access_completion_score,
+    // Surfaces the same devops_access row already joined for access_completion_score
+    // above — no extra query, no duplicated calculation. Lets list/dashboard views
+    // show Point of Communication / Progress Shared / per-access-type status
+    // without a second call to GET /project/:id/devops-access.
+    devops_access: devops
+      ? {
+          point_of_communication: devops.point_of_communication,
+          progress_shared_status: devops.progress_shared_status,
+          git_access_status: devops.git_access_status,
+          server_access_status: devops.server_access_status,
+          domain_access_status: devops.domain_access_status,
+          email_smtp_access_status: devops.email_smtp_access_status,
+        }
+      : null,
     client_portal: portal
       ? { enabled: true, portal_user: portal.client?.name || null, status: portal.client?.status || null, access_level: portal.access_level }
       : { enabled: false, portal_user: null, status: null, access_level: null },
@@ -176,7 +197,19 @@ export async function find_project_by_id(id, user_id = null) {
   return normalize_project(p, { is_saved, portal: portal_map.get(id) || null });
 }
 
-export async function create_project({ title, description, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, progress_mode, project_type, budget, budget_currency, member_ids = [] }) {
+// Normalizes the two accepted member-assignment shapes into project_members
+// rows: the new `members: [{ user_id, role }]` (preferred, carries a
+// functional role) and the legacy `member_ids: string[]` (kept for backward
+// compatibility — every row defaults to role "MEMBER", the column's existing
+// default, so old callers/tests keep working unchanged).
+function to_member_rows(project_id, { member_ids, members }) {
+  if (Array.isArray(members)) {
+    return members.map((m) => ({ project_id, user_id: m.user_id, role: m.role || 'MEMBER' }));
+  }
+  return (member_ids || []).map((uid) => ({ project_id, user_id: uid }));
+}
+
+export async function create_project({ title, description, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, progress_mode, project_type, budget, budget_currency, member_ids = [], members }) {
   // NOTE: the final read must happen *after* the transaction commits — calling
   // find_project_by_id (which uses the outer `prisma` client) from inside the
   // transaction callback reads via a separate connection that can't see the
@@ -201,11 +234,9 @@ export async function create_project({ title, description, start_date, end_date,
       },
     });
 
-    if (member_ids.length > 0) {
-      await tx.project_members.createMany({
-        data: member_ids.map((uid) => ({ project_id: project.id, user_id: uid })),
-        skipDuplicates: true,
-      });
+    const member_rows = to_member_rows(project.id, { member_ids, members });
+    if (member_rows.length > 0) {
+      await tx.project_members.createMany({ data: member_rows, skipDuplicates: true });
     }
 
     return project.id;
@@ -214,7 +245,7 @@ export async function create_project({ title, description, start_date, end_date,
   return find_project_by_id(project_id);
 }
 
-export async function update_project(id, { title, description, status, progress, progress_mode, project_type, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, budget, budget_currency, budget_spent, member_ids }) {
+export async function update_project(id, { title, description, status, progress, progress_mode, project_type, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, budget, budget_currency, budget_spent, member_ids, members }) {
   // See create_project note above — read-after-write must happen post-commit.
   await prisma.$transaction(async (tx) => {
     const data = {};
@@ -237,13 +268,11 @@ export async function update_project(id, { title, description, status, progress,
 
     await tx.projects.update({ where: { id }, data });
 
-    if (Array.isArray(member_ids)) {
+    if (Array.isArray(members) || Array.isArray(member_ids)) {
       await tx.project_members.deleteMany({ where: { project_id: id } });
-      if (member_ids.length > 0) {
-        await tx.project_members.createMany({
-          data: member_ids.map((uid) => ({ project_id: id, user_id: uid })),
-          skipDuplicates: true,
-        });
+      const member_rows = to_member_rows(id, { member_ids, members });
+      if (member_rows.length > 0) {
+        await tx.project_members.createMany({ data: member_rows, skipDuplicates: true });
       }
     }
   });

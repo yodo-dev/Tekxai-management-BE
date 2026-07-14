@@ -10,6 +10,24 @@ export const PROGRESS_MODES = ['MANUAL', 'AUTO'];
 // Enterprise Performance Platform M1 — distinguishes revenue-bearing client work from
 // internal/overhead work. See Tekxai-Operations-OS/08-Master-Gap-Analysis.md §11.5.
 export const PROJECT_TYPES = ['CLIENT', 'INTERNAL'];
+// Reuses the existing project_members.role column (previously always "MEMBER",
+// never enforced). See Tekxai-Operations-OS gap audit — Sprint 2 Phase 2.
+export const PROJECT_MEMBER_ROLES = ['FRONTEND', 'BACKEND', 'TEAM_LEAD', 'QA', 'DEVOPS', 'UI_UX', 'MEMBER'];
+
+// `members` is the new shape ([{ user_id, role }]) accepted alongside the
+// legacy `member_ids` (plain string array, defaults every row to MEMBER) for
+// backward compatibility — see create_project/update_project in the repository.
+function validate_members_field(body) {
+  if (body.members === undefined) return { valid: true };
+  if (!Array.isArray(body.members)) return { valid: false, message: 'members must be an array' };
+  for (const m of body.members) {
+    if (!m?.user_id) return { valid: false, message: 'Each member requires a user_id' };
+    if (m.role !== undefined && !PROJECT_MEMBER_ROLES.includes(m.role)) {
+      return { valid: false, message: `member role must be one of ${PROJECT_MEMBER_ROLES.join(', ')}` };
+    }
+  }
+  return { valid: true };
+}
 
 function validate_budget_fields(body) {
   if (body.budget !== undefined && body.budget !== null && body.budget !== '' && +body.budget < 0) {
@@ -32,6 +50,8 @@ export function validate_create_project(body) {
   if (body.project_type !== undefined && !PROJECT_TYPES.includes(body.project_type)) {
     return { valid: false, message: `project_type must be one of ${PROJECT_TYPES.join(', ')}` };
   }
+  const members_check = validate_members_field(body);
+  if (!members_check.valid) return members_check;
   const budget_check = validate_budget_fields(body);
   if (!budget_check.valid) return budget_check;
   return { valid: true };
@@ -48,6 +68,8 @@ export function validate_update_project(body) {
   if (body.project_type !== undefined && !PROJECT_TYPES.includes(body.project_type)) {
     return { valid: false, message: `project_type must be one of ${PROJECT_TYPES.join(', ')}` };
   }
+  const members_check = validate_members_field(body);
+  if (!members_check.valid) return members_check;
   const budget_check = validate_budget_fields(body);
   if (!budget_check.valid) return budget_check;
   return { valid: true };
