@@ -59,9 +59,6 @@ import email_logs_routes       from '../modules/email/email-logs.routes.js';
 import payroll_router           from '../modules/payroll/payroll.routes.js';
 import webhooks_router         from '../modules/webhooks/webhooks.routes.js';
 import calendar_router         from '../modules/calendar/calendar.routes.js';
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
 
 const router = Router();
 
