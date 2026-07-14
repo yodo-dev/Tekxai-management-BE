@@ -16,7 +16,7 @@
     "db:studio": "NODE_ENV=development prisma studio",
     "db:reset": "NODE_ENV=development prisma migrate reset",
     "db:seed": "NODE_ENV=development node prisma/seeders/index.js",
-    "test": "node --test tests/**/*.test.js"
+    "test": "node --import ./tests/setup.js --test tests/**/*.test.js"
   },
   "prisma": {
     "seed": "node prisma/seeders/index.js"
