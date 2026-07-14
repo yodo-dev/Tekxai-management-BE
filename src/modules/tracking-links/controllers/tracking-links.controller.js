@@ -2,6 +2,7 @@ import {
   create_link, delete_link, find_link_by_id, find_links_by_project,
 } from '../repositories/tracking-links.repository.js';
 import { validate_create_link } from '../validators/tracking-links.validation.js';
+import { log_activity } from '../../activity-logs/repositories/activity.repository.js';
 
 function ok(res, payload, msg = 'OK', status = 200) {
   return res.status(status).json({ success: true, message: msg, payload });
@@ -23,6 +24,10 @@ export async function create_link_ctrl(req, res, next) {
     if (!valid) return fail(res, message);
     const { link_type, label, url } = req.body;
     const link = await create_link({ project_id: req.params.projectId, link_type, label, url, created_by: req.user.id });
+    log_activity({
+      user_id: req.user.id, action: 'CREATE', entity_type: 'project', entity_id: req.params.projectId,
+      description: `Added a ${link_type} tracking link${label ? ` (${label})` : ''}`,
+    }).catch(() => {});
     return ok(res, link, 'Tracking link added', 201);
   } catch (err) { next(err); }
 }
@@ -32,6 +37,10 @@ export async function delete_link_ctrl(req, res, next) {
     const existing = await find_link_by_id(req.params.linkId);
     if (!existing) return fail(res, 'Link not found', 404);
     await delete_link(req.params.linkId);
+    log_activity({
+      user_id: req.user.id, action: 'DELETE', entity_type: 'project', entity_id: existing.project_id,
+      description: `Removed the ${existing.link_type} tracking link${existing.label ? ` (${existing.label})` : ''}`,
+    }).catch(() => {});
     return ok(res, null, 'Tracking link deleted');
   } catch (err) { next(err); }
 }

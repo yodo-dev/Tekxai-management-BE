@@ -46,6 +46,10 @@ export async function delete_update_ctrl(req, res, next) {
     const existing = await find_update_by_id(req.params.updateId);
     if (!existing) return fail(res, 'Update not found', 404);
     await delete_update(req.params.updateId);
+    log_activity({
+      user_id: req.user.id, action: 'DELETE', entity_type: 'project', entity_id: existing.project_id,
+      description: `Removed a logged client update from ${existing.update_date?.toISOString?.().slice(0, 10) || existing.update_date}`,
+    }).catch(() => {});
     return ok(res, null, 'Weekly update deleted');
   } catch (err) { next(err); }
 }

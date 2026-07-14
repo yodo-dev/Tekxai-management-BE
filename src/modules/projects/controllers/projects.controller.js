@@ -71,16 +71,77 @@ export async function create_project_ctrl(req, res, next) {
   } catch (e) { return next(e); }
 }
 
+function name_of(user) {
+  if (!user) return 'Unknown';
+  return `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || 'Unknown';
+}
+
+// Diffs the member list before/after an update and logs one entry per
+// meaningful change (added / removed / role changed) — reuses the same
+// activity_logs table/entity_type as every other project event, no new store.
+function log_member_changes({ user_id, project_id, before_members, after_members }) {
+  const before_map = new Map(before_members.map((m) => [m.user_id, m]));
+  const after_map = new Map(after_members.map((m) => [m.user_id, m]));
+
+  for (const [uid, after] of after_map) {
+    const before = before_map.get(uid);
+    if (!before) {
+      log_activity({
+        user_id, action: 'UPDATE', entity_type: 'project', entity_id: project_id,
+        description: `Added ${name_of(after.user)} to the team as ${after.role}`,
+      }).catch(() => {});
+    } else if (before.role !== after.role) {
+      log_activity({
+        user_id, action: 'UPDATE', entity_type: 'project', entity_id: project_id,
+        description: `Changed ${name_of(after.user)}'s role from ${before.role} to ${after.role}`,
+      }).catch(() => {});
+    }
+  }
+
+  for (const [uid, before] of before_map) {
+    if (!after_map.has(uid)) {
+      log_activity({
+        user_id, action: 'UPDATE', entity_type: 'project', entity_id: project_id,
+        description: `Removed ${name_of(before.user)} from the team`,
+      }).catch(() => {});
+    }
+  }
+}
+
 export async function update_project_ctrl(req, res, next) {
   try {
     const { valid, message } = validate_update_project(req.body);
     if (!valid) return res.status(400).json({ success: false, message });
 
-    const before = req.body.status !== undefined
-      ? await prisma.projects.findUnique({ where: { id: req.params.id }, select: { status: true, title: true, owner_id: true, leader_id: true } })
+    const needs_before = req.body.status !== undefined || req.body.progress !== undefined
+      || Array.isArray(req.body.members) || Array.isArray(req.body.member_ids);
+    const before = needs_before
+      ? await prisma.projects.findUnique({
+        where: { id: req.params.id },
+        select: {
+          status: true, title: true, owner_id: true, leader_id: true, progress: true,
+          members: { select: { user_id: true, role: true, user: { select: { first_name: true, last_name: true, email: true } } } },
+        },
+      })
       : null;
 
     const updated = await update_existing_project(req.params.id, req.body, req.user.id);
+
+    if (before && req.body.progress !== undefined && +req.body.progress !== before.progress) {
+      log_activity({
+        user_id: req.user.id, action: 'UPDATE', entity_type: 'project', entity_id: req.params.id,
+        description: `Progress updated from ${before.progress}% to ${req.body.progress}%`,
+      }).catch(() => {});
+    }
+
+    if (before && (Array.isArray(req.body.members) || Array.isArray(req.body.member_ids))) {
+      log_member_changes({
+        user_id: req.user.id,
+        project_id: req.params.id,
+        before_members: before.members,
+        after_members: updated.members.map((m) => ({ user_id: m.id, role: m.role, user: m })),
+      });
+    }
 
     if (before && req.body.status !== undefined && req.body.status !== before.status) {
       log_activity({
