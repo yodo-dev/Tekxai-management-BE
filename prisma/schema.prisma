@@ -60,6 +60,10 @@ model users {
   starred_items               starred_items[]
   notifications               notifications[]
   support_tickets             support_tickets[]
+  assigned_tickets            support_tickets[]             @relation("ticket_assignee")
+  approved_tickets            support_tickets[]             @relation("ticket_approver")
+  ticket_approvals_made       ticket_approvals[]            @relation("ticket_approval_approver")
+  default_ticket_type_for     ticket_types[]                @relation("ticket_type_default_assignee")
   ticket_replies              ticket_replies[]
   marketing_deals             marketing_deals[]
   salary_builders             salary_builders[]
@@ -249,6 +253,7 @@ model departments {
   requisitions    requisitions[] @relation("dept_requisitions")
   designations    designations[]
   support_tickets support_tickets[]
+  ticket_types    ticket_types[]
 
   designation_history_previous designation_history[] @relation("designation_history_previous_department")
   designation_history_new      designation_history[] @relation("designation_history_new_department")
@@ -376,6 +381,8 @@ model teams {
   members    team_members[]
   projects   projects[]
   invites    invites[]
+  support_tickets     support_tickets[]
+  default_ticket_type_teams ticket_types[]
 
   @@index([department_id])
 }
@@ -435,6 +442,7 @@ model projects {
   documents          project_documents[]
   extension_requests extension_requests[]
   invoices           crm_invoices[]
+  support_tickets    support_tickets[]
 
   @@index([owner_id])
   @@index([status])
@@ -760,13 +768,114 @@ model support_tickets {
   created_at      DateTime  @default(now())
   updated_at      DateTime  @updatedAt
 
-  user       users            @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  department departments?     @relation(fields: [department_id], references: [id], onDelete: SetNull)
-  replies    ticket_replies[]
+  // ─── Enterprise Service Desk fields (additive/nullable — existing tickets
+  // keep ticket_type_id: null and continue working exactly as before) ──────
+  ticket_type_id     String?
+  assignee_id        String?
+  team_id            String?
+  severity           String? // global field, fixed values, same across every ticket type — not part of a type's field_schema
+  project_id         String?
+  custom_fields      Json? // type-specific field values, keyed by field_schema's field keys, grouped by section
+  response_due_at    DateTime? // stamped at creation from ticket_type.response_sla_mins
+  resolution_due_at  DateTime? // stamped at creation from ticket_type.resolution_sla_mins
+  // Fast-read denormalized flag — the source of truth for multi-step/history
+  // is the ticket_approvals log below (same relationship requisitions.status
+  // has to requisition_approvals). Only meaningful when the ticket's current
+  // workflow step is approval-gated.
+  approval_status    String? // PENDING | APPROVED | REJECTED
+  approved_by        String?
+  approved_at        DateTime?
+  asset_id           String? // set by an integration hook (e.g. on_approve: ASSET_RETURN)
+  closed_at          DateTime? // distinct from resolved_at — stamped when status reaches the type's terminal workflow step
+  // Frozen copy of the type's definition as it existed at creation time, so
+  // historical tickets render/validate identically forever even if the
+  // ticket_type is later renamed/edited. { type_id, type_name, category_id,
+  // category_name, field_schema, workflow } — see ticket_types below for the
+  // shape of field_schema/workflow (already full objects, not plain strings).
+  type_snapshot      Json?
+
+  user        users              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  department  departments?       @relation(fields: [department_id], references: [id], onDelete: SetNull)
+  replies     ticket_replies[]
+  ticket_type ticket_types?      @relation(fields: [ticket_type_id], references: [id], onDelete: SetNull)
+  assignee    users?             @relation("ticket_assignee", fields: [assignee_id], references: [id], onDelete: SetNull)
+  approver    users?             @relation("ticket_approver", fields: [approved_by], references: [id], onDelete: SetNull)
+  team        teams?             @relation(fields: [team_id], references: [id], onDelete: SetNull)
+  project     projects?          @relation(fields: [project_id], references: [id], onDelete: SetNull)
+  asset       assets?            @relation(fields: [asset_id], references: [id], onDelete: SetNull)
+  approvals   ticket_approvals[]
 
   @@index([user_id])
   @@index([status])
   @@index([department_id])
+  @@index([ticket_type_id])
+  @@index([assignee_id])
+  @@index([project_id])
+  @@index([severity])
+}
+
+// Multi-level/history-capable approval log — mirrors requisition_approvals'
+// exact shape/philosophy (see requisitions model above) rather than
+// inventing a new approval architecture. One row per approval action taken;
+// support_tickets.approval_status is the fast-read denormalized "current
+// state" derived from the latest row here for the ticket's current stage.
+model ticket_approvals {
+  id         String   @id @default(cuid())
+  ticket_id  String
+  approver_id String
+  action     String   // APPROVE | REJECT — same convention as requisition_approvals.action
+  comment    String?
+  stage      String?  // the workflow step key this approval decision belongs to
+  created_at DateTime @default(now())
+
+  ticket   support_tickets @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  approver users           @relation("ticket_approval_approver", fields: [approver_id], references: [id])
+
+  @@index([ticket_id])
+}
+
+// Category → Ticket Type hierarchy (Enterprise Service Desk). Both are pure
+// configuration tables — they define behavior/shape, they don't hold ticket
+// instances (those remain in support_tickets, unchanged).
+model ticket_categories {
+  id         String        @id @default(cuid())
+  key        String        @unique
+  label      String
+  sort_order Int           @default(0)
+  is_active  Boolean       @default(true)
+  created_at DateTime      @default(now())
+  updated_at DateTime      @updatedAt
+
+  ticket_types ticket_types[]
+}
+
+model ticket_types {
+  id                   String   @id @default(cuid())
+  key                  String   @unique
+  label                String
+  description          String?
+  category_id          String
+  department_id        String?
+  default_assignee_id  String?
+  default_team_id      String?
+  project_association  String   @default("NONE") // NONE | OPTIONAL | REQUIRED
+  field_schema         Json     // [{ section, fields: [{key,label,type,options,required}] }]
+  workflow             Json     // [{ key, label, requires_approval?, approver_role? }]
+  response_sla_mins    Int?
+  resolution_sla_mins  Int?
+  integration_hooks    Json?    // e.g. { "on_approve": "ASSET_RETURN" | "CREATE_REQUISITION" }
+  is_active            Boolean  @default(true)
+  sort_order           Int      @default(0)
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  category         ticket_categories @relation(fields: [category_id], references: [id], onDelete: Restrict)
+  department       departments?      @relation(fields: [department_id], references: [id], onDelete: SetNull)
+  default_assignee users?            @relation("ticket_type_default_assignee", fields: [default_assignee_id], references: [id], onDelete: SetNull)
+  default_team     teams?            @relation(fields: [default_team_id], references: [id], onDelete: SetNull)
+  tickets          support_tickets[]
+
+  @@index([category_id])
 }
 
 model ticket_replies {
@@ -897,6 +1006,7 @@ model assets {
   assignments asset_assignments[]
   maintenance asset_maintenance_logs[]
   disposals   asset_disposals[]
+  support_tickets support_tickets[]
 
   @@index([category_id])
   @@index([status])
