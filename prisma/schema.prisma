@@ -65,6 +65,10 @@ model users {
   ticket_approvals_made       ticket_approvals[]            @relation("ticket_approval_approver")
   default_ticket_type_for     ticket_types[]                @relation("ticket_type_default_assignee")
   ticket_replies              ticket_replies[]
+  responsible_for_assets      assets[]                      @relation("asset_responsible_user")
+  checklist_results_checked   checklist_results[]           @relation("checklist_result_checker")
+  asset_inspections_assigned  asset_inspections[]           @relation("asset_inspection_assignee")
+  asset_inspections_completed asset_inspections[]           @relation("asset_inspection_completer")
   marketing_deals             marketing_deals[]
   salary_builders             salary_builders[]
   upwork_bids                 upwork_bids[]
@@ -947,8 +951,15 @@ model asset_categories {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
-  assets   assets[]
-  requests asset_requests[]
+  // Safety & Compliance — category-level defaults, inherited by assets in
+  // this category unless a specific asset overrides them.
+  tracking_type                     String  @default("SERIALIZED") // SERIALIZED | QUANTITY
+  default_criticality                String  @default("MEDIUM")     // CRITICAL | HIGH | MEDIUM | LOW
+  default_inspection_frequency_days Int?
+
+  assets               assets[]
+  requests             asset_requests[]
+  compliance_requirements compliance_requirements[]
 }
 
 model asset_vendors {
@@ -970,12 +981,17 @@ model asset_locations {
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
 
-  assets assets[]
+  // Free-string, matching the existing users.business_unit convention
+  // (deliberately not an FK — same reasoning as business_unit_rules).
+  business_unit String?
+
+  assets                   assets[]
+  compliance_requirements compliance_requirements[]
 }
 
 model assets {
   id              String    @id @default(cuid())
-  asset_tag       String    @unique
+  asset_tag       String?   @unique // nullable: QUANTITY-tracked assets (per category.tracking_type) don't require a tag
   name            String
   brand           String?
   model           String?
@@ -999,18 +1015,35 @@ model assets {
   updated_at      DateTime  @updatedAt
   deleted_at      DateTime?
 
-  category    asset_categories         @relation(fields: [category_id], references: [id], onDelete: Restrict)
-  vendor      asset_vendors?           @relation(fields: [vendor_id], references: [id], onDelete: SetNull)
-  location    asset_locations?         @relation(fields: [location_id], references: [id], onDelete: SetNull)
-  department  departments?             @relation(fields: [department_id], references: [id], onDelete: SetNull)
-  assignments asset_assignments[]
-  maintenance asset_maintenance_logs[]
-  disposals   asset_disposals[]
-  support_tickets support_tickets[]
+  // Safety & Compliance fields (additive/nullable — existing assets unaffected)
+  expiry_date               DateTime?
+  compliance_status         String?   // WORKING | DAMAGED | MISSING | EXPIRED | OUT_OF_SERVICE | RETIRED
+  criticality               String    @default("MEDIUM") // CRITICAL | HIGH | MEDIUM | LOW — falls back to category.default_criticality at creation time
+  inspection_frequency_days Int?      // override; falls back to category.default_inspection_frequency_days when null
+  last_inspection_at        DateTime?
+  next_inspection_at        DateTime?
+  responsible_user_id       String?
+  required_quantity         Int?
+  current_quantity          Int?
+  minimum_quantity           Int?
+  reorder_quantity           Int?
+
+  category         asset_categories         @relation(fields: [category_id], references: [id], onDelete: Restrict)
+  vendor           asset_vendors?           @relation(fields: [vendor_id], references: [id], onDelete: SetNull)
+  location         asset_locations?         @relation(fields: [location_id], references: [id], onDelete: SetNull)
+  department       departments?             @relation(fields: [department_id], references: [id], onDelete: SetNull)
+  responsible_user users?                   @relation("asset_responsible_user", fields: [responsible_user_id], references: [id], onDelete: SetNull)
+  assignments      asset_assignments[]
+  maintenance      asset_maintenance_logs[]
+  disposals        asset_disposals[]
+  support_tickets  support_tickets[]
+  inspections      asset_inspections[]
 
   @@index([category_id])
   @@index([status])
   @@index([department_id])
+  @@index([compliance_status])
+  @@index([next_inspection_at])
 }
 
 model asset_assignments {
@@ -1036,16 +1069,22 @@ model asset_assignments {
 }
 
 model asset_maintenance_logs {
-  id            String    @id @default(cuid())
-  asset_id      String
-  type          String
-  description   String
-  cost          Float?
-  performed_by  String?
-  performed_at  DateTime  @default(now())
-  next_due_date DateTime?
-  created_at    DateTime  @default(now())
-  updated_at    DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  asset_id          String
+  type              String    // INSPECTION | SERVICE | REPAIR | REPLACEMENT | CALIBRATION | CLEANING | REFILL | TESTING | VENDOR_VISIT
+  description       String
+  cost              Float?
+  performed_by      String?
+  performed_at      DateTime  @default(now())
+  next_due_date     DateTime?
+  vendor_name       String?
+  invoice_reference String?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  // Before/after photo evidence reuses file_uploads (entity_type:
+  // 'maintenance_before_photo' / 'maintenance_after_photo', entity_id: this
+  // log's id) — no new attachment system, no columns needed here for it.
 
   asset assets @relation(fields: [asset_id], references: [id], onDelete: Cascade)
 
@@ -1088,6 +1127,141 @@ model asset_requests {
   @@index([status])
   @@index([user_id])
   @@index([asset_category_id])
+}
+
+// ─── Safety & Compliance ──────────────────────────────────────────────────────
+// Extends Asset Management (categories/assets/maintenance-logs above) rather
+// than duplicating it. Every table here reuses the existing entity_type/
+// entity_id polymorphic convention (already used by activity_logs/
+// file_uploads/channels) wherever it needs to reference more than one kind
+// of entity, so future non-asset consumers (audits, incidents, visitor
+// safety, etc.) can plug in later without a redesign.
+
+// Config-driven "what a location should have" — reusable across offices via
+// compliance_requirement_templates rather than configured one-by-one.
+model compliance_requirements {
+  id                       String    @id @default(cuid())
+  location_id              String
+  category_id               String
+  required_quantity         Int
+  status                    String    @default("ACTIVE") // ACTIVE | UNDER_MAINTENANCE | TEMPORARILY_DISABLED | NOT_APPLICABLE
+  applied_template_id       String?
+  applied_template_version Int?
+  notes                     String?
+  created_at                DateTime  @default(now())
+  updated_at                DateTime  @updatedAt
+
+  location asset_locations  @relation(fields: [location_id], references: [id], onDelete: Cascade)
+  category asset_categories @relation(fields: [category_id], references: [id], onDelete: Restrict)
+
+  @@unique([location_id, category_id])
+  @@index([location_id])
+  @@index([category_id])
+}
+
+// Reusable "apply to a location" presets (e.g. "Corporate Office Template").
+// Editing never mutates an existing version — a new version row is inserted
+// instead — so locations that already applied an older version are
+// unaffected (compliance_requirements.applied_template_version records which
+// version was used, purely for audit/history, not a live link).
+model compliance_requirement_templates {
+  id          String   @id @default(cuid())
+  key         String
+  version     Int      @default(1)
+  label       String
+  description String?
+  items       Json     // [{ category_id, required_quantity }]
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@unique([key, version])
+}
+
+// Generic checklist engine — entity_type defaults to "asset" (the only
+// consumer wired up in this milestone set) but is not constrained to it, so
+// Office/Kitchen/Electrical/Vendor/ISO audits can reuse this unchanged later.
+model checklist_templates {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  label       String
+  entity_type String   @default("asset")
+  items       Json     // [{ key, label }]
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  results checklist_results[]
+}
+
+model checklist_results {
+  id          String   @id @default(cuid())
+  entity_type String
+  entity_id   String
+  template_id String
+  results     Json     // { item_key: boolean }
+  checked_by  String
+  checked_at  DateTime @default(now())
+
+  template checklist_templates @relation(fields: [template_id], references: [id], onDelete: Restrict)
+  checker  users               @relation("checklist_result_checker", fields: [checked_by], references: [id])
+  inspections asset_inspections[]
+
+  @@index([entity_type, entity_id])
+  @@index([template_id])
+}
+
+// Mirrors the existing `tasks` assignment shape (assigned_to/due_date/status)
+// without reusing the tasks table itself — tasks require a non-nullable
+// project_id and are structurally project-bound, which inspections are not.
+model asset_inspections {
+  id                  String    @id @default(cuid())
+  asset_id            String
+  assigned_to          String
+  due_date             DateTime
+  completed_by         String?
+  completed_at         DateTime?
+  status               String    @default("PENDING") // PENDING | COMPLETED | OVERDUE
+  checklist_result_id String?
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
+
+  asset            assets              @relation(fields: [asset_id], references: [id], onDelete: Cascade)
+  assignee         users               @relation("asset_inspection_assignee", fields: [assigned_to], references: [id])
+  completer        users?              @relation("asset_inspection_completer", fields: [completed_by], references: [id], onDelete: SetNull)
+  checklist_result checklist_results?  @relation(fields: [checklist_result_id], references: [id], onDelete: SetNull)
+
+  @@index([asset_id])
+  @@index([assigned_to])
+  @@index([status])
+  @@index([due_date])
+}
+
+// Time-based escalation ladder, config-driven (not hardcoded), reused across
+// alert types via alert_type — e.g. INSPECTION_OVERDUE, EXPIRED, LOW_STOCK.
+model escalation_policies {
+  id         String   @id @default(cuid())
+  key        String   @unique
+  label      String
+  stages     Json     // [{ day_threshold, notify }]
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+// Tracks how far an actively-overdue item has already been escalated, so the
+// scheduler job never re-fires the same stage's notification twice.
+model compliance_escalations {
+  id               String    @id @default(cuid())
+  entity_type      String
+  entity_id        String
+  alert_type       String
+  stage_reached    Int       @default(0)
+  last_escalated_at DateTime?
+  created_at        DateTime  @default(now())
+
+  @@unique([entity_type, entity_id, alert_type])
+  @@index([entity_type, entity_id])
 }
 
 // ─── Performance Management ───────────────────────────────────────────────────
