@@ -1,8 +1,26 @@
 import prisma from '../../../shared/database/client.js';
 import { log_activity } from '../../activity-logs/repositories/activity.repository.js';
 import { create_notification } from '../../notifications/services/notifications.service.js';
+import { validate_not_a_medicine, validate_tracking_type_rules } from '../validators/assets.validation.js';
 
 function app_error(m, c = 400) { const e = new Error(m); e.status_code = c; return e; }
+
+// Category-dependent validation (tracking-type rules + medicine denylist) —
+// requires the category row, so it lives here rather than in the stateless
+// validator module, same pattern as the Ticket module's custom_fields
+// validation against its loaded ticket_type.
+async function validate_against_category(category_id, body, { is_update = false } = {}) {
+  const category = await prisma.asset_categories.findUnique({ where: { id: category_id } });
+  if (!category) throw app_error('Category not found', 404);
+
+  const tracking = validate_tracking_type_rules(category, body, { is_update });
+  if (!tracking.valid) throw app_error(tracking.message, 400);
+
+  const medicine = validate_not_a_medicine(category, body);
+  if (!medicine.valid) throw app_error(medicine.message, 400);
+
+  return category;
+}
 
 const ASSET_INCLUDE = {
   category: true,
@@ -56,10 +74,21 @@ function parse_dates(d) {
 export async function create_asset(data) {
   const { user_id, assigned_at, ...assetData } = data;
   parse_dates(assetData);
-  if (!assetData.asset_tag) {
+
+  const category = await validate_against_category(assetData.category_id, assetData, { is_update: false });
+
+  // Auto-generated tag only applies to SERIALIZED assets — QUANTITY-tracked
+  // assets (Band-Aids, PPE, etc.) intentionally have no tag at all.
+  if (category.tracking_type === 'SERIALIZED' && !assetData.asset_tag) {
     const count = await prisma.assets.count();
     assetData.asset_tag = `AST-${String(count + 1001).padStart(4, '0')}`;
   }
+  // Category-level defaults, inherited unless the caller overrides them.
+  if (assetData.criticality === undefined) assetData.criticality = category.default_criticality;
+  if (assetData.inspection_frequency_days === undefined && category.default_inspection_frequency_days) {
+    assetData.inspection_frequency_days = category.default_inspection_frequency_days;
+  }
+
   if (user_id) {
     assetData.status = 'ASSIGNED';
     return prisma.$transaction(async (tx) => {
@@ -79,8 +108,10 @@ export async function create_asset(data) {
 }
 
 export async function update_asset(id, data) {
-  await get_asset(id);
+  const existing = await get_asset(id);
   parse_dates(data);
+  const category_id = data.category_id || existing.category_id;
+  await validate_against_category(category_id, data, { is_update: true });
   return prisma.assets.update({ where: { id }, data, include: ASSET_INCLUDE });
 }
 
@@ -340,12 +371,18 @@ export async function list_categories() {
   });
 }
 
-export async function create_category({ name, description, is_device = false, is_assignable = true }) {
+export async function create_category({
+  name, description, is_device = false, is_assignable = true,
+  tracking_type = 'SERIALIZED', default_criticality = 'MEDIUM', default_inspection_frequency_days,
+}) {
   const code = name.toUpperCase().replace(/[^A-Z0-9]/g, '_').replace(/_+/g, '_').slice(0, 20);
   return prisma.asset_categories.upsert({
     where: { code },
-    update: { name, description, is_device, is_assignable, is_active: true },
-    create: { name, code, description, is_device, is_assignable, is_active: true, sort_order: 50 },
+    update: { name, description, is_device, is_assignable, is_active: true, tracking_type, default_criticality, default_inspection_frequency_days },
+    create: {
+      name, code, description, is_device, is_assignable, is_active: true, sort_order: 50,
+      tracking_type, default_criticality, default_inspection_frequency_days: default_inspection_frequency_days ?? null,
+    },
   });
 }
 

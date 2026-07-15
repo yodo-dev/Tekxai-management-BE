@@ -20,6 +20,7 @@ import {
   return_asset,
   update_asset,
 } from '../services/assets.service.js';
+import { validate_asset } from '../validators/assets.validation.js';
 
 export async function get_assets(req, res, next) {
   try {
@@ -33,8 +34,11 @@ export async function get_asset_ctrl(req, res, next) {
 }
 
 export async function create_asset_ctrl(req, res, next) {
-  try { return res.status(201).json({ success: true, payload: await create_asset(req.body) }); }
-  catch (e) { return next(e); }
+  try {
+    const { valid, message } = validate_asset(req.body);
+    if (!valid) return res.status(400).json({ success: false, message });
+    return res.status(201).json({ success: true, payload: await create_asset(req.body) });
+  } catch (e) { return next(e); }
 }
 
 export async function update_asset_ctrl(req, res, next) {
