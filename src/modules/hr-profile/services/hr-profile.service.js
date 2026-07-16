@@ -2,6 +2,7 @@ import prisma from '../../../shared/database/client.js';
 import { set_employment_status } from '../../users/repositories/users.repository.js';
 import { validate_employment_status } from '../../users/constants/employment-status.js';
 import { set_lifecycle_stage } from './employee-lifecycle.service.js';
+import { field_error } from '../../../shared/errors/field_error.js';
 
 const PROFILE_SELECT = {
   id: true, user_id: true, profile_status: true, lifecycle_stage: true,
@@ -64,11 +65,7 @@ export async function upsert_hr_profile(user_id, data, actor_user_id) {
   // employee_profiles.employment_status can never drift apart.
   if (data.employment_status !== undefined) {
     const check = validate_employment_status(data.employment_status);
-    if (!check.valid) {
-      const e = new Error(check.message);
-      e.status_code = 422;
-      throw e;
-    }
+    if (!check.valid) throw field_error(check.message, 'employment_status', 'INVALID_VALUE', 422);
     await set_employment_status(user_id, data.employment_status);
   }
 

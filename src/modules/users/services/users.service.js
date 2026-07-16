@@ -1,7 +1,9 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../../../shared/database/client.js';
-import { create_user, find_user_by_id, find_users, soft_delete_user, update_user, set_employment_status, record_designation_change } from '../repositories/users.repository.js';
+import { create_user, find_user_by_id, find_users, soft_delete_user, update_user, set_employment_status, record_designation_change, set_user_role } from '../repositories/users.repository.js';
 import { validate_employment_status } from '../constants/employment-status.js';
+import { validate_create_user } from '../validators/users.validation.js';
+import { field_error } from '../../../shared/errors/field_error.js';
 import { set_lifecycle_stage } from '../../hr-profile/services/employee-lifecycle.service.js';
 import { validate_lifecycle_stage } from '../../hr-profile/constants/employee-lifecycle.js';
 import { trigger_employee_created } from '../../automation/services/automation.service.js';
@@ -35,8 +37,11 @@ async function generate_employee_id() {
 }
 
 export async function create_new_user(body, actor_user_id) {
+  const check = validate_create_user(body);
+  if (!check.valid) throw field_error(check.message, check.field, check.code, 422);
+
   const existing = await prisma.users.findUnique({ where: { email: body.email } });
-  if (existing) throw app_error('Email already in use', 409);
+  if (existing) throw field_error('Email already in use', 'email', 'DUPLICATE_EMAIL', 409);
 
   const password_hash = await bcrypt.hash(body.password || Math.random().toString(36), 12);
   const { team_id, ...rest } = body;
@@ -83,15 +88,26 @@ export async function update_existing_user(id, body, actor_user_id) {
   // sync, or the designation_history audit trail. This matters in practice:
   // the Employee Profile page's Organization card already PUTs designation
   // changes through this exact generic endpoint.
-  const { team_id, password, status, lifecycle_stage, designation_id, grade_id, department_id, ...rest } = body;
+  // RBAC ISOLATION: role_id/role/roles/permissions/user_permissions are
+  // stripped here too, on top of update_user()'s own unconditional strip —
+  // this endpoint (generic profile update, reached by Employee Directory,
+  // Employee Profile, HR flows) must never be able to influence RBAC even
+  // if a future refactor changes what update_user() does with its input.
+  // Role assignment has exactly one write path: change_user_role() below,
+  // reachable only via the dedicated PUT /users/:id/role endpoint.
+  const {
+    team_id, password, status, lifecycle_stage, designation_id, grade_id, department_id,
+    role_id, role, roles, permissions, user_permissions,
+    ...rest
+  } = body;
   if (password) {
-    if (password.length < 8) throw app_error('Password must be at least 8 characters', 422);
+    if (password.length < 8) throw field_error('Password must be at least 8 characters', 'password', 'MIN_LENGTH', 422);
     rest.password_hash = await bcrypt.hash(password, 12);
   }
 
   if (status !== undefined) {
     const check = validate_employment_status(status);
-    if (!check.valid) throw app_error(check.message, 422);
+    if (!check.valid) throw field_error(check.message, 'status', 'INVALID_VALUE', 422);
     await set_employment_status(id, status);
   }
 
@@ -192,4 +208,32 @@ export async function change_user_designation(id, body, actor_user_id) {
 export async function delete_user(id) {
   await get_user(id);
   await soft_delete_user(id);
+}
+
+// RBAC — the ONE write path for a user's role assignment. Only the dedicated
+// RBAC/User Management endpoint (PUT /users/:id/role) calls this; no HR
+// Profile, Employee Directory, or Add/Edit Employee endpoint may reach it.
+// This is the fix for the SUPER_ADMIN -> EMPLOYEE demotion bug: that
+// corruption happened because a generic profile-update endpoint was allowed
+// to silently carry a (wrong, defaulted) role_id through to a user_roles
+// write. Requiring a distinct, explicit action for role changes closes that
+// path structurally, not just by patching the one call site that broke.
+export async function change_user_role(id, role_id, actor_user_id) {
+  await get_user(id); // throws 404 if not found
+  if (!role_id) throw field_error('role_id is required', 'role_id', 'REQUIRED_FIELD', 422);
+
+  const role = await prisma.roles.findUnique({ where: { id: role_id } });
+  if (!role) throw field_error('Role not found', 'role_id', 'INVALID_VALUE', 404);
+
+  const user = await set_user_role(id, role_id);
+
+  await log_activity({
+    user_id: actor_user_id || id,
+    action: 'UPDATE',
+    entity_type: 'user_role',
+    entity_id: id,
+    description: `Role changed to ${role.name} for ${user.first_name || ''} ${user.last_name || ''}`.trim(),
+  }).catch(() => {});
+
+  return user;
 }

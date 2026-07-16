@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate, can_or_role } from '../../../shared/middleware/authenticate.js';
-import { create_div, delete_div, get_div, get_all_divs, update_div } from '../controllers/departments.controller.js';
+import { bulk_delete_divs, create_div, delete_div, get_div, get_all_divs, update_div } from '../controllers/departments.controller.js';
 
 // Standalone division management — same owning module as Departments (People/Org Structure).
 const router = Router();
@@ -84,5 +84,30 @@ router.put('/:id', EDIT, update_div);
  *         description: Unauthorized
  */
 router.delete('/:id', EDIT, delete_div);
+
+/**
+ * @swagger
+ * /divisions/bulk-delete:
+ *   post:
+ *     summary: Bulk delete divisions (soft delete), returns per-item results
+ *     tags: [Divisions]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ids]
+ *             properties:
+ *               ids: { type: array, items: { type: string } }
+ *     responses:
+ *       200:
+ *         description: Per-item delete results
+ *       400:
+ *         description: ids array required
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/bulk-delete', EDIT, bulk_delete_divs);
 
 export default router;

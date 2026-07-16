@@ -24,7 +24,7 @@ export async function get_invite(id) {
   return inv;
 }
 
-export async function send_invite({ email, role_id, team_id, department, designation, invited_by }) {
+export async function send_invite({ email, role_id, team_id, department_id, designation_id, grade_id, invited_by }) {
   const existing = await prisma.invites.findFirst({
     where: { email, status: 'PENDING', expires_at: { gt: new Date() } },
   });
@@ -38,8 +38,24 @@ export async function send_invite({ email, role_id, team_id, department, designa
     resolved_role_id = employee_role.id;
   }
 
+  // Snapshot the display names alongside the FK ids — the legacy `department`/
+  // `designation` free-text columns are kept only so existing list/search
+  // code (find_invites' search-by-text) keeps working, not as a second
+  // source of truth: department_id/designation_id/grade_id are authoritative
+  // and are what redeem_invite() actually uses to create the real user.
+  const [dept, desig] = await Promise.all([
+    department_id ? prisma.departments.findUnique({ where: { id: department_id }, select: { name: true } }) : null,
+    designation_id ? prisma.designations.findUnique({ where: { id: designation_id }, select: { name: true } }) : null,
+  ]);
+
   const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-  const invite = await create_invite({ email, role_id: resolved_role_id, team_id, department, designation, invited_by, expires_at });
+  const invite = await create_invite({
+    email, role_id: resolved_role_id, team_id,
+    department_id, designation_id, grade_id,
+    department: dept?.name || null,
+    designation: desig?.name || null,
+    invited_by, expires_at,
+  });
 
   // Send invite email (non-fatal — invite is still created if email fails)
   try {
@@ -71,6 +87,9 @@ export async function preview_token(token) {
     role: inv.role,
     department: inv.department,
     designation: inv.designation,
+    department_id: inv.department_id,
+    designation_id: inv.designation_id,
+    grade_id: inv.grade_id,
     user_exists,
     requires_login_only: user_exists,
   };
@@ -95,7 +114,18 @@ export async function redeem_invite({ token, first_name, last_name, password }) 
   const password_hash = await bcrypt.hash(password, 12);
   const user = await prisma.$transaction(async (tx) => {
     const u = await tx.users.create({
-      data: { email: inv.email, password_hash, first_name, last_name, designation: inv.designation, status: 'ACTIVE' },
+      data: {
+        email: inv.email, password_hash, first_name, last_name, status: 'ACTIVE',
+        // FK ids are authoritative — this is the fix for the invite/employee
+        // desync bug: redemption used to only copy the free-text `designation`
+        // string with no department/grade at all, leaving invite-redeemed
+        // accounts with no department and a designation disconnected from
+        // the designations table.
+        department_id: inv.department_id || undefined,
+        designation_id: inv.designation_id || undefined,
+        grade_id: inv.grade_id || undefined,
+        designation: inv.designation || undefined,
+      },
     });
     if (inv.role_id) {
       await tx.user_roles.create({ data: { user_id: u.id, role_id: inv.role_id } });

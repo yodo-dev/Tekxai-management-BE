@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { run_probation_reminders } from './jobs/probation-reminders.job.js';
 import { run_compliance_escalation_job } from './jobs/compliance-escalation.job.js';
 import { run_ticket_sla_escalation_job } from './jobs/ticket-sla-escalation.job.js';
+import { run_meeting_action_item_reminders } from './jobs/meeting-action-item-reminders.job.js';
 
 // First scheduled job in this codebase (Sprint 1 Phase 4 Milestone 3). There
 // was previously zero cron/scheduled-job infrastructure anywhere in be-work
@@ -35,5 +36,13 @@ export function start_scheduler() {
     });
   });
 
-  console.log('[scheduler] started — probation reminders scheduled daily at 09:00, compliance escalation daily at 08:00, ticket SLA escalation every 15 min');
+  // Runs once daily at 9:30 AM server time — after the probation batch so
+  // meeting action-item reminders land in a distinct notification wave.
+  cron.schedule('30 9 * * *', () => {
+    run_meeting_action_item_reminders().catch((err) => {
+      console.error('[scheduler] run_meeting_action_item_reminders failed:', err.message);
+    });
+  });
+
+  console.log('[scheduler] started — probation reminders scheduled daily at 09:00, compliance escalation daily at 08:00, ticket SLA escalation every 15 min, meeting action-item reminders daily at 09:30');
 }

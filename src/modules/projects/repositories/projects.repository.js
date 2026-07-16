@@ -89,6 +89,12 @@ function normalize_project(p, { is_saved = false, portal = null } = {}) {
     leader_id: p.leader_id,
     client_name: p.client_name,
     dev_status: p.dev_status,
+    // Persisted correctly by create_project/update_project but previously
+    // dropped here — the API returned no budget at all despite the DB
+    // having the right value (Priority 1, confirmed root cause).
+    budget: p.budget,
+    budget_currency: p.budget_currency,
+    budget_spent: p.budget_spent,
     owner: p.owner,
     team_leader: p.team_leader,
     members: p.members?.map((m) => ({ ...m.user, role: m.role })) || [],

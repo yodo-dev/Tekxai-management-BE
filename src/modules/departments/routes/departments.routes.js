@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate, authorize, can_or_role } from '../../../shared/middleware/authenticate.js';
-import { create_dept, create_div, delete_dept, get_dept, get_departments, get_divs, update_dept } from '../controllers/departments.controller.js';
+import { bulk_delete_depts, create_dept, create_div, delete_dept, get_dept, get_departments, get_divs, update_dept } from '../controllers/departments.controller.js';
 
 const router = Router();
 router.use(authenticate);
@@ -112,6 +112,31 @@ router.put('/:id', ADMIN, update_dept);
  *         description: Unauthorized
  */
 router.delete('/:id', ADMIN, delete_dept);
+
+/**
+ * @swagger
+ * /departments/bulk-delete:
+ *   post:
+ *     summary: Bulk delete departments (soft delete), returns per-item results
+ *     tags: [Departments]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ids]
+ *             properties:
+ *               ids: { type: array, items: { type: string } }
+ *     responses:
+ *       200:
+ *         description: Per-item delete results
+ *       400:
+ *         description: ids array required
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/bulk-delete', ADMIN, bulk_delete_depts);
 
 /**
  * @swagger

@@ -17,7 +17,7 @@ const USER_SELECT = {
   team_memberships: { select: { team: { select: { id: true, name: true } } }, take: 1 },
   supervisor: { select: { id: true, first_name: true, last_name: true, avatar: true, designation: true } },
   employee_profile: { select: { employment_status: true, employment_type: true, grade: true, base_salary: true, profile_status: true } },
-  roles: { select: { role: { select: { name: true } } }, take: 1 },
+  roles: { select: { role: { select: { id: true, name: true } } }, take: 1 },
 };
 
 /**
@@ -82,7 +82,7 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
       q, division_id, department_id, team_id, status, employment_status,
       hire_from, page = 1, limit = 20, business_unit,
       sort_by = 'hire_date', sort_dir = 'desc',
-      employee_id, role, designation_id,
+      employee_id, role, designation_id, lifecycle_stage,
     } = req.query;
 
     const take = Math.min(+limit || 20, 100);
@@ -92,11 +92,21 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
     if (business_unit) where.business_unit = business_unit;
     if (division_id)   where.division_id = division_id;
     if (department_id) where.department_id = department_id;
-    if (status)        where.status = { equals: status, mode: 'insensitive' };
+    // "PENDING" is not a users.status value — it maps to a draft HR profile
+    // (employee_profile.profile_status = 'DRAFT'), the same flag the Add
+    // Employee wizard's "Save as Draft" action sets.
+    if (status === 'PENDING') {
+      where.employee_profile = { ...(where.employee_profile || {}), profile_status: 'DRAFT' };
+    } else if (status) {
+      where.status = { equals: status, mode: 'insensitive' };
+    }
     if (hire_from)     where.hire_date = { gte: new Date(hire_from) };
     if (team_id)       where.team_memberships = { some: { team_id } };
     if (employment_status) {
-      where.employee_profile = { employment_status: { equals: employment_status, mode: 'insensitive' } };
+      where.employee_profile = { ...(where.employee_profile || {}), employment_status: { equals: employment_status, mode: 'insensitive' } };
+    }
+    if (lifecycle_stage) {
+      where.employee_profile = { ...(where.employee_profile || {}), lifecycle_stage };
     }
     // Dedicated filters (distinct from the fuzzy `q` search below) — added
     // to replace the Employee Directory's temporary client-side filtering.
@@ -170,6 +180,13 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
       where: { ...baseWhere, hire_date: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } },
     });
 
+    const pending = await prisma.users.count({
+      where: { ...baseWhere, employee_profile: { profile_status: 'DRAFT' } },
+    });
+    const probation = await prisma.users.count({
+      where: { ...baseWhere, employee_profile: { lifecycle_stage: 'PROBATION' } },
+    });
+
     const normalized = records.map(u => ({
       id: u.id, email: u.email,
       full_name: `${u.first_name || ''} ${u.last_name || ''}`.trim(),
@@ -191,6 +208,11 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
       grade: u.employee_profile?.grade,
       base_salary: u.employee_profile?.base_salary,
       role: u.roles?.[0]?.role?.name,
+      // Fixes the Employee Directory -> Edit User role-corruption bug: the
+      // edit form's role dropdown previously had no id to prefill from here
+      // (only a bare name string), so it silently defaulted to EMPLOYEE and
+      // that wrong id got submitted back on save.
+      role_id: u.roles?.[0]?.role?.id || null,
     }));
 
     return res.json({
@@ -206,6 +228,8 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
           on_leave,
           new_this_month,
           suspended: stat_map['SUSPENDED'] || 0,
+          pending,
+          probation,
         },
       },
     });
@@ -234,7 +258,7 @@ router.get('/stats', ADMIN_HR, async (req, res, next) => {
     const { business_unit } = req.query;
     const baseWhere = { deleted_at: null, ...(business_unit ? { business_unit } : {}) };
 
-    const [total, active, inactive, on_leave, suspended] = await Promise.all([
+    const [total, active, inactive, on_leave, suspended, pending, probation] = await Promise.all([
       prisma.users.count({ where: baseWhere }),
       prisma.users.count({ where: { ...baseWhere, status: 'ACTIVE' } }),
       prisma.users.count({ where: { ...baseWhere, status: 'INACTIVE' } }),
@@ -242,6 +266,8 @@ router.get('/stats', ADMIN_HR, async (req, res, next) => {
         where: { status: 'APPROVED', start_date: { lte: new Date() }, end_date: { gte: new Date() } },
       }),
       prisma.users.count({ where: { ...baseWhere, status: 'SUSPENDED' } }),
+      prisma.users.count({ where: { ...baseWhere, employee_profile: { profile_status: 'DRAFT' } } }),
+      prisma.users.count({ where: { ...baseWhere, employee_profile: { lifecycle_stage: 'PROBATION' } } }),
     ]);
 
     const now = new Date();
@@ -253,7 +279,7 @@ router.get('/stats', ADMIN_HR, async (req, res, next) => {
 
     return res.json({
       success: true,
-      payload: { total, active, inactive, on_leave, new_this_month, suspended },
+      payload: { total, active, inactive, on_leave, new_this_month, suspended, pending, probation },
     });
   } catch (err) { next(err); }
 });

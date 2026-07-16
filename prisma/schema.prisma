@@ -34,108 +34,116 @@ model users {
   updated_at     DateTime  @updatedAt
   deleted_at     DateTime?
 
-  roles                       user_roles[]
-  refresh_tokens              auth_refresh_tokens[]
-  otp_codes                   otp_codes[]
-  settings                    user_settings?
-  department                  departments?                  @relation(fields: [department_id], references: [id], onDelete: SetNull)
-  division                    divisions?                    @relation(fields: [division_id], references: [id], onDelete: SetNull)
-  designation_ref             designations?                 @relation(fields: [designation_id], references: [id], onDelete: SetNull)
-  grade                       grades?                       @relation(fields: [grade_id], references: [id], onDelete: SetNull)
-  supervisor                  users?                        @relation("user_supervisor", fields: [supervisor_id], references: [id], onDelete: SetNull)
-  subordinates                users[]                       @relation("user_supervisor")
-  team_memberships            team_members[]
-  managed_teams               teams[]                       @relation("team_manager")
-  owned_projects              projects[]                    @relation("project_owner")
-  led_projects                projects[]                    @relation("project_leader")
-  extension_requests_made     extension_requests[]          @relation("extension_requester")
-  extension_requests_reviewed extension_requests[]          @relation("extension_reviewer")
-  project_memberships         project_members[]
-  timesheet_entries           timesheet_entries[]
-  time_off_requests           time_off_requests[]
-  timesheet_edit_requests     timesheet_edit_requests[]
-  user_permissions            user_permissions[]
-  invites_sent                invites[]                     @relation("invite_sender")
-  redeemed_invite             invites?                      @relation("invite_redeemed_by")
-  starred_items               starred_items[]
-  notifications               notifications[]
-  support_tickets             support_tickets[]
-  assigned_tickets            support_tickets[]             @relation("ticket_assignee")
-  approved_tickets            support_tickets[]             @relation("ticket_approver")
-  ticket_approvals_made       ticket_approvals[]            @relation("ticket_approval_approver")
-  default_ticket_type_for     ticket_types[]                @relation("ticket_type_default_assignee")
-  ticket_replies              ticket_replies[]
-  responsible_for_assets      assets[]                      @relation("asset_responsible_user")
-  checklist_results_checked   checklist_results[]           @relation("checklist_result_checker")
-  asset_inspections_assigned  asset_inspections[]           @relation("asset_inspection_assignee")
-  asset_inspections_completed asset_inspections[]           @relation("asset_inspection_completer")
-  marketing_deals             marketing_deals[]
-  salary_builders             salary_builders[]
-  upwork_bids                 upwork_bids[]
-  linkedin_leads              linkedin_leads[]
-  email_leads                 email_leads[]
-  linkedin_activity           linkedin_activity[]
-  deposits_created            deposits[]
-  marketing_targets           marketing_targets[]
-  asset_assignments           asset_assignments[]
-  asset_requests_made         asset_requests[]              @relation("asset_request_requester")
-  asset_requests_for_me       asset_requests[]              @relation("asset_request_target")
-  asset_requests_reviewed     asset_requests[]              @relation("asset_request_reviewer")
-  daily_reports               daily_progress_reports[]
-  performance_scores          employee_performance_scores[]
-  performance_reviews         performance_reviews[]
-  assigned_tasks              tasks[]                       @relation("task_assignee")
-  created_sub_items           task_sub_items[]              @relation("sub_item_creator")
-  task_time_logs              task_time_logs[]              @relation("task_time_logs")
-  payroll_entries             payroll_entries[]             @relation("payroll_entries")
-  processed_runs              payroll_runs[]                @relation("payroll_processor")
-  employee_shifts             employee_shifts[]
-  attendance_violations       attendance_violations[]
-  leave_balances              leave_balances[]
-  job_description             job_descriptions?
-  activity_logs               activity_logs[]
-  screenshot_sessions         screenshot_sessions[]
-  screenshots                 screenshots[]
-  productivity_sessions       productivity_sessions[]
-  file_uploads                file_uploads[]
-  onboarding_tasks            onboarding_tasks[]
-  offboarding_tasks           offboarding_tasks[]
-  contracts                   contracts[]
-  policy_acknowledgements     policy_acknowledgements[]
-  employee_profile            employee_profiles?
-  employee_documents          employee_documents[]
-  uploaded_documents          employee_documents[]          @relation("doc_uploader")
-  requisitions_raised         requisitions[]                @relation("req_requester")
-  requisition_approvals       requisition_approvals[]       @relation("req_approver")
-  crm_handoffs_assigned       crm_handoffs[]                @relation("handoff_assignee")
-  crm_handoffs_created        crm_handoffs[]                @relation("handoff_creator")
-  crm_invoices_created        crm_invoices[]                @relation("invoice_creator")
-  project_discussions         project_discussions[]
-  channel_memberships         channel_members[]
-  messages                    messages[]
-  education_records           education_records[]
-  employment_history          employment_history[]
-  emergency_contacts          emergency_contacts[]
-  salary_increments           salary_increments[]
-  increments_approved         salary_increments[]           @relation("increment_approver")
-  designation_history         designation_history[]
-  designation_changes_made    designation_history[]         @relation("designation_history_actor")
-  overtime_requests           overtime_requests[]
-  overtime_approved           overtime_requests[]           @relation("overtime_approver")
-  expense_account             expense_accounts?
-  expense_transactions        expense_transactions[]        @relation("expense_txn_user")
-  created_expense_txns        expense_transactions[]        @relation("expense_txn_creator")
-  financial_reports           financial_reports[]
-  download_events             download_events[]
-  app_usage_logs              app_usage_logs[]
-  two_factor_enabled          Boolean                       @default(false)
-  two_factor_secret           String?
-  google_id                   String?                       @unique
-  created_webhooks            webhooks[]                    @relation("webhook_creator")
-  saved_reports               saved_reports[]               @relation("saved_reports_creator")
-  google_calendar_token       google_calendar_tokens?
-  client_weekly_updates       client_weekly_updates[]
-  project_documents_uploaded  project_documents[]
+  roles                         user_roles[]
+  refresh_tokens                auth_refresh_tokens[]
+  otp_codes                     otp_codes[]
+  settings                      user_settings?
+  department                    departments?                  @relation(fields: [department_id], references: [id], onDelete: SetNull)
+  division                      divisions?                    @relation(fields: [division_id], references: [id], onDelete: SetNull)
+  designation_ref               designations?                 @relation(fields: [designation_id], references: [id], onDelete: SetNull)
+  grade                         grades?                       @relation(fields: [grade_id], references: [id], onDelete: SetNull)
+  supervisor                    users?                        @relation("user_supervisor", fields: [supervisor_id], references: [id], onDelete: SetNull)
+  subordinates                  users[]                       @relation("user_supervisor")
+  team_memberships              team_members[]
+  managed_teams                 teams[]                       @relation("team_manager")
+  owned_projects                projects[]                    @relation("project_owner")
+  led_projects                  projects[]                    @relation("project_leader")
+  extension_requests_made       extension_requests[]          @relation("extension_requester")
+  extension_requests_reviewed   extension_requests[]          @relation("extension_reviewer")
+  project_memberships           project_members[]
+  timesheet_entries             timesheet_entries[]
+  time_off_requests             time_off_requests[]
+  timesheet_edit_requests       timesheet_edit_requests[]
+  user_permissions              user_permissions[]
+  invites_sent                  invites[]                     @relation("invite_sender")
+  redeemed_invite               invites?                      @relation("invite_redeemed_by")
+  starred_items                 starred_items[]
+  notifications                 notifications[]
+  support_tickets               support_tickets[]
+  assigned_tickets              support_tickets[]             @relation("ticket_assignee")
+  approved_tickets              support_tickets[]             @relation("ticket_approver")
+  ticket_approvals_made         ticket_approvals[]            @relation("ticket_approval_approver")
+  default_ticket_type_for       ticket_types[]                @relation("ticket_type_default_assignee")
+  ticket_replies                ticket_replies[]
+  responsible_for_assets        assets[]                      @relation("asset_responsible_user")
+  checklist_results_checked     checklist_results[]           @relation("checklist_result_checker")
+  asset_inspections_assigned    asset_inspections[]           @relation("asset_inspection_assignee")
+  asset_inspections_completed   asset_inspections[]           @relation("asset_inspection_completer")
+  marketing_deals               marketing_deals[]
+  salary_builders               salary_builders[]
+  upwork_bids                   upwork_bids[]
+  linkedin_leads                linkedin_leads[]
+  email_leads                   email_leads[]
+  linkedin_activity             linkedin_activity[]
+  deposits_created              deposits[]
+  marketing_targets             marketing_targets[]
+  asset_assignments             asset_assignments[]
+  asset_requests_made           asset_requests[]              @relation("asset_request_requester")
+  asset_requests_for_me         asset_requests[]              @relation("asset_request_target")
+  asset_requests_reviewed       asset_requests[]              @relation("asset_request_reviewer")
+  daily_reports                 daily_progress_reports[]
+  performance_scores            employee_performance_scores[]
+  performance_reviews           performance_reviews[]
+  assigned_tasks                tasks[]                       @relation("task_assignee")
+  created_sub_items             task_sub_items[]              @relation("sub_item_creator")
+  task_time_logs                task_time_logs[]              @relation("task_time_logs")
+  payroll_entries               payroll_entries[]             @relation("payroll_entries")
+  processed_runs                payroll_runs[]                @relation("payroll_processor")
+  employee_shifts               employee_shifts[]
+  attendance_violations         attendance_violations[]
+  leave_balances                leave_balances[]
+  job_description               job_descriptions?
+  activity_logs                 activity_logs[]
+  screenshot_sessions           screenshot_sessions[]
+  screenshots                   screenshots[]
+  productivity_sessions         productivity_sessions[]
+  file_uploads                  file_uploads[]
+  onboarding_tasks              onboarding_tasks[]
+  offboarding_tasks             offboarding_tasks[]
+  contracts                     contracts[]
+  policy_acknowledgements       policy_acknowledgements[]
+  employee_profile              employee_profiles?
+  employee_documents            employee_documents[]
+  uploaded_documents            employee_documents[]          @relation("doc_uploader")
+  requisitions_raised           requisitions[]                @relation("req_requester")
+  requisition_approvals         requisition_approvals[]       @relation("req_approver")
+  crm_handoffs_assigned         crm_handoffs[]                @relation("handoff_assignee")
+  crm_handoffs_created          crm_handoffs[]                @relation("handoff_creator")
+  crm_invoices_created          crm_invoices[]                @relation("invoice_creator")
+  project_discussions           project_discussions[]
+  channel_memberships           channel_members[]
+  messages                      messages[]
+  education_records             education_records[]
+  employment_history            employment_history[]
+  emergency_contacts            emergency_contacts[]
+  salary_increments             salary_increments[]
+  increments_approved           salary_increments[]           @relation("increment_approver")
+  designation_history           designation_history[]
+  designation_changes_made      designation_history[]         @relation("designation_history_actor")
+  overtime_requests             overtime_requests[]
+  overtime_approved             overtime_requests[]           @relation("overtime_approver")
+  expense_account               expense_accounts?
+  expense_transactions          expense_transactions[]        @relation("expense_txn_user")
+  created_expense_txns          expense_transactions[]        @relation("expense_txn_creator")
+  financial_reports             financial_reports[]
+  download_events               download_events[]
+  app_usage_logs                app_usage_logs[]
+  two_factor_enabled            Boolean                       @default(false)
+  two_factor_secret             String?
+  google_id                     String?                       @unique
+  created_webhooks              webhooks[]                    @relation("webhook_creator")
+  saved_reports                 saved_reports[]               @relation("saved_reports_creator")
+  google_calendar_token         google_calendar_tokens?
+  client_weekly_updates         client_weekly_updates[]
+  project_documents_uploaded    project_documents[]
+  owned_meeting_rooms           meeting_rooms[]               @relation("meeting_room_owner")
+  meeting_room_memberships      meeting_room_members[]        @relation("meeting_room_member_user")
+  organized_meetings            meetings[]                    @relation("meeting_organizer")
+  meeting_participations        meeting_participants[]        @relation("meeting_participant_user")
+  meeting_notes_authored        meeting_notes[]               @relation("meeting_note_author")
+  meeting_decisions_made        meeting_decisions[]           @relation("meeting_decision_decider")
+  meeting_action_items_assigned meeting_action_items[]        @relation("meeting_action_item_assignee")
+  meeting_attachments_uploaded  meeting_attachments[]         @relation("meeting_attachment_uploader")
 
   @@index([department_id])
   @@index([division_id])
@@ -254,10 +262,12 @@ model departments {
   users           users[]
   teams           teams[]
   assets          assets[]
-  requisitions    requisitions[] @relation("dept_requisitions")
+  requisitions    requisitions[]    @relation("dept_requisitions")
   designations    designations[]
   support_tickets support_tickets[]
   ticket_types    ticket_types[]
+  meeting_rooms   meeting_rooms[]
+  invites         invites[]
 
   designation_history_previous designation_history[] @relation("designation_history_previous_department")
   designation_history_new      designation_history[] @relation("designation_history_new_department")
@@ -291,6 +301,7 @@ model designations {
 
   department departments? @relation(fields: [department_id], references: [id], onDelete: SetNull)
   users      users[]
+  invites    invites[]
 
   designation_history_previous designation_history[] @relation("designation_history_previous_designation")
   designation_history_new      designation_history[] @relation("designation_history_new_designation")
@@ -324,14 +335,14 @@ model business_activities {
 // introduced by adding a row here before any user is ever tagged with it.
 // See Tekxai-Operations-OS/08-Master-Gap-Analysis.md §11.4.
 model business_unit_rules {
-  id                       String   @id @default(cuid())
-  business_unit            String   @unique // matches users.business_unit values, e.g. "ERP", "CRM"
-  default_allocation_method String  @default("TIME_SHARE") // TIME_SHARE | FIXED_SHARE | HEADCOUNT_SHARE
-  revenue_source_type      String   @default("INVOICE") // INVOICE | RETAINER_ALLOCATION | MANUAL_ESTIMATE — this unit's default revenue attribution source (§11.1)
-  performance_weights      Json?    // unit-specific KPI weighting overrides for the Performance Engine (§11.3), null = use platform defaults
-  is_active                Boolean  @default(true)
-  created_at               DateTime @default(now())
-  updated_at               DateTime @updatedAt
+  id                        String   @id @default(cuid())
+  business_unit             String   @unique // matches users.business_unit values, e.g. "ERP", "CRM"
+  default_allocation_method String   @default("TIME_SHARE") // TIME_SHARE | FIXED_SHARE | HEADCOUNT_SHARE
+  revenue_source_type       String   @default("INVOICE") // INVOICE | RETAINER_ALLOCATION | MANUAL_ESTIMATE — this unit's default revenue attribution source (§11.1)
+  performance_weights       Json? // unit-specific KPI weighting overrides for the Performance Engine (§11.3), null = use platform defaults
+  is_active                 Boolean  @default(true)
+  created_at                DateTime @default(now())
+  updated_at                DateTime @updatedAt
 }
 
 model grades {
@@ -344,7 +355,8 @@ model grades {
   updated_at  DateTime  @updatedAt
   deleted_at  DateTime?
 
-  users users[]
+  users   users[]
+  invites invites[]
 
   designation_history_previous designation_history[] @relation("designation_history_previous_grade")
   designation_history_new      designation_history[] @relation("designation_history_new_grade")
@@ -379,13 +391,13 @@ model teams {
   updated_at    DateTime  @updatedAt
   deleted_at    DateTime?
 
-  department departments?   @relation(fields: [department_id], references: [id], onDelete: SetNull)
-  division   divisions?     @relation(fields: [division_id], references: [id], onDelete: SetNull)
-  manager    users?         @relation("team_manager", fields: [manager_id], references: [id], onDelete: SetNull)
-  members    team_members[]
-  projects   projects[]
-  invites    invites[]
-  support_tickets     support_tickets[]
+  department                departments?      @relation(fields: [department_id], references: [id], onDelete: SetNull)
+  division                  divisions?        @relation(fields: [division_id], references: [id], onDelete: SetNull)
+  manager                   users?            @relation("team_manager", fields: [manager_id], references: [id], onDelete: SetNull)
+  members                   team_members[]
+  projects                  projects[]
+  invites                   invites[]
+  support_tickets           support_tickets[]
   default_ticket_type_teams ticket_types[]
 
   @@index([department_id])
@@ -714,8 +726,15 @@ model invites {
   token          String    @unique @default(cuid())
   role_id        String
   team_id        String?
+  // Legacy free-text snapshot — kept for display/backward-compat only. New
+  // writes populate department_id/designation_id/grade_id below;
+  // redeem_invite() now maps an invite onto the same FK columns `users` uses
+  // instead of leaving a disconnected string with no relation.
   department     String?
   designation    String?
+  department_id  String?
+  designation_id String?
+  grade_id       String?
   status         String    @default("PENDING")
   invited_by     String
   expires_at     DateTime
@@ -724,14 +743,20 @@ model invites {
   created_at     DateTime  @default(now())
   updated_at     DateTime  @updatedAt
 
-  role        roles  @relation(fields: [role_id], references: [id], onDelete: Restrict)
-  team        teams? @relation(fields: [team_id], references: [id], onDelete: SetNull)
-  inviter     users  @relation("invite_sender", fields: [invited_by], references: [id], onDelete: Cascade)
-  redeemed_by users? @relation("invite_redeemed_by", fields: [redeemed_by_id], references: [id])
+  role            roles         @relation(fields: [role_id], references: [id], onDelete: Restrict)
+  team            teams?        @relation(fields: [team_id], references: [id], onDelete: SetNull)
+  department_ref  departments?  @relation(fields: [department_id], references: [id], onDelete: SetNull)
+  designation_ref designations? @relation(fields: [designation_id], references: [id], onDelete: SetNull)
+  grade_ref       grades?       @relation(fields: [grade_id], references: [id], onDelete: SetNull)
+  inviter         users         @relation("invite_sender", fields: [invited_by], references: [id], onDelete: Cascade)
+  redeemed_by     users?        @relation("invite_redeemed_by", fields: [redeemed_by_id], references: [id])
 
   @@index([email])
   @@index([token])
   @@index([status])
+  @@index([department_id])
+  @@index([designation_id])
+  @@index([grade_id])
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -774,29 +799,29 @@ model support_tickets {
 
   // ─── Enterprise Service Desk fields (additive/nullable — existing tickets
   // keep ticket_type_id: null and continue working exactly as before) ──────
-  ticket_type_id     String?
-  assignee_id        String?
-  team_id            String?
-  severity           String? // global field, fixed values, same across every ticket type — not part of a type's field_schema
-  project_id         String?
-  custom_fields      Json? // type-specific field values, keyed by field_schema's field keys, grouped by section
-  response_due_at    DateTime? // stamped at creation from ticket_type.response_sla_mins
-  resolution_due_at  DateTime? // stamped at creation from ticket_type.resolution_sla_mins
+  ticket_type_id    String?
+  assignee_id       String?
+  team_id           String?
+  severity          String? // global field, fixed values, same across every ticket type — not part of a type's field_schema
+  project_id        String?
+  custom_fields     Json? // type-specific field values, keyed by field_schema's field keys, grouped by section
+  response_due_at   DateTime? // stamped at creation from ticket_type.response_sla_mins
+  resolution_due_at DateTime? // stamped at creation from ticket_type.resolution_sla_mins
   // Fast-read denormalized flag — the source of truth for multi-step/history
   // is the ticket_approvals log below (same relationship requisitions.status
   // has to requisition_approvals). Only meaningful when the ticket's current
   // workflow step is approval-gated.
-  approval_status    String? // PENDING | APPROVED | REJECTED
-  approved_by        String?
-  approved_at        DateTime?
-  asset_id           String? // set by an integration hook (e.g. on_approve: ASSET_RETURN)
-  closed_at          DateTime? // distinct from resolved_at — stamped when status reaches the type's terminal workflow step
+  approval_status   String? // PENDING | APPROVED | REJECTED
+  approved_by       String?
+  approved_at       DateTime?
+  asset_id          String? // set by an integration hook (e.g. on_approve: ASSET_RETURN)
+  closed_at         DateTime? // distinct from resolved_at — stamped when status reaches the type's terminal workflow step
   // Frozen copy of the type's definition as it existed at creation time, so
   // historical tickets render/validate identically forever even if the
   // ticket_type is later renamed/edited. { type_id, type_name, category_id,
   // category_name, field_schema, workflow } — see ticket_types below for the
   // shape of field_schema/workflow (already full objects, not plain strings).
-  type_snapshot      Json?
+  type_snapshot     Json?
 
   user        users              @relation(fields: [user_id], references: [id], onDelete: Cascade)
   department  departments?       @relation(fields: [department_id], references: [id], onDelete: SetNull)
@@ -824,13 +849,13 @@ model support_tickets {
 // support_tickets.approval_status is the fast-read denormalized "current
 // state" derived from the latest row here for the ticket's current stage.
 model ticket_approvals {
-  id         String   @id @default(cuid())
-  ticket_id  String
+  id          String   @id @default(cuid())
+  ticket_id   String
   approver_id String
-  action     String   // APPROVE | REJECT — same convention as requisition_approvals.action
-  comment    String?
-  stage      String?  // the workflow step key this approval decision belongs to
-  created_at DateTime @default(now())
+  action      String // APPROVE | REJECT — same convention as requisition_approvals.action
+  comment     String?
+  stage       String? // the workflow step key this approval decision belongs to
+  created_at  DateTime @default(now())
 
   ticket   support_tickets @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
   approver users           @relation("ticket_approval_approver", fields: [approver_id], references: [id])
@@ -842,36 +867,36 @@ model ticket_approvals {
 // configuration tables — they define behavior/shape, they don't hold ticket
 // instances (those remain in support_tickets, unchanged).
 model ticket_categories {
-  id         String        @id @default(cuid())
-  key        String        @unique
+  id         String   @id @default(cuid())
+  key        String   @unique
   label      String
-  sort_order Int           @default(0)
-  is_active  Boolean       @default(true)
-  created_at DateTime      @default(now())
-  updated_at DateTime      @updatedAt
+  sort_order Int      @default(0)
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   ticket_types ticket_types[]
 }
 
 model ticket_types {
-  id                   String   @id @default(cuid())
-  key                  String   @unique
-  label                String
-  description          String?
-  category_id          String
-  department_id        String?
-  default_assignee_id  String?
-  default_team_id      String?
-  project_association  String   @default("NONE") // NONE | OPTIONAL | REQUIRED
-  field_schema         Json     // [{ section, fields: [{key,label,type,options,required}] }]
-  workflow             Json     // [{ key, label, requires_approval?, approver_role? }]
-  response_sla_mins    Int?
-  resolution_sla_mins  Int?
-  integration_hooks    Json?    // e.g. { "on_approve": "ASSET_RETURN" | "CREATE_REQUISITION" }
-  is_active            Boolean  @default(true)
-  sort_order           Int      @default(0)
-  created_at           DateTime @default(now())
-  updated_at           DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  key                 String   @unique
+  label               String
+  description         String?
+  category_id         String
+  department_id       String?
+  default_assignee_id String?
+  default_team_id     String?
+  project_association String   @default("NONE") // NONE | OPTIONAL | REQUIRED
+  field_schema        Json // [{ section, fields: [{key,label,type,options,required}] }]
+  workflow            Json // [{ key, label, requires_approval?, approver_role? }]
+  response_sla_mins   Int?
+  resolution_sla_mins Int?
+  integration_hooks   Json? // e.g. { "on_approve": "ASSET_RETURN" | "CREATE_REQUISITION" }
+  is_active           Boolean  @default(true)
+  sort_order          Int      @default(0)
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
 
   category         ticket_categories @relation(fields: [category_id], references: [id], onDelete: Restrict)
   department       departments?      @relation(fields: [department_id], references: [id], onDelete: SetNull)
@@ -953,12 +978,12 @@ model asset_categories {
 
   // Safety & Compliance — category-level defaults, inherited by assets in
   // this category unless a specific asset overrides them.
-  tracking_type                     String  @default("SERIALIZED") // SERIALIZED | QUANTITY
-  default_criticality                String  @default("MEDIUM")     // CRITICAL | HIGH | MEDIUM | LOW
+  tracking_type                     String @default("SERIALIZED") // SERIALIZED | QUANTITY
+  default_criticality               String @default("MEDIUM") // CRITICAL | HIGH | MEDIUM | LOW
   default_inspection_frequency_days Int?
 
-  assets               assets[]
-  requests             asset_requests[]
+  assets                  assets[]
+  requests                asset_requests[]
   compliance_requirements compliance_requirements[]
 }
 
@@ -985,7 +1010,7 @@ model asset_locations {
   // (deliberately not an FK — same reasoning as business_unit_rules).
   business_unit String?
 
-  assets                   assets[]
+  assets                  assets[]
   compliance_requirements compliance_requirements[]
 }
 
@@ -1017,16 +1042,16 @@ model assets {
 
   // Safety & Compliance fields (additive/nullable — existing assets unaffected)
   expiry_date               DateTime?
-  compliance_status         String?   // WORKING | DAMAGED | MISSING | EXPIRED | OUT_OF_SERVICE | RETIRED
+  compliance_status         String? // WORKING | DAMAGED | MISSING | EXPIRED | OUT_OF_SERVICE | RETIRED
   criticality               String    @default("MEDIUM") // CRITICAL | HIGH | MEDIUM | LOW — falls back to category.default_criticality at creation time
-  inspection_frequency_days Int?      // override; falls back to category.default_inspection_frequency_days when null
+  inspection_frequency_days Int? // override; falls back to category.default_inspection_frequency_days when null
   last_inspection_at        DateTime?
   next_inspection_at        DateTime?
   responsible_user_id       String?
   required_quantity         Int?
   current_quantity          Int?
-  minimum_quantity           Int?
-  reorder_quantity           Int?
+  minimum_quantity          Int?
+  reorder_quantity          Int?
 
   category         asset_categories         @relation(fields: [category_id], references: [id], onDelete: Restrict)
   vendor           asset_vendors?           @relation(fields: [vendor_id], references: [id], onDelete: SetNull)
@@ -1071,7 +1096,7 @@ model asset_assignments {
 model asset_maintenance_logs {
   id                String    @id @default(cuid())
   asset_id          String
-  type              String    // INSPECTION | SERVICE | REPAIR | REPLACEMENT | CALIBRATION | CLEANING | REFILL | TESTING | VENDOR_VISIT
+  type              String // INSPECTION | SERVICE | REPAIR | REPLACEMENT | CALIBRATION | CLEANING | REFILL | TESTING | VENDOR_VISIT
   description       String
   cost              Float?
   performed_by      String?
@@ -1140,16 +1165,16 @@ model asset_requests {
 // Config-driven "what a location should have" — reusable across offices via
 // compliance_requirement_templates rather than configured one-by-one.
 model compliance_requirements {
-  id                       String    @id @default(cuid())
+  id                       String   @id @default(cuid())
   location_id              String
-  category_id               String
-  required_quantity         Int
-  status                    String    @default("ACTIVE") // ACTIVE | UNDER_MAINTENANCE | TEMPORARILY_DISABLED | NOT_APPLICABLE
-  applied_template_id       String?
+  category_id              String
+  required_quantity        Int
+  status                   String   @default("ACTIVE") // ACTIVE | UNDER_MAINTENANCE | TEMPORARILY_DISABLED | NOT_APPLICABLE
+  applied_template_id      String?
   applied_template_version Int?
-  notes                     String?
-  created_at                DateTime  @default(now())
-  updated_at                DateTime  @updatedAt
+  notes                    String?
+  created_at               DateTime @default(now())
+  updated_at               DateTime @updatedAt
 
   location asset_locations  @relation(fields: [location_id], references: [id], onDelete: Cascade)
   category asset_categories @relation(fields: [category_id], references: [id], onDelete: Restrict)
@@ -1170,7 +1195,7 @@ model compliance_requirement_templates {
   version     Int      @default(1)
   label       String
   description String?
-  items       Json     // [{ category_id, required_quantity }]
+  items       Json // [{ category_id, required_quantity }]
   is_active   Boolean  @default(true)
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
@@ -1186,7 +1211,7 @@ model checklist_templates {
   key         String   @unique
   label       String
   entity_type String   @default("asset")
-  items       Json     // [{ key, label }]
+  items       Json // [{ key, label }]
   is_active   Boolean  @default(true)
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
@@ -1199,12 +1224,12 @@ model checklist_results {
   entity_type String
   entity_id   String
   template_id String
-  results     Json     // { item_key: boolean }
+  results     Json // { item_key: boolean }
   checked_by  String
   checked_at  DateTime @default(now())
 
-  template checklist_templates @relation(fields: [template_id], references: [id], onDelete: Restrict)
-  checker  users               @relation("checklist_result_checker", fields: [checked_by], references: [id])
+  template    checklist_templates @relation(fields: [template_id], references: [id], onDelete: Restrict)
+  checker     users               @relation("checklist_result_checker", fields: [checked_by], references: [id])
   inspections asset_inspections[]
 
   @@index([entity_type, entity_id])
@@ -1217,19 +1242,19 @@ model checklist_results {
 model asset_inspections {
   id                  String    @id @default(cuid())
   asset_id            String
-  assigned_to          String
-  due_date             DateTime
-  completed_by         String?
-  completed_at         DateTime?
-  status               String    @default("PENDING") // PENDING | COMPLETED | OVERDUE
+  assigned_to         String
+  due_date            DateTime
+  completed_by        String?
+  completed_at        DateTime?
+  status              String    @default("PENDING") // PENDING | COMPLETED | OVERDUE
   checklist_result_id String?
-  created_at           DateTime  @default(now())
-  updated_at           DateTime  @updatedAt
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
 
-  asset            assets              @relation(fields: [asset_id], references: [id], onDelete: Cascade)
-  assignee         users               @relation("asset_inspection_assignee", fields: [assigned_to], references: [id])
-  completer        users?              @relation("asset_inspection_completer", fields: [completed_by], references: [id], onDelete: SetNull)
-  checklist_result checklist_results?  @relation(fields: [checklist_result_id], references: [id], onDelete: SetNull)
+  asset            assets             @relation(fields: [asset_id], references: [id], onDelete: Cascade)
+  assignee         users              @relation("asset_inspection_assignee", fields: [assigned_to], references: [id])
+  completer        users?             @relation("asset_inspection_completer", fields: [completed_by], references: [id], onDelete: SetNull)
+  checklist_result checklist_results? @relation(fields: [checklist_result_id], references: [id], onDelete: SetNull)
 
   @@index([asset_id])
   @@index([assigned_to])
@@ -1243,7 +1268,7 @@ model escalation_policies {
   id         String   @id @default(cuid())
   key        String   @unique
   label      String
-  stages     Json     // [{ day_threshold, notify }]
+  stages     Json // [{ day_threshold, notify }]
   is_active  Boolean  @default(true)
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -1252,11 +1277,11 @@ model escalation_policies {
 // Tracks how far an actively-overdue item has already been escalated, so the
 // scheduler job never re-fires the same stage's notification twice.
 model compliance_escalations {
-  id               String    @id @default(cuid())
-  entity_type      String
-  entity_id        String
-  alert_type       String
-  stage_reached    Int       @default(0)
+  id                String    @id @default(cuid())
+  entity_type       String
+  entity_id         String
+  alert_type        String
+  stage_reached     Int       @default(0)
   last_escalated_at DateTime?
   created_at        DateTime  @default(now())
 
@@ -2572,7 +2597,7 @@ model task_time_logs {
   seconds              Int      @default(0)
   note                 String?
   business_activity_id String? // Enterprise Performance Platform M2 — see §11.2. Nullable: pre-existing logs have none.
-  allocation_method     String   @default("TIME_SHARE") // TIME_SHARE | FIXED_SHARE | HEADCOUNT_SHARE — see §11.4
+  allocation_method    String   @default("TIME_SHARE") // TIME_SHARE | FIXED_SHARE | HEADCOUNT_SHARE — see §11.4
   logged_at            DateTime @default(now())
   created_at           DateTime @default(now())
 
@@ -2609,19 +2634,19 @@ model payroll_runs {
 }
 
 model payroll_entries {
-  id              String   @id @default(cuid())
-  run_id          String
-  user_id         String
-  base_salary     Float    @default(0)
-  working_days    Int      @default(0)
-  present_days    Int      @default(0)
-  overtime_hours  Float    @default(0)
-  overtime_amount Float    @default(0)
-  bonus_amount    Float    @default(0)
-  deductions      Float    @default(0)
-  gross_amount    Float    @default(0)
-  net_amount      Float    @default(0)
-  tax_amount      Float    @default(0)
+  id                    String   @id @default(cuid())
+  run_id                String
+  user_id               String
+  base_salary           Float    @default(0)
+  working_days          Int      @default(0)
+  present_days          Int      @default(0)
+  overtime_hours        Float    @default(0)
+  overtime_amount       Float    @default(0)
+  bonus_amount          Float    @default(0)
+  deductions            Float    @default(0)
+  gross_amount          Float    @default(0)
+  net_amount            Float    @default(0)
+  tax_amount            Float    @default(0)
   // Sprint 3: Payroll x Attendance/Leave integration. paid_leave_days counts
   // toward earned pay (present_days + paid_leave_days, capped at working_days);
   // unpaid_leave_days and absent_days are informational breakdowns only —
@@ -2629,12 +2654,12 @@ model payroll_entries {
   // simply not added to paid_leave_days), it has no separate deduction line.
   // late_deduction and absence_penalty ARE separate deduction line items,
   // folded into `deductions` alongside tax_amount.
-  paid_leave_days     Int   @default(0)
-  unpaid_leave_days   Int   @default(0)
-  absent_days         Int   @default(0)
-  late_violation_count Int  @default(0)
-  late_deduction      Float @default(0)
-  absence_penalty     Float @default(0)
+  paid_leave_days       Int      @default(0)
+  unpaid_leave_days     Int      @default(0)
+  absent_days           Int      @default(0)
+  late_violation_count  Int      @default(0)
+  late_deduction        Float    @default(0)
+  absence_penalty       Float    @default(0)
   // Sprint 3 Milestone 5: Negative Payroll Validation. `net_amount` is never
   // stored below zero -- `calculated_net_amount` retains the true computed
   // value (which may be negative) for audit/validation purposes.
@@ -2642,14 +2667,14 @@ model payroll_entries {
   // advancing to COMPLETED/PAID (see update_run_status in payroll.controller.js)
   // until corrected and recalculated, but does not stop other employees in
   // the same run from being calculated normally.
-  calculated_net_amount Float   @default(0)
-  validation_status     String  @default("PASSED")
+  calculated_net_amount Float    @default(0)
+  validation_status     String   @default("PASSED")
   validation_reason     String?
-  status          String   @default("PENDING")
-  payslip_url     String?
-  notes           String?
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
+  status                String   @default("PENDING")
+  payslip_url           String?
+  notes                 String?
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
 
   run  payroll_runs @relation(fields: [run_id], references: [id], onDelete: Cascade)
   user users        @relation("payroll_entries", fields: [user_id], references: [id])
@@ -2729,4 +2754,172 @@ model emergency_contacts {
   user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([user_id])
+}
+
+// ─── Meeting Management (Milestone 2) ─────────────────────────────────────────
+// One meeting_room per topic/project/client/department. Meetings, agenda items
+// (room-scoped, persist across meetings) and action items hang off a room.
+// Timeline reuses activity_logs (entity_type: 'meeting_room' | 'meeting') —
+// no dedicated events table, same pattern as the ticket module's timeline.
+// Attachments reuse the activity_logs entity_type/entity_id polymorphic
+// pattern (attachable_type/attachable_id, no FK constraint on attachable_id).
+
+model meeting_rooms {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?
+  status        String    @default("ACTIVE") // ACTIVE | CLOSED | ARCHIVED
+  owner_id      String
+  department_id String?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+  deleted_at    DateTime?
+
+  owner        users                  @relation("meeting_room_owner", fields: [owner_id], references: [id], onDelete: Restrict)
+  department   departments?           @relation(fields: [department_id], references: [id], onDelete: SetNull)
+  members      meeting_room_members[]
+  agenda_items meeting_agenda_items[]
+  meetings     meetings[]
+
+  @@index([owner_id])
+  @@index([department_id])
+  @@index([status])
+}
+
+model meeting_room_members {
+  id         String   @id @default(cuid())
+  room_id    String
+  user_id    String
+  role       String   @default("MEMBER") // MEMBER | OWNER
+  created_at DateTime @default(now())
+
+  room meeting_rooms @relation(fields: [room_id], references: [id], onDelete: Cascade)
+  user users         @relation("meeting_room_member_user", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([room_id, user_id])
+  @@index([user_id])
+}
+
+model meetings {
+  id                  String    @id @default(cuid())
+  room_id             String
+  title               String
+  scheduled_at        DateTime
+  organizer_id        String
+  status              String    @default("SCHEDULED") // SCHEDULED | COMPLETED | CANCELLED
+  closed_at           DateTime?
+  previous_meeting_id String?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
+  deleted_at          DateTime?
+
+  room             meeting_rooms          @relation(fields: [room_id], references: [id], onDelete: Cascade)
+  organizer        users                  @relation("meeting_organizer", fields: [organizer_id], references: [id], onDelete: Restrict)
+  previous_meeting meetings?              @relation("meeting_follow_up", fields: [previous_meeting_id], references: [id], onDelete: SetNull)
+  follow_ups       meetings[]             @relation("meeting_follow_up")
+  participants     meeting_participants[]
+  notes            meeting_notes[]
+  decisions        meeting_decisions[]
+  action_items     meeting_action_items[]
+  agenda_items     meeting_agenda_items[]
+
+  @@index([room_id])
+  @@index([organizer_id])
+  @@index([status])
+  @@index([scheduled_at])
+  @@index([previous_meeting_id])
+}
+
+model meeting_participants {
+  id         String   @id @default(cuid())
+  meeting_id String
+  user_id    String
+  created_at DateTime @default(now())
+
+  meeting meetings @relation(fields: [meeting_id], references: [id], onDelete: Cascade)
+  user    users    @relation("meeting_participant_user", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([meeting_id, user_id])
+  @@index([user_id])
+}
+
+model meeting_notes {
+  id         String   @id @default(cuid())
+  meeting_id String
+  author_id  String
+  content    String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  meeting meetings @relation(fields: [meeting_id], references: [id], onDelete: Cascade)
+  author  users    @relation("meeting_note_author", fields: [author_id], references: [id], onDelete: Restrict)
+
+  @@index([meeting_id])
+}
+
+model meeting_decisions {
+  id            String   @id @default(cuid())
+  meeting_id    String
+  decision_text String
+  decided_by    String
+  created_at    DateTime @default(now())
+
+  meeting meetings @relation(fields: [meeting_id], references: [id], onDelete: Cascade)
+  decider users    @relation("meeting_decision_decider", fields: [decided_by], references: [id], onDelete: Restrict)
+
+  @@index([meeting_id])
+}
+
+model meeting_agenda_items {
+  id          String   @id @default(cuid())
+  room_id     String
+  meeting_id  String?
+  title       String
+  description String?
+  status      String   @default("PENDING") // PENDING | IN_PROGRESS | COMPLETED
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  room    meeting_rooms @relation(fields: [room_id], references: [id], onDelete: Cascade)
+  meeting meetings?     @relation(fields: [meeting_id], references: [id], onDelete: SetNull)
+
+  @@index([room_id])
+  @@index([meeting_id])
+  @@index([status])
+}
+
+model meeting_action_items {
+  id          String    @id @default(cuid())
+  meeting_id  String
+  title       String
+  assignee_id String
+  due_date    DateTime?
+  priority    String    @default("MEDIUM") // LOW | MEDIUM | HIGH | URGENT
+  status      String    @default("PENDING") // PENDING | IN_PROGRESS | COMPLETED
+  notes       String?
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+
+  meeting  meetings @relation(fields: [meeting_id], references: [id], onDelete: Cascade)
+  assignee users    @relation("meeting_action_item_assignee", fields: [assignee_id], references: [id], onDelete: Restrict)
+
+  @@index([meeting_id])
+  @@index([assignee_id])
+  @@index([status])
+  @@index([due_date])
+}
+
+model meeting_attachments {
+  id              String   @id @default(cuid())
+  attachable_type String // ROOM | MEETING | AGENDA_ITEM | ACTION_ITEM
+  attachable_id   String
+  file_url        String
+  file_name       String
+  uploaded_by     String
+  created_at      DateTime @default(now())
+
+  uploader users @relation("meeting_attachment_uploader", fields: [uploaded_by], references: [id], onDelete: Restrict)
+
+  @@index([attachable_type, attachable_id])
+  @@index([uploaded_by])
 }

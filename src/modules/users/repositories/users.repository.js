@@ -135,12 +135,29 @@ export async function create_user({ email, password_hash, first_name, last_name,
   });
 }
 
+// RBAC ISOLATION (critical): update_user is the generic profile-field patch
+// used by Employee Directory / Employee Profile / HR flows. It must NEVER
+// write to user_roles or user_permissions — role/permission assignment has
+// exactly one write path (set_user_role below), reachable only from the
+// dedicated RBAC/User Management module. This function used to accept a
+// `role_id` and silently delete+recreate the user's user_roles row on any
+// generic profile save; that is the exact mechanism that demoted a
+// SUPER_ADMIN to EMPLOYEE when their profile was edited from Employee
+// Directory (the directory's list payload never carried the real role id,
+// so the edit form's role dropdown silently defaulted to EMPLOYEE and that
+// wrong value got submitted). role_id/role/roles/permissions/user_permissions
+// are now unconditionally stripped here — even if a caller sends them, they
+// are ignored, not applied.
 export async function update_user(id, data) {
-  // Strip relation objects and non-column fields; map department_id correctly.
+  // Strip relation objects, non-column fields, and anything RBAC-related.
   // `status` is intentionally excluded — Employment Status has exactly one
   // write path (set_employment_status below), never a generic field patch,
   // so it can never drift from employee_profiles.employment_status.
-  const { role_id, password, role, department, division, supervisor, status, ...rest } = data;
+  const {
+    role_id, role, roles, permissions, user_permissions,
+    password, department, division, supervisor, status,
+    ...rest
+  } = data;
 
   // If department_id is a string ID use it; otherwise drop it (frontend may send name)
   const update_data = { ...rest, updated_at: new Date() };
@@ -153,21 +170,25 @@ export async function update_user(id, data) {
     data: update_data,
   });
 
-  if (role_id) {
-    const existing = await prisma.user_roles.findFirst({ where: { user_id: id } });
-    if (existing) {
-      await prisma.user_roles.delete({
-        where: { user_id_role_id: { user_id: id, role_id: existing.role_id } },
-      });
-    }
-    await prisma.user_roles.upsert({
-      where: { user_id_role_id: { user_id: id, role_id } },
-      update: {},
-      create: { user_id: id, role_id },
+  return find_user_by_id(id);
+}
+
+// The ONLY write path for a user's role assignment. Callable exclusively
+// from the dedicated RBAC/User Management module's role-change endpoint —
+// never from generic profile updates (see update_user above).
+export async function set_user_role(user_id, role_id) {
+  const existing = await prisma.user_roles.findFirst({ where: { user_id } });
+  if (existing) {
+    await prisma.user_roles.delete({
+      where: { user_id_role_id: { user_id, role_id: existing.role_id } },
     });
   }
-
-  return find_user_by_id(id);
+  await prisma.user_roles.upsert({
+    where: { user_id_role_id: { user_id, role_id } },
+    update: {},
+    create: { user_id, role_id },
+  });
+  return find_user_by_id(user_id);
 }
 
 export async function soft_delete_user(id) {

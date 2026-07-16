@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate, authorize, can_or_role } from '../../../shared/middleware/authenticate.js';
-import { create_user_ctrl, delete_user_ctrl, bulk_delete_users_ctrl, get_user_by_id, get_users, update_my_profile, get_my_activity, update_user_ctrl, change_user_designation_ctrl } from '../controllers/users.controller.js';
+import { create_user_ctrl, delete_user_ctrl, bulk_delete_users_ctrl, get_user_by_id, get_users, update_my_profile, get_my_activity, update_user_ctrl, change_user_designation_ctrl, change_user_role_ctrl } from '../controllers/users.controller.js';
 import prisma from '../../../shared/database/client.js';
 
 const router = Router();
@@ -222,6 +222,42 @@ router.put('/:id',         ADMIN_HR, update_user_ctrl);
  *         description: Unauthorized
  */
 router.post('/:id/designation-change', ADMIN_HR, change_user_designation_ctrl);
+
+/**
+ * @swagger
+ * /users/{id}/role:
+ *   put:
+ *     summary: Change a user's role (RBAC — the only endpoint that may do this)
+ *     description: >
+ *       The single write path for user_roles. Deliberately separate from the
+ *       generic PUT /users/:id profile-update endpoint, which strips role_id
+ *       unconditionally — see change_user_role() in users.service.js for the
+ *       incident this separation fixes (a generic profile edit silently
+ *       demoted a SUPER_ADMIN to EMPLOYEE).
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [role_id]
+ *             properties:
+ *               role_id: { type: string }
+ *     responses:
+ *       200:
+ *         description: Role changed
+ *       404:
+ *         description: User or role not found
+ *       401:
+ *         description: Unauthorized
+ */
+router.put('/:id/role', ADMIN, change_user_role_ctrl);
 
 /**
  * @swagger

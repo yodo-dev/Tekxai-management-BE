@@ -27,9 +27,23 @@ describe('User validation', async () => {
     assert.match(r.message, /first name/i);
   });
 
+  it('rejects missing last name', () => {
+    const r = validate_create_user({ email: 'john@test.com', first_name: 'John' });
+    assert.equal(r.valid, false);
+    assert.equal(r.field, 'last_name');
+    assert.equal(r.code, 'REQUIRED_FIELD');
+  });
+
   it('accepts valid user data', () => {
-    const r = validate_create_user({ email: 'john@test.com', first_name: 'John', password: 'pass123' });
+    const r = validate_create_user({ email: 'john@test.com', first_name: 'John', last_name: 'Doe', password: 'pass123' });
     assert.equal(r.valid, true);
+  });
+
+  it('attaches field/code for a missing email so the frontend can route the error', () => {
+    const r = validate_create_user({ first_name: 'John', last_name: 'Doe' });
+    assert.equal(r.valid, false);
+    assert.equal(r.field, 'email');
+    assert.equal(r.code, 'INVALID_EMAIL');
   });
 
   it('update accepts empty body', () => {

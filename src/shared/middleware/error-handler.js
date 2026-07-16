@@ -15,5 +15,10 @@ export function error_handler(err, req, res, next) {
   return res.status(status_code).json({
     success: false,
     message: err.message || "Internal server error",
+    // Additive, optional — only present when the throwing call site used
+    // field_error() to attach a machine-readable field/code (e.g. duplicate
+    // email, missing required field), so a form can locate the exact input.
+    ...(err.field ? { field: err.field } : {}),
+    ...(err.code ? { code: err.code } : {}),
   });
 }

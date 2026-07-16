@@ -66,6 +66,7 @@ import email_logs_routes       from '../modules/email/email-logs.routes.js';
 import payroll_router           from '../modules/payroll/payroll.routes.js';
 import webhooks_router         from '../modules/webhooks/webhooks.routes.js';
 import calendar_router         from '../modules/calendar/calendar.routes.js';
+import meetings_routes         from '../modules/meetings/routes/meetings.routes.js';
 
 const router = Router();
 
@@ -173,6 +174,9 @@ router.use('/webhooks',          webhooks_router);
 
 // Google Calendar
 router.use('/calendar',          calendar_router);
+
+// Meeting Management
+router.use('/meeting',           meetings_routes);
 
 export default router;
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            

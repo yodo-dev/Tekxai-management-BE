@@ -1,4 +1,4 @@
-import { create_new_user, delete_user, get_user, list_users, update_existing_user, change_user_designation } from '../services/users.service.js';
+import { create_new_user, delete_user, get_user, list_users, update_existing_user, change_user_designation, change_user_role } from '../services/users.service.js';
 
 export async function get_users(req, res, next) {
   try {
@@ -58,6 +58,16 @@ export async function change_user_designation_ctrl(req, res, next) {
   try {
     const result = await change_user_designation(req.params.id, req.body, req.user.id);
     return res.status(201).json({ success: true, payload: result });
+  } catch (e) { return next(e); }
+}
+
+// PUT /users/:id/role — the ONLY endpoint allowed to change a user's role.
+// Dedicated RBAC/User Management action, deliberately separate from the
+// generic profile-update endpoint (see change_user_role() for why).
+export async function change_user_role_ctrl(req, res, next) {
+  try {
+    const user = await change_user_role(req.params.id, req.body.role_id, req.user.id);
+    return res.json({ success: true, payload: user });
   } catch (e) { return next(e); }
 }
 

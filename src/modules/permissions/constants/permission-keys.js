@@ -84,6 +84,11 @@ export const PERMISSION_DEFINITIONS = [
   { key: 'erp.ticket-categories.manage', label: 'Ticket Categories – Manage', workspace: 'erp', module: 'ticket_categories', action: 'manage' },
   { key: 'erp.ticket-types.view',        label: 'Ticket Types – View',        workspace: 'erp', module: 'ticket_types',      action: 'view'   },
   { key: 'erp.ticket-types.manage',      label: 'Ticket Types – Manage',      workspace: 'erp', module: 'ticket_types',      action: 'manage' },
+  { key: 'erp.meetings.view',            label: 'Meetings – View',            workspace: 'erp', module: 'meetings',          action: 'view'   },
+  { key: 'erp.meetings.create',          label: 'Meetings – Create',          workspace: 'erp', module: 'meetings',          action: 'create' },
+  { key: 'erp.meetings.edit',            label: 'Meetings – Edit',            workspace: 'erp', module: 'meetings',          action: 'edit'   },
+  { key: 'erp.meetings.delete',          label: 'Meetings – Delete',          workspace: 'erp', module: 'meetings',          action: 'delete' },
+  { key: 'erp.meetings.manage',          label: 'Meetings – Manage',          workspace: 'erp', module: 'meetings',          action: 'manage' },
 
   // ── CRM Workspace access ──────────────────────────────────────────────────
   { key: 'crm.workspace.access',        label: 'CRM Workspace Access',      workspace: 'crm', module: 'workspace',        action: 'access' },
@@ -178,6 +183,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'erp.compliance.escalation.view', 'erp.compliance.escalation.manage',
     'erp.ticket-categories.view', 'erp.ticket-categories.manage',
     'erp.ticket-types.view', 'erp.ticket-types.manage',
+    'erp.meetings.view', 'erp.meetings.create', 'erp.meetings.edit', 'erp.meetings.delete', 'erp.meetings.manage',
     'hr.workspace.access', 'hr.dashboard.view',
     'hr.employees.view', 'hr.employees.create', 'hr.employees.edit',
     'hr.departments.view', 'hr.departments.edit',
@@ -216,6 +222,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'erp.grades.view', 'erp.grades.create', 'erp.grades.edit',
     'erp.users.view',
     'erp.reports.view',
+    'erp.meetings.view', 'erp.meetings.create', 'erp.meetings.edit',
   ],
   DIVISION_MANAGER: [
     'erp.workspace.access', 'erp.dashboard.view',
@@ -232,6 +239,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'erp.performance.view',
     'erp.attendance.view',
     'erp.requisitions.view', 'erp.requisitions.approve',
+    'erp.meetings.view', 'erp.meetings.create', 'erp.meetings.edit',
     'hr.workspace.access',
     'hr.employees.view',
     'hr.attendance.view',
@@ -262,6 +270,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'erp.attendance.view',
     'erp.performance.view',
     'erp.requisitions.view',
+    'erp.meetings.view', 'erp.meetings.create', 'erp.meetings.edit',
     'hr.workspace.access',
     'hr.employees.view',
   ],
@@ -281,6 +290,10 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     // Employees use the /employee workspace — no ERP/CRM/HR workspace access by default
     // except projects, which the controller scopes to member_only for this role
     'erp.projects.view',
+    // Employees can view/create meetings they're a member/participant of — the
+    // controller/service layer scopes list/detail results to rooms/meetings the
+    // user is a member/participant/organizer of, same member_only pattern as projects.
+    'erp.meetings.view', 'erp.meetings.create',
   ],
 };
 
