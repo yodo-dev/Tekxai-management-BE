@@ -95,6 +95,25 @@ describe('Custom fields validation (against field_schema)', () => {
     const r = validate_custom_fields([], {});
     assert.equal(r.valid, true);
   });
+
+  it('rejects an empty array for a required multiselect field (M4 dynamic form bug)', () => {
+    const schema = [{ section: 'S', fields: [{ key: 'tags', label: 'Tags', type: 'multiselect', required: true }] }];
+    const r = validate_custom_fields(schema, { tags: [] });
+    assert.equal(r.valid, false);
+    assert.match(r.message, /Tags/);
+  });
+
+  it('accepts a non-empty array for a required multiselect field', () => {
+    const schema = [{ section: 'S', fields: [{ key: 'tags', label: 'Tags', type: 'multiselect', required: true }] }];
+    const r = validate_custom_fields(schema, { tags: ['urgent'] });
+    assert.equal(r.valid, true);
+  });
+
+  it('accepts a falsy-but-valid value like the number 0 for a required field', () => {
+    const schema = [{ section: 'S', fields: [{ key: 'count', label: 'Count', type: 'number', required: true }] }];
+    const r = validate_custom_fields(schema, { count: 0 });
+    assert.equal(r.valid, true);
+  });
 });
 
 describe('Workflow transition validation (uses the ticket\'s own type_snapshot, not the live type)', () => {

@@ -71,6 +71,16 @@ export async function update_user_password(user_id, password_hash) {
   });
 }
 
+// Invalidates every other active session for a user — used after a password
+// change/reset so a stolen refresh token can't keep a session alive past a
+// credential rotation.
+export async function revoke_all_refresh_tokens_for_user(user_id) {
+  return prisma.auth_refresh_tokens.updateMany({
+    where: { user_id, revoked_at: null },
+    data: { revoked_at: new Date() },
+  });
+}
+
 export async function ensure_user_settings(user_id) {
   return prisma.user_settings.upsert({
     where: { user_id },

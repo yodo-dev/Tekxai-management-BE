@@ -13,6 +13,7 @@ import {
   find_user_with_roles_by_id,
   find_valid_otp,
   mark_otp_used,
+  revoke_all_refresh_tokens_for_user,
   revoke_refresh_token_by_hash,
   update_user_password,
 } from '../repositories/auth.repository.js';
@@ -26,6 +27,15 @@ function app_error(message, status_code = 400) {
 function hash_token(raw) {
   return crypto.createHash('sha256').update(raw).digest('hex');
 }
+
+// Precomputed bcrypt hash of a random, unguessable string — never a real
+// password. Used purely so the "no such user" / "inactive user" rejection
+// paths in login_user() pay the same bcrypt cost as a real wrong-password
+// compare, closing the timing side-channel that previously let an attacker
+// distinguish account existence/state by response time alone (both paths
+// already returned the identical AUTH_MESSAGES.INVALID_CREDENTIALS message —
+// this only equalizes timing, it changes no visible behavior).
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(crypto.randomBytes(32).toString('hex'), 12);
 
 function get_role_names(user) {
   return user.roles.map((ur) => ur.role.name);
@@ -110,7 +120,11 @@ async function issue_tokens(user, metadata) {
 
 export async function login_user(payload, metadata) {
   const user = await find_user_with_roles_by_email(payload.email);
-  if (!user || !user.is_active) throw app_error(AUTH_MESSAGES.INVALID_CREDENTIALS, 401);
+
+  if (!user || !user.is_active) {
+    await bcrypt.compare(payload.password, DUMMY_PASSWORD_HASH); // pay the same cost as a real attempt
+    throw app_error(AUTH_MESSAGES.INVALID_CREDENTIALS, 401);
+  }
 
   const valid = await bcrypt.compare(payload.password, user.password_hash);
   if (!valid) throw app_error(AUTH_MESSAGES.INVALID_CREDENTIALS, 401);
@@ -226,6 +240,7 @@ export async function reset_password(user_id, code, new_password) {
   const password_hash = await bcrypt.hash(new_password, 12);
   await update_user_password(user_id, password_hash);
   await mark_otp_used(otp.id);
+  await revoke_all_refresh_tokens_for_user(user_id); // invalidate sessions issued under the old password
   return { message: AUTH_MESSAGES.PASSWORD_RESET_SUCCESS };
 }
 

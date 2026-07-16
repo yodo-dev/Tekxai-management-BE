@@ -11,6 +11,7 @@ const ENTITY_MAP={
   milestones:{fields:{id:true,project_id:true,title:true,due_date:true,completed:true,blocked:true,created_at:true},filters:['project_id','completed','blocked','created_at']},
   expense_transactions:{fields:{id:true,total_amount:true,transaction_type:true,category_id:true,date:true,title:true,paid_to:true,created_at:true},filters:['transaction_type','category_id','created_at']},
   payroll_entries:{fields:{id:true,base_salary:true,gross_amount:true,net_amount:true,tax_amount:true,present_days:true,working_days:true,status:true},filters:['status']},
+  support_tickets:{fields:{id:true,ticket_number:true,subject:true,status:true,priority:true,severity:true,ticket_type_id:true,department_id:true,assignee_id:true,approval_status:true,response_due_at:true,resolution_due_at:true,closed_at:true,created_at:true},filters:['status','priority','severity','ticket_type_id','department_id','assignee_id','approval_status','created_at']},
 };
 
 export async function get_schema(req,res,next){

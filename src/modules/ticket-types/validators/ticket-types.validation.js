@@ -44,7 +44,9 @@ export function validate_custom_fields(field_schema, custom_fields = {}) {
     for (const f of section.fields || []) {
       known_keys.add(f.key);
       const value = custom_fields ? custom_fields[f.key] : undefined;
-      if (f.required && (value === undefined || value === null || value === '')) {
+      const is_empty = value === undefined || value === null || value === ''
+        || (Array.isArray(value) && value.length === 0);
+      if (f.required && is_empty) {
         missing.push(f.label || f.key);
       }
     }

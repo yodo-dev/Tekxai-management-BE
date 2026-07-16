@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../../../shared/database/client.js';
+import { revoke_all_refresh_tokens_for_user } from '../../auth/repositories/auth.repository.js';
 
 function app_error(m, c = 400) { const e = new Error(m); e.status_code = c; return e; }
 
@@ -30,5 +31,6 @@ export async function change_password(user_id, { old_password, new_password }) {
 
   const password_hash = await bcrypt.hash(new_password, 12);
   await prisma.users.update({ where: { id: user_id }, data: { password_hash } });
+  await revoke_all_refresh_tokens_for_user(user_id); // invalidate sessions issued under the old password
   return { message: 'Password updated successfully' };
 }

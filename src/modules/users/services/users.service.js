@@ -84,7 +84,10 @@ export async function update_existing_user(id, body, actor_user_id) {
   // the Employee Profile page's Organization card already PUTs designation
   // changes through this exact generic endpoint.
   const { team_id, password, status, lifecycle_stage, designation_id, grade_id, department_id, ...rest } = body;
-  if (password) rest.password_hash = await bcrypt.hash(password, 12);
+  if (password) {
+    if (password.length < 8) throw app_error('Password must be at least 8 characters', 422);
+    rest.password_hash = await bcrypt.hash(password, 12);
+  }
 
   if (status !== undefined) {
     const check = validate_employment_status(status);

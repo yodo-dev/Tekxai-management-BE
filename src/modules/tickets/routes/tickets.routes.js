@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
 import {
   approve_ctrl, create_ticket_ctrl, get_approvals_ctrl, get_ticket_ctrl, get_tickets,
-  update_ticket_ctrl, add_attachment_ctrl, stats_ctrl, add_reply_ctrl,
+  get_timeline_ctrl, update_ticket_ctrl, add_attachment_ctrl, stats_ctrl, add_reply_ctrl,
 } from '../controllers/tickets.controller.js';
 
 const ADMIN_HR = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
@@ -37,6 +37,19 @@ router.get('/stats', ADMIN_HR, stats_ctrl);
  *       - in: query
  *         name: priority
  *         schema: { type: string }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Free-text search over subject, description, and ticket number
+ *       - in: query
+ *         name: from
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: to
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: sla
+ *         schema: { type: string, enum: [overdue] }
  *     responses:
  *       200:
  *         description: Tickets list
@@ -205,5 +218,22 @@ router.get('/:id/approvals', ADMIN_HR, get_approvals_ctrl);
  *       400: { description: Invalid approval stage }
  */
 router.post('/:id/approvals', ADMIN_HR, approve_ctrl);
+
+/**
+ * @swagger
+ * /tickets/{id}/timeline:
+ *   get:
+ *     summary: Get a ticket's activity timeline (owner or admin)
+ *     tags: [Tickets]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Activity log entries for this ticket }
+ *       403: { description: Not the ticket owner }
+ */
+router.get('/:id/timeline', get_timeline_ctrl);
 
 export default router;

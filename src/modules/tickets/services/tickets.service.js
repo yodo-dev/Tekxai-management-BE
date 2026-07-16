@@ -1,5 +1,5 @@
 import prisma from '../../../shared/database/client.js';
-import { log_activity } from '../../activity-logs/repositories/activity.repository.js';
+import { find_activity_logs, log_activity } from '../../activity-logs/repositories/activity.repository.js';
 import { validate_custom_fields, validate_workflow_transition } from '../../ticket-types/validators/ticket-types.validation.js';
 
 function app_error(m, c = 400) { const e = new Error(m); e.status_code = c; return e; }
@@ -61,7 +61,8 @@ const INCLUDE = {
 
 export async function list_tickets({
   user_id, is_admin = false, status, priority, category_id, ticket_type_id, department_id,
-  assignee_id, team_id, project_id, asset_id, severity, approval_status, sla, page = 1, limit = 20,
+  assignee_id, team_id, project_id, asset_id, severity, approval_status, sla,
+  search, from, to, page = 1, limit = 20,
 } = {}) {
   page = +page || 1; limit = +limit || 20;
   const skip = (page - 1) * limit;
@@ -78,10 +79,26 @@ export async function list_tickets({
   if (asset_id) where.asset_id = asset_id;
   if (severity) where.severity = severity;
   if (approval_status) where.approval_status = approval_status;
+  if (from || to) {
+    where.created_at = {};
+    if (from) where.created_at.gte = new Date(from);
+    if (to) where.created_at.lte = new Date(to);
+  }
+  // AND-of-ORs so the sla-overdue OR and the text-search OR can coexist.
+  const and = [];
   if (sla === 'overdue') {
     where.closed_at = null;
-    where.OR = [{ response_due_at: { lt: new Date() } }, { resolution_due_at: { lt: new Date() } }];
+    and.push({ OR: [{ response_due_at: { lt: new Date() } }, { resolution_due_at: { lt: new Date() } }] });
   }
+  if (search?.trim()) {
+    const q = search.trim();
+    and.push({ OR: [
+      { subject: { contains: q, mode: 'insensitive' } },
+      { description: { contains: q, mode: 'insensitive' } },
+      { ticket_number: { contains: q, mode: 'insensitive' } },
+    ]});
+  }
+  if (and.length) where.AND = and;
 
   const [total, records] = await Promise.all([
     prisma.support_tickets.count({ where }),
@@ -344,6 +361,16 @@ export async function record_ticket_approval(ticket_id, approver_id, { action, c
 
 export async function get_ticket_approvals(ticket_id) {
   return get_approvals_for(ticket_id);
+}
+
+// ─── Timeline — reuses activity_logs (every create/update/reply/attachment/
+// approval above already writes entity_type:'ticket' rows), no new table. ────
+
+export async function get_ticket_timeline(ticket_id, user_id, is_admin, { page = 1, limit = 50 } = {}) {
+  const t = await prisma.support_tickets.findUnique({ where: { id: ticket_id }, select: { user_id: true } });
+  if (!t) throw app_error('Ticket not found', 404);
+  if (!is_admin && t.user_id !== user_id) throw app_error('Forbidden', 403);
+  return find_activity_logs({ entity_type: 'ticket', entity_id: ticket_id, page, limit });
 }
 
 function normalize_ticket(t, attachments = [], replies = [], approvals = []) {

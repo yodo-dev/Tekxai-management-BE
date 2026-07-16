@@ -34,6 +34,7 @@ import compliance_requirements_routes from '../modules/compliance-requirements/r
 import compliance_templates_routes    from '../modules/compliance-templates/routes/compliance-templates.routes.js';
 import checklists_routes    from '../modules/checklists/routes/checklists.routes.js';
 import asset_inspections_routes from '../modules/asset-inspections/routes/asset-inspections.routes.js';
+import compliance_escalation_routes from '../modules/compliance-escalation/routes/compliance-escalation.routes.js';
 import activity_routes      from '../modules/activity-logs/routes/activity.routes.js';
 import jd_routes            from '../modules/job-descriptions/routes/jd.routes.js';
 import leave_balance_routes from '../modules/leave-balances/routes/leave-balances.routes.js';
@@ -106,6 +107,7 @@ router.use('/compliance-requirements', compliance_requirements_routes);
 router.use('/compliance-templates',    compliance_templates_routes);
 router.use('/checklists',              checklists_routes);
 router.use('/asset-inspections',       asset_inspections_routes);
+router.use('/compliance-escalation',   compliance_escalation_routes);
 
 // HR & People
 router.use('/attendance',        attendance_routes);

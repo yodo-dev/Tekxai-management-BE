@@ -199,16 +199,41 @@ Response:
 
 ---
 
-## Tickets `/ticket`
+## Tickets `/ticket` — Enterprise Service Desk
+
+Two creation paths share one endpoint: **legacy** (no `ticket_type_id` — the
+original free-form ticket, unchanged) and **Service Desk** (`ticket_type_id`
+present — dynamic form, workflow, SLA, and assignment all driven by the
+ticket type's configuration). Admins configure types under
+`/ticket-categories` and `/ticket-types` (see below); everything else in
+this section auto-derives from that config.
 
 | Method | Path | Roles | Description |
 |--------|------|-------|-------------|
-| GET | `/ticket` | Any auth | List tickets (own or all for admin) |
-| POST | `/ticket` | Any auth | Create ticket |
-| GET | `/ticket/:id` | Any auth | Get ticket |
-| PATCH | `/ticket/:id` | ADMIN+ | Update ticket status |
+| GET | `/ticket` | Any auth | List tickets (own or all for admin). See query params below |
+| POST | `/ticket` | Any auth | Create ticket (legacy or Service Desk path) |
+| GET | `/ticket/:id` | Any auth (owner) / ADMIN+ | Get ticket, including custom fields, SLA due dates, assignee/team, approvals |
+| PATCH | `/ticket/:id` | ADMIN+ | Update status/assignee/team/priority/severity — status changes are validated against the ticket's workflow if it has one |
+| GET | `/ticket/:id/timeline` | Any auth (owner) / ADMIN+ | Activity log entries for this ticket (reuses `activity_logs`, no separate timeline table) |
+| POST | `/ticket/:id/attachments` | Any auth (owner) / ADMIN+ | Attach a file |
+| POST | `/ticket/:id/replies` | Any auth (owner) / ADMIN+ | Post a reply (auto-moves legacy `pending` → `in_progress` on admin reply) |
+| GET | `/ticket/:id/approvals` | ADMIN+ | Approval history for this ticket |
+| POST | `/ticket/:id/approvals` | ADMIN+ | Approve/reject at the ticket's current workflow step (only valid when that step is approval-gated) |
+| GET | `/ticket/stats` | ADMIN+ | Counts by status and by ticket type |
 
-**Create ticket body:**
+**`GET /ticket` query params:**
+
+| Param | Notes |
+|---|---|
+| `status`, `priority`, `severity` | Exact match |
+| `category_id`, `ticket_type_id` | Filter by Service Desk config |
+| `department_id`, `assignee_id`, `team_id`, `project_id`, `asset_id` | Assignment filters |
+| `approval_status` | `PENDING` \| `APPROVED` \| `REJECTED` |
+| `sla=overdue` | Tickets not yet closed whose `response_due_at` or `resolution_due_at` has passed |
+| `search` | Free-text match over subject, description, and ticket number |
+| `from`, `to` | Filters on `created_at` |
+
+**Create ticket body — legacy path (no `ticket_type_id`):**
 ```json
 {
   "subject": "AC not working",
@@ -218,6 +243,80 @@ Response:
   "recipient_name": "Ahmed Khan",
   "priority": "high"
 }
+```
+
+**Create ticket body — Service Desk path (`ticket_type_id` present):**
+```json
+{
+  "subject": "Need a replacement laptop",
+  "description": "Screen and battery both failed",
+  "ticket_type_id": "cmr...",
+  "custom_fields": { "device_model": "MacBook Pro", "reason": "Screen and battery both failed" },
+  "project_id": "cmr...",
+  "severity": "high"
+}
+```
+`custom_fields` is validated against the type's `field_schema` server-side —
+missing required fields or unknown keys are rejected with a 400. Department,
+team, and assignee are auto-filled from the type's configured defaults
+(an admin/HR caller may override); `response_due_at`/`resolution_due_at` are
+stamped from the type's `response_sla_mins`/`resolution_sla_mins` at creation
+time; the ticket's initial `status` is the first step of the type's
+`workflow`. A frozen `type_snapshot` (field schema + workflow as they existed
+at creation) is stored on the ticket so historical tickets keep validating
+against the workflow they were created under, even if the type config
+changes later.
+
+**SLA escalation**: a scheduler job (every 15 minutes) checks open tickets
+past `response_due_at`/`resolution_due_at` and escalates through configurable
+stages (see `escalation_policies` with key `ticket_response_sla_breach` /
+`ticket_resolution_sla_breach`), notifying the assignee, then supervisor,
+then admins as stages progress. Same generic escalation engine used by the
+Compliance module — see `/compliance-escalation/policies` to view or edit
+the stage thresholds.
+
+---
+
+## Ticket Categories `/ticket-categories` and Ticket Types `/ticket-types`
+
+Admin-only configuration for the Service Desk. A **category** is a simple
+grouping (`IT`, `HR`, `Facilities`, ...); a **type** belongs to a category
+and defines everything a ticket of that type needs: its dynamic form
+(`field_schema`), its approval workflow (`workflow`), SLA minutes, and
+default department/team/assignee.
+
+| Method | Path | Permission |
+|--------|------|------------|
+| GET | `/ticket-categories` | `erp.ticket-categories.view` |
+| POST | `/ticket-categories` | `erp.ticket-categories.manage` |
+| PUT / PATCH `:id/active` | `/ticket-categories/:id` | `erp.ticket-categories.manage` |
+| GET | `/ticket-types?category_id=&include_inactive=` | `erp.ticket-types.view` |
+| POST | `/ticket-types` | `erp.ticket-types.manage` |
+| PUT / PATCH `:id/active` | `/ticket-types/:id` | `erp.ticket-types.manage` |
+
+**`field_schema` shape** (an array of sections, each with typed fields):
+```json
+[
+  { "section": "Device Details", "fields": [
+    { "key": "device_model", "label": "Preferred Model", "type": "select", "options": ["MacBook Pro", "MacBook Air"], "required": true },
+    { "key": "reason", "label": "Reason", "type": "textarea", "required": true },
+    { "key": "needed_by", "label": "Needed By", "type": "date" }
+  ]}
+]
+```
+Supported `type` values: `text`, `textarea`, `number`, `date`, `time`,
+`checkbox`, `switch`, `select`, `multiselect`, `user`, `employee`, `team`,
+`department`, `project`, `asset`, `email`, `phone`, `url`, `file`, `image`.
+
+**`workflow` shape** (an ordered array of steps; a step with
+`requires_approval: true` can only be advanced via `POST /ticket/:id/approvals`,
+never a direct `PATCH` status change):
+```json
+[
+  { "key": "submitted", "label": "Submitted", "requires_approval": true, "approver_role": "ADMIN" },
+  { "key": "procurement", "label": "In Procurement" },
+  { "key": "delivered", "label": "Delivered" }
+]
 ```
 
 ---

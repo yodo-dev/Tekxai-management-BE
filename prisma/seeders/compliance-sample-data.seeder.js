@@ -109,7 +109,54 @@ function build_templates(cat) {
   ];
 }
 
+// Default escalation ladders — day_threshold is "days overdue", notify is a
+// subset of ASSIGNEE/SUPERVISOR/ADMIN. Keys match the alert types the
+// compliance-escalation engine understands (case-insensitive).
+const ESCALATION_POLICIES = [
+  {
+    key: 'inspection_overdue', label: 'Overdue Asset Inspection',
+    stages: [
+      { day_threshold: 1, notify: ['ASSIGNEE'] },
+      { day_threshold: 3, notify: ['ASSIGNEE', 'SUPERVISOR'] },
+      { day_threshold: 7, notify: ['ASSIGNEE', 'SUPERVISOR', 'ADMIN'] },
+    ],
+  },
+  {
+    key: 'compliance_requirement_unresolved', label: 'Unresolved Compliance Requirement',
+    stages: [
+      { day_threshold: 7, notify: ['ADMIN'] },
+      { day_threshold: 14, notify: ['ADMIN'] },
+    ],
+  },
+  // Ticket SLA breaches — day_threshold 0 fires on the first engine run after
+  // the due date passes (the ticket job runs every 15 minutes).
+  {
+    key: 'ticket_response_sla_breach', label: 'Ticket Response SLA Breach',
+    stages: [
+      { day_threshold: 0, notify: ['ASSIGNEE'] },
+      { day_threshold: 1, notify: ['ASSIGNEE', 'SUPERVISOR'] },
+      { day_threshold: 3, notify: ['ASSIGNEE', 'SUPERVISOR', 'ADMIN'] },
+    ],
+  },
+  {
+    key: 'ticket_resolution_sla_breach', label: 'Ticket Resolution SLA Breach',
+    stages: [
+      { day_threshold: 0, notify: ['ASSIGNEE'] },
+      { day_threshold: 1, notify: ['ASSIGNEE', 'SUPERVISOR'] },
+      { day_threshold: 3, notify: ['ASSIGNEE', 'SUPERVISOR', 'ADMIN'] },
+    ],
+  },
+];
+
 export async function seed_compliance_sample_data(prisma) {
+  for (const p of ESCALATION_POLICIES) {
+    await prisma.escalation_policies.upsert({
+      where: { key: p.key },
+      update: {},
+      create: { key: p.key, label: p.label, stages: p.stages },
+    });
+  }
+
   const categories = await prisma.asset_categories.findMany({
     where: { code: { in: ['first_aid', 'fire_safety', 'emergency', 'security', 'ppe', 'environmental', 'utilities'] } },
   });

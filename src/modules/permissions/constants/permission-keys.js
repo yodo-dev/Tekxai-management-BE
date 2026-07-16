@@ -78,6 +78,12 @@ export const PERMISSION_DEFINITIONS = [
   { key: 'erp.expenses.edit',           label: 'Expenses – Edit',           workspace: 'erp', module: 'expenses',          action: 'edit'   },
   { key: 'erp.expenses.delete',         label: 'Expenses – Delete',         workspace: 'erp', module: 'expenses',          action: 'delete' },
   { key: 'erp.expenses.manage',         label: 'Expenses – Manage',         workspace: 'erp', module: 'expenses',          action: 'manage' },
+  { key: 'erp.compliance.escalation.view',   label: 'Compliance Escalation – View',   workspace: 'erp', module: 'compliance_escalation', action: 'view'   },
+  { key: 'erp.compliance.escalation.manage', label: 'Compliance Escalation – Manage', workspace: 'erp', module: 'compliance_escalation', action: 'manage' },
+  { key: 'erp.ticket-categories.view',   label: 'Ticket Categories – View',   workspace: 'erp', module: 'ticket_categories', action: 'view'   },
+  { key: 'erp.ticket-categories.manage', label: 'Ticket Categories – Manage', workspace: 'erp', module: 'ticket_categories', action: 'manage' },
+  { key: 'erp.ticket-types.view',        label: 'Ticket Types – View',        workspace: 'erp', module: 'ticket_types',      action: 'view'   },
+  { key: 'erp.ticket-types.manage',      label: 'Ticket Types – Manage',      workspace: 'erp', module: 'ticket_types',      action: 'manage' },
 
   // ── CRM Workspace access ──────────────────────────────────────────────────
   { key: 'crm.workspace.access',        label: 'CRM Workspace Access',      workspace: 'crm', module: 'workspace',        action: 'access' },
@@ -169,6 +175,9 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'erp.attendance.view', 'erp.attendance.edit',
     'erp.estimator.view',
     'erp.expenses.view', 'erp.expenses.create', 'erp.expenses.edit', 'erp.expenses.delete', 'erp.expenses.manage',
+    'erp.compliance.escalation.view', 'erp.compliance.escalation.manage',
+    'erp.ticket-categories.view', 'erp.ticket-categories.manage',
+    'erp.ticket-types.view', 'erp.ticket-types.manage',
     'hr.workspace.access', 'hr.dashboard.view',
     'hr.employees.view', 'hr.employees.create', 'hr.employees.edit',
     'hr.departments.view', 'hr.departments.edit',

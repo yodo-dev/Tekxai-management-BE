@@ -5,6 +5,7 @@ import {
   get_ticket,
   get_ticket_approvals,
   get_ticket_stats,
+  get_ticket_timeline,
   list_tickets,
   record_ticket_approval,
   update_ticket,
@@ -31,6 +32,9 @@ export async function get_tickets(req, res, next) {
       severity: req.query.severity,
       approval_status: req.query.approval_status,
       sla: req.query.sla,
+      search: req.query.search,
+      from: req.query.from,
+      to: req.query.to,
       page: +req.query.page || 1,
       limit: +req.query.limit || 20,
     });
@@ -90,5 +94,15 @@ export async function approve_ctrl(req, res, next) {
 export async function get_approvals_ctrl(req, res, next) {
   try {
     return res.json({ success: true, payload: await get_ticket_approvals(req.params.id) });
+  } catch (e) { return next(e); }
+}
+
+export async function get_timeline_ctrl(req, res, next) {
+  try {
+    const result = await get_ticket_timeline(req.params.id, req.user.id, is_admin(req), {
+      page: +req.query.page || 1,
+      limit: +req.query.limit || 50,
+    });
+    return res.json({ success: true, payload: result });
   } catch (e) { return next(e); }
 }
