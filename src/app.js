@@ -9,6 +9,7 @@ import { swagger_spec } from './config/swagger.js';
 import api_routes from './routes/index.js';
 import { error_handler, not_found_handler } from './shared/middleware/error-handler.js';
 import { build_allowed_origins, is_origin_allowed } from './shared/cors-config.js';
+import { authenticate, authorize } from './shared/middleware/authenticate.js';
 
 const app = express();
 
@@ -46,15 +47,29 @@ app.use(
 app.get('/api/v1/health', (_req, res) => res.json({ success: true, message: 'OK', timestamp: new Date().toISOString() }));
 app.get('/health', (_req, res) => res.json({ success: true, message: 'OK', timestamp: new Date().toISOString() }));
 
-// Swagger UI — mounted at both /api-docs and /api/v1/api-docs to support both direct and proxied access
-const swagger_setup = swaggerUi.setup(swagger_spec, {
-  customSiteTitle: 'TekXAI ERP API Docs',
-  swaggerOptions: { persistAuthorization: true },
-});
-app.use('/api-docs', swaggerUi.serve, swagger_setup);
-app.use('/api/v1/api-docs', swaggerUi.serve, swagger_setup);
-app.get('/api-docs.json', (_req, res) => res.json(swagger_spec));
-app.get('/api/v1/api-docs.json', (_req, res) => res.json(swagger_spec));
+// Swagger UI — mounted at both /api-docs and /api/v1/api-docs to support both direct and proxied access.
+// Production readiness audit finding (Critical/Medium): this previously had no
+// auth gate at all, leaking the full API surface to anonymous visitors and,
+// via persistAuthorization, letting anyone with a token issue live requests
+// straight from the docs UI. Disabled entirely in production; gated to
+// authenticated SUPER_ADMIN users in every other environment.
+if (env_config.env === 'production') {
+  const swagger_disabled = (_req, res) => res.status(404).json({ success: false, message: 'Not found' });
+  app.use('/api-docs', swagger_disabled);
+  app.use('/api/v1/api-docs', swagger_disabled);
+  app.get('/api-docs.json', swagger_disabled);
+  app.get('/api/v1/api-docs.json', swagger_disabled);
+} else {
+  const SWAGGER_ADMIN = [authenticate, authorize('SUPER_ADMIN')];
+  const swagger_setup = swaggerUi.setup(swagger_spec, {
+    customSiteTitle: 'TekXAI ERP API Docs',
+    swaggerOptions: { persistAuthorization: true },
+  });
+  app.use('/api-docs', SWAGGER_ADMIN, swaggerUi.serve, swagger_setup);
+  app.use('/api/v1/api-docs', SWAGGER_ADMIN, swaggerUi.serve, swagger_setup);
+  app.get('/api-docs.json', SWAGGER_ADMIN, (_req, res) => res.json(swagger_spec));
+  app.get('/api/v1/api-docs.json', SWAGGER_ADMIN, (_req, res) => res.json(swagger_spec));
+}
 
 app.use('/api/v1', api_routes);
 

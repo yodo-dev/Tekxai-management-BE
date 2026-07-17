@@ -1,11 +1,15 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, can_or_role } from '../../../shared/middleware/authenticate.js';
 import {
   approve_ctrl, create_ticket_ctrl, get_approvals_ctrl, get_ticket_ctrl, get_tickets,
   get_timeline_ctrl, update_ticket_ctrl, add_attachment_ctrl, stats_ctrl, add_reply_ctrl,
 } from '../controllers/tickets.controller.js';
 
-const ADMIN_HR = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
+// Registered permission keys (erp.tickets.*) — previously this module had no
+// keys at all and relied entirely on hardcoded authorize('ADMIN','SUPER_ADMIN','HR').
+const TICKETS_VIEW = can_or_role('erp.tickets.view', 'ADMIN', 'SUPER_ADMIN', 'HR');
+const TICKETS_EDIT = can_or_role('erp.tickets.edit', 'ADMIN', 'SUPER_ADMIN', 'HR');
+const TICKETS_APPROVE = can_or_role('erp.tickets.approve', 'ADMIN', 'SUPER_ADMIN', 'HR');
 
 const router = Router();
 router.use(authenticate);
@@ -22,7 +26,7 @@ router.use(authenticate);
  *       401:
  *         description: Unauthorized
  */
-router.get('/stats', ADMIN_HR, stats_ctrl);
+router.get('/stats', TICKETS_VIEW, stats_ctrl);
 
 /**
  * @swagger
@@ -129,7 +133,7 @@ router.get('/:id', get_ticket_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.patch('/:id', ADMIN_HR, update_ticket_ctrl);
+router.patch('/:id', TICKETS_EDIT, update_ticket_ctrl);
 
 /**
  * @swagger
@@ -195,7 +199,7 @@ router.post('/:id/replies', add_reply_ctrl);
  *     responses:
  *       200: { description: Approval log }
  */
-router.get('/:id/approvals', ADMIN_HR, get_approvals_ctrl);
+router.get('/:id/approvals', TICKETS_VIEW, get_approvals_ctrl);
 
 /**
  * @swagger
@@ -217,7 +221,7 @@ router.get('/:id/approvals', ADMIN_HR, get_approvals_ctrl);
  *       201: { description: Approval recorded }
  *       400: { description: Invalid approval stage }
  */
-router.post('/:id/approvals', ADMIN_HR, approve_ctrl);
+router.post('/:id/approvals', TICKETS_APPROVE, approve_ctrl);
 
 /**
  * @swagger

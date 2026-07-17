@@ -67,6 +67,17 @@ const MANAGER = authorize('ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
 router.post('/upload', upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, message: 'No file provided' });
+    // Production readiness audit fix: this direct-upload path previously did
+    // no MIME/extension validation at all, unlike /storage/presign — any file
+    // type (including ones on the dangerous-extension blocklist) could be
+    // written to disk/S3 and served back with a public URL. Apply the same
+    // checks presign already enforces.
+    if (!is_mime_allowed(req.file.mimetype)) {
+      return res.status(400).json({ success: false, message: `File type not allowed: ${req.file.mimetype}` });
+    }
+    if (is_extension_dangerous(req.file.originalname)) {
+      return res.status(400).json({ success: false, message: 'File extension not allowed' });
+    }
     const ext  = path.extname(req.file.originalname);
     const key  = `uploads/${req.user.id}/${Date.now()}_${randomBytes(8).toString('hex')}${ext}`;
 

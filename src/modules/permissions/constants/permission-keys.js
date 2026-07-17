@@ -51,6 +51,10 @@ export const PERMISSION_DEFINITIONS = [
   { key: 'erp.operations.view',         label: 'Operations – View',         workspace: 'erp', module: 'operations',       action: 'view'   },
   { key: 'erp.operations.edit',         label: 'Operations – Edit',         workspace: 'erp', module: 'operations',       action: 'edit'   },
   { key: 'erp.monitoring.view',         label: 'Monitoring – View',         workspace: 'erp', module: 'monitoring',       action: 'view'   },
+  { key: 'erp.business_units.view',     label: 'Business Units – View',     workspace: 'erp', module: 'business_units',    action: 'view'   },
+  { key: 'erp.business_units.create',   label: 'Business Units – Create',   workspace: 'erp', module: 'business_units',    action: 'create' },
+  { key: 'erp.business_units.edit',     label: 'Business Units – Edit',     workspace: 'erp', module: 'business_units',    action: 'edit'   },
+  { key: 'erp.business_units.delete',   label: 'Business Units – Delete',   workspace: 'erp', module: 'business_units',    action: 'delete' },
   { key: 'erp.departments.view',        label: 'Departments – View',        workspace: 'erp', module: 'departments',      action: 'view'   },
   { key: 'erp.departments.create',      label: 'Departments – Create',      workspace: 'erp', module: 'departments',      action: 'create' },
   { key: 'erp.departments.edit',        label: 'Departments – Edit',        workspace: 'erp', module: 'departments',      action: 'edit'   },
@@ -89,6 +93,23 @@ export const PERMISSION_DEFINITIONS = [
   { key: 'erp.meetings.edit',            label: 'Meetings – Edit',            workspace: 'erp', module: 'meetings',          action: 'edit'   },
   { key: 'erp.meetings.delete',          label: 'Meetings – Delete',          workspace: 'erp', module: 'meetings',          action: 'delete' },
   { key: 'erp.meetings.manage',          label: 'Meetings – Manage',          workspace: 'erp', module: 'meetings',          action: 'manage' },
+  // Tickets previously had no registered permission key at all (hardcoded
+  // authorize('ADMIN','SUPER_ADMIN','HR') on some routes, no guard on others).
+  { key: 'erp.tickets.view',             label: 'Support Tickets – View',      workspace: 'erp', module: 'tickets',          action: 'view'   },
+  { key: 'erp.tickets.create',           label: 'Support Tickets – Create',    workspace: 'erp', module: 'tickets',          action: 'create' },
+  { key: 'erp.tickets.edit',             label: 'Support Tickets – Edit',      workspace: 'erp', module: 'tickets',          action: 'edit'   },
+  { key: 'erp.tickets.approve',          label: 'Support Tickets – Approve',   workspace: 'erp', module: 'tickets',          action: 'approve'},
+  // Payroll previously borrowed the unrelated erp.users.view key.
+  { key: 'erp.payroll.view',             label: 'Payroll – View',              workspace: 'erp', module: 'payroll',          action: 'view'   },
+  { key: 'erp.payroll.create',           label: 'Payroll – Create',            workspace: 'erp', module: 'payroll',          action: 'create' },
+  { key: 'erp.payroll.edit',             label: 'Payroll – Edit',              workspace: 'erp', module: 'payroll',          action: 'edit'   },
+  // Webhooks previously borrowed the unrelated erp.users.view key.
+  { key: 'erp.webhooks.manage',          label: 'Webhooks – Manage',           workspace: 'erp', module: 'webhooks',         action: 'manage' },
+  // Admin activity-log listing endpoint had no permission check at all despite
+  // its own swagger doc labeling it "admin only".
+  { key: 'erp.activity-logs.view',       label: 'Activity Logs – View',        workspace: 'erp', module: 'activity_logs',    action: 'view'   },
+  // Was referenced in code (executive-analytics.routes.js) but never registered.
+  { key: 'erp.executive-analytics.view', label: 'Executive Analytics – View',  workspace: 'erp', module: 'executive_analytics', action: 'view' },
 
   // ── CRM Workspace access ──────────────────────────────────────────────────
   { key: 'crm.workspace.access',        label: 'CRM Workspace Access',      workspace: 'crm', module: 'workspace',        action: 'access' },
@@ -171,6 +192,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'erp.reports.view', 'erp.reports.export',
     'erp.operations.view', 'erp.operations.edit',
     'erp.monitoring.view',
+    'erp.business_units.view', 'erp.business_units.create', 'erp.business_units.edit', 'erp.business_units.delete',
     'erp.departments.view', 'erp.departments.create', 'erp.departments.edit',
     'erp.designations.view', 'erp.designations.create', 'erp.designations.edit',
     'erp.grades.view', 'erp.grades.create', 'erp.grades.edit',
@@ -184,6 +206,11 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'erp.ticket-categories.view', 'erp.ticket-categories.manage',
     'erp.ticket-types.view', 'erp.ticket-types.manage',
     'erp.meetings.view', 'erp.meetings.create', 'erp.meetings.edit', 'erp.meetings.delete', 'erp.meetings.manage',
+    'erp.tickets.view', 'erp.tickets.create', 'erp.tickets.edit', 'erp.tickets.approve',
+    'erp.payroll.view', 'erp.payroll.create', 'erp.payroll.edit',
+    'erp.webhooks.manage',
+    'erp.activity-logs.view',
+    'erp.executive-analytics.view',
     'hr.workspace.access', 'hr.dashboard.view',
     'hr.employees.view', 'hr.employees.create', 'hr.employees.edit',
     'hr.departments.view', 'hr.departments.edit',
@@ -217,12 +244,21 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'erp.workspace.access', 'erp.dashboard.view',
     'erp.timesheet.view', 'erp.timesheet.approve',
     'erp.attendance.view', 'erp.attendance.edit',
+    'erp.business_units.view',
     'erp.departments.view',
     'erp.designations.view', 'erp.designations.create', 'erp.designations.edit',
     'erp.grades.view', 'erp.grades.create', 'erp.grades.edit',
     'erp.users.view',
     'erp.reports.view',
     'erp.meetings.view', 'erp.meetings.create', 'erp.meetings.edit',
+    'erp.tickets.view', 'erp.tickets.create', 'erp.tickets.edit', 'erp.tickets.approve',
+    'erp.payroll.view', 'erp.payroll.create', 'erp.payroll.edit',
+    'erp.executive-analytics.view',
+    // HR is granted monitoring-view to match the pre-existing sidebar/route
+    // access HR already had to /hr/monitoring — the API previously silently
+    // excluded HR from erp.monitoring.view's fallback role list, a 403-after-click
+    // bug fixed by adding HR to the route guard alongside this grant.
+    'erp.monitoring.view',
   ],
   DIVISION_MANAGER: [
     'erp.workspace.access', 'erp.dashboard.view',
@@ -240,6 +276,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'erp.attendance.view',
     'erp.requisitions.view', 'erp.requisitions.approve',
     'erp.meetings.view', 'erp.meetings.create', 'erp.meetings.edit',
+    'erp.executive-analytics.view',
     'hr.workspace.access',
     'hr.employees.view',
     'hr.attendance.view',

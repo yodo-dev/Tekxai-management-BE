@@ -17,10 +17,12 @@ import { get_targets, upsert_target_ctrl, get_my_report } from '../controllers/t
 
 const router = Router();
 router.use(authenticate);
-// NOTE: publish_salary, deposit-target, upwork/linkedin/email-lead deletes, deposit
-// edit/delete, and the /members dashboard remain on authorize()/MKT/ADMIN — no
-// matching crm.* permission key exists for those specific actions yet
-// (see Sprint 1 Phase 5 Milestone 2 audit).
+// NOTE: deposit-target, upwork/linkedin/email-lead deletes, deposit edit/delete,
+// and the /members dashboard remain on authorize()/MKT/ADMIN — no matching
+// crm.* permission key exists for those specific actions yet (see Sprint 1
+// Phase 5 Milestone 2 audit). publish_salary was migrated to the registered
+// crm.salary.approve key (Permission Standardization sprint) — it had been
+// left on hardcoded ADMIN despite that key already existing for this action.
 const MKT   = authorize('ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
 const ADMIN = authorize('ADMIN', 'SUPER_ADMIN');
 
@@ -40,6 +42,10 @@ const EMAIL_LEADS_EDIT  = can_or_role('crm.email_leads.edit', 'ADMIN', 'SUPER_AD
 const DEPOSITS_VIEW     = can_or_role('crm.deposits.view', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
 const DEPOSITS_CREATE   = can_or_role('crm.deposits.create', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
 const TARGETS_EDIT      = can_or_role('crm.targets.edit', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+const TARGETS_VIEW      = can_or_role('crm.targets.view', 'ADMIN', 'SUPER_ADMIN', 'MARKETING', 'HR');
+// crm.salary.approve is registered but was previously unused — publish_salary
+// stayed hardcoded to ADMIN despite this key existing for exactly this action.
+const SALARY_APPROVE    = can_or_role('crm.salary.approve', 'ADMIN', 'SUPER_ADMIN');
 
 // ── Won Deals + Salary ─────────────────────────────────────────────────────
 /**
@@ -145,7 +151,7 @@ router.post('/salary-builder', SALARY_EDIT, upsert_salary_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.post('/salary-builder/:user_id/:period/publish', ADMIN, publish_salary_ctrl);
+router.post('/salary-builder/:user_id/:period/publish', SALARY_APPROVE, publish_salary_ctrl);
 
 /**
  * @swagger
@@ -442,7 +448,9 @@ router.delete('/deposits/:id', MKT, del_deposit);
 router.get('/deposit-target',   MKT, get_deposit_target_ctrl);
 router.post('/deposit-target',  ADMIN, upsert_deposit_target_ctrl);
 
-router.get('/targets', get_targets);
+// Previously had zero authorization check at all despite crm.targets.view
+// being registered and intended for exactly this endpoint.
+router.get('/targets', TARGETS_VIEW, get_targets);
 router.post('/targets', TARGETS_EDIT, upsert_target_ctrl);
 
 // ── Dashboard: marketing team members + salary status ─────────────────────

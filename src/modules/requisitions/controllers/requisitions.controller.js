@@ -23,6 +23,14 @@ export async function get_ctrl(req, res, next) {
   try {
     const req_data = await get_requisition(req.params.id);
     if (!req_data) return res.status(404).json({ success: false, message: 'Not found' });
+    // Non-admins may only view their own requisition — this route had no
+    // scoping at all, letting any authenticated employee read anyone else's.
+    const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN', 'HR'];
+    const role = req.user?.role_name || req.user?.role || '';
+    const is_admin = ADMIN_ROLES.includes(role) || req.user?.roles?.some((r) => ADMIN_ROLES.includes(r));
+    if (!is_admin && req_data.requester?.id !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Insufficient permissions' });
+    }
     return res.json({ success: true, payload: req_data });
   } catch (e) { return next(e); }
 }

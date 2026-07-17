@@ -4,7 +4,8 @@ import { list_webhooks, create_webhook, update_webhook, delete_webhook, get_deli
 
 const router = Router();
 router.use(authenticate);
-const ADMIN = can_or_role('erp.users.view','ADMIN','SUPER_ADMIN');
+// Previously borrowed the unrelated erp.users.view key.
+const ADMIN = can_or_role('erp.webhooks.manage','ADMIN','SUPER_ADMIN');
 
 /**
  * @swagger

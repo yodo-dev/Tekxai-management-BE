@@ -1,9 +1,10 @@
 import { Router } from 'express';
-import { authenticate } from '../../../shared/middleware/authenticate.js';
+import { authenticate, can_or_role } from '../../../shared/middleware/authenticate.js';
 import { list_activity_ctrl, list_my_activity_ctrl } from '../controllers/activity.controller.js';
 
 const router = Router();
 router.use(authenticate);
+const ACTIVITY_LOGS_VIEW = can_or_role('erp.activity-logs.view', 'ADMIN', 'SUPER_ADMIN');
 
 /**
  * @swagger
@@ -30,7 +31,7 @@ router.use(authenticate);
  *       401:
  *         description: Unauthorized
  */
-router.get('/', list_activity_ctrl);
+router.get('/', ACTIVITY_LOGS_VIEW, list_activity_ctrl);
 
 /**
  * @swagger

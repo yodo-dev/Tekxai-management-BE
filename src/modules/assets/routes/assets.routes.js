@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../../../shared/middleware/authenticate.js';
+import { authenticate, can_or_role } from '../../../shared/middleware/authenticate.js';
 import {
   add_maintenance_ctrl,
   approve_asset_request_ctrl,
@@ -26,7 +26,15 @@ import {
 
 const router = Router();
 router.use(authenticate);
-const HR = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
+// Previously this whole module bypassed the permission-key system entirely
+// (hardcoded authorize('ADMIN','SUPER_ADMIN','HR') for every mutating route,
+// and NO guard at all on most view routes) despite erp.assets.*/hr.assets.*
+// already being registered and default-granted to ADMIN/HR.
+const ASSETS_VIEW = can_or_role('erp.assets.view', 'ADMIN', 'SUPER_ADMIN', 'HR');
+const ASSETS_CREATE = can_or_role('erp.assets.create', 'ADMIN', 'SUPER_ADMIN', 'HR');
+const ASSETS_EDIT = can_or_role('erp.assets.edit', 'ADMIN', 'SUPER_ADMIN', 'HR');
+const ASSETS_DELETE = can_or_role('erp.assets.delete', 'ADMIN', 'SUPER_ADMIN', 'HR');
+const ASSETS_MANAGE = can_or_role('hr.assets.manage', 'ADMIN', 'SUPER_ADMIN', 'HR');
 
 /**
  * @swagger
@@ -40,7 +48,7 @@ const HR = authorize('ADMIN', 'SUPER_ADMIN', 'HR');
  *       401:
  *         description: Unauthorized
  */
-router.get('/categories',       get_categories);
+router.get('/categories',       ASSETS_VIEW, get_categories);
 
 /**
  * @swagger
@@ -63,7 +71,7 @@ router.get('/categories',       get_categories);
  *       401:
  *         description: Unauthorized
  */
-router.post('/categories',      HR, create_category_ctrl);
+router.post('/categories',      ASSETS_CREATE, create_category_ctrl);
 
 /**
  * @swagger
@@ -77,7 +85,7 @@ router.post('/categories',      HR, create_category_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.get('/locations',        get_locations);
+router.get('/locations',        ASSETS_VIEW, get_locations);
 
 /**
  * @swagger
@@ -91,7 +99,7 @@ router.get('/locations',        get_locations);
  *       401:
  *         description: Unauthorized
  */
-router.get('/vendors',          get_vendors);
+router.get('/vendors',          ASSETS_VIEW, get_vendors);
 
 /**
  * @swagger
@@ -134,7 +142,7 @@ router.post('/requests',        create_asset_request_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.get('/requests',         HR,   get_asset_requests_ctrl);
+router.get('/requests',         ASSETS_VIEW,   get_asset_requests_ctrl);
 
 /**
  * @swagger
@@ -163,7 +171,7 @@ router.get('/requests',         HR,   get_asset_requests_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.post('/requests/:id/approve', HR, approve_asset_request_ctrl);
+router.post('/requests/:id/approve', ASSETS_MANAGE, approve_asset_request_ctrl);
 
 /**
  * @swagger
@@ -189,7 +197,7 @@ router.post('/requests/:id/approve', HR, approve_asset_request_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.post('/requests/:id/reject',  HR, reject_asset_request_ctrl);
+router.post('/requests/:id/reject',  ASSETS_MANAGE, reject_asset_request_ctrl);
 
 /**
  * @swagger
@@ -203,7 +211,7 @@ router.post('/requests/:id/reject',  HR, reject_asset_request_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.get('/disposals',        HR,   get_disposals_ctrl);
+router.get('/disposals',        ASSETS_VIEW,   get_disposals_ctrl);
 
 /**
  * @swagger
@@ -229,7 +237,7 @@ router.get('/disposals',        HR,   get_disposals_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.post('/disposals',       HR,   create_disposal_ctrl);
+router.post('/disposals',       ASSETS_MANAGE,   create_disposal_ctrl);
 
 /**
  * @swagger
@@ -243,7 +251,7 @@ router.post('/disposals',       HR,   create_disposal_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.get('/reports/depreciation', HR, get_depreciation_report_ctrl);
+router.get('/reports/depreciation', ASSETS_VIEW, get_depreciation_report_ctrl);
 
 /**
  * @swagger
@@ -257,7 +265,7 @@ router.get('/reports/depreciation', HR, get_depreciation_report_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.get('/reports/inventory',    HR, get_inventory_report_ctrl);
+router.get('/reports/inventory',    ASSETS_VIEW, get_inventory_report_ctrl);
 
 /**
  * @swagger
@@ -278,7 +286,7 @@ router.get('/reports/inventory',    HR, get_inventory_report_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.get('/',                 get_assets);
+router.get('/',                 ASSETS_VIEW, get_assets);
 
 /**
  * @swagger
@@ -305,7 +313,7 @@ router.get('/',                 get_assets);
  *       401:
  *         description: Unauthorized
  */
-router.post('/',                HR,   create_asset_ctrl);
+router.post('/',                ASSETS_CREATE,   create_asset_ctrl);
 
 /**
  * @swagger
@@ -326,7 +334,7 @@ router.post('/',                HR,   create_asset_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.get('/:id',              get_asset_ctrl);
+router.get('/:id',              ASSETS_VIEW, get_asset_ctrl);
 
 /**
  * @swagger
@@ -345,7 +353,7 @@ router.get('/:id',              get_asset_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.put('/:id',              HR,     update_asset_ctrl);
+router.put('/:id',              ASSETS_EDIT,     update_asset_ctrl);
 
 /**
  * @swagger
@@ -364,7 +372,7 @@ router.put('/:id',              HR,     update_asset_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.delete('/:id',           HR,   delete_asset_ctrl);
+router.delete('/:id',           ASSETS_DELETE,   delete_asset_ctrl);
 
 /**
  * @swagger
@@ -393,7 +401,7 @@ router.delete('/:id',           HR,   delete_asset_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.post('/:id/assign',      HR,    assign_asset_ctrl);
+router.post('/:id/assign',      ASSETS_MANAGE,    assign_asset_ctrl);
 
 /**
  * @swagger
@@ -412,7 +420,7 @@ router.post('/:id/assign',      HR,    assign_asset_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.post('/:id/return',      HR,    return_asset_ctrl);
+router.post('/:id/return',      ASSETS_MANAGE,    return_asset_ctrl);
 
 /**
  * @swagger
@@ -426,7 +434,7 @@ router.post('/:id/return',      HR,    return_asset_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.get('/maintenance/all',  list_all_maintenance_ctrl);
+router.get('/maintenance/all',  ASSETS_VIEW, list_all_maintenance_ctrl);
 
 /**
  * @swagger
@@ -456,6 +464,6 @@ router.get('/maintenance/all',  list_all_maintenance_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.post('/:id/maintenance', HR,     add_maintenance_ctrl);
+router.post('/:id/maintenance', ASSETS_EDIT,     add_maintenance_ctrl);
 
 export default router;

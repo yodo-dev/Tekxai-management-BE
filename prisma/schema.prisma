@@ -248,16 +248,39 @@ model otp_codes {
 
 // ─── Org Structure ────────────────────────────────────────────────────────────
 
+// Organization Hierarchy Migration — Sprint 1, Phase 1. New top-level entity
+// above Department (target hierarchy: Business Unit -> Department ->
+// Designation -> Grade). Additive only — no existing column removed/renamed.
+model business_units {
+  id          String    @id @default(cuid())
+  name        String
+  code        String?   @unique
+  description String?
+  is_active   Boolean   @default(true)
+  sort_order  Int       @default(0)
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+
+  departments departments[]
+
+  @@index([is_active])
+}
+
 model departments {
   id          String    @id @default(cuid())
   name        String
   code        String?   @unique
   description String?
   manager_id  String?
+  // Sprint 1: nullable FK to business_units — existing departments are not
+  // backfilled/migrated this sprint (Phase 5: backward compatibility), so
+  // this must stay optional until Sprint 2 makes it required.
+  business_unit_id String?
   created_at  DateTime  @default(now())
   updated_at  DateTime  @updatedAt
   deleted_at  DateTime?
 
+  business_unit   business_units?   @relation(fields: [business_unit_id], references: [id], onDelete: SetNull)
   divisions       divisions[]
   users           users[]
   teams           teams[]
@@ -271,6 +294,8 @@ model departments {
 
   designation_history_previous designation_history[] @relation("designation_history_previous_department")
   designation_history_new      designation_history[] @relation("designation_history_new_department")
+
+  @@index([business_unit_id])
 }
 
 model divisions {
@@ -2536,7 +2561,10 @@ model expense_transactions {
   created_at         DateTime @default(now())
   updated_at         DateTime @updatedAt
 
-  expense_account expense_accounts    @relation(fields: [expense_account_id], references: [id], onDelete: Cascade)
+  // Restrict (not Cascade): financial audit history must never be silently
+  // destroyed by deleting the parent account — no delete endpoint exists for
+  // expense_accounts today; deactivation should use is_enabled instead.
+  expense_account expense_accounts    @relation(fields: [expense_account_id], references: [id], onDelete: Restrict)
   user            users               @relation("expense_txn_user", fields: [user_id], references: [id])
   category        expense_categories? @relation(fields: [category_id], references: [id])
   creator         users?              @relation("expense_txn_creator", fields: [created_by], references: [id])
@@ -2676,7 +2704,11 @@ model payroll_entries {
   created_at            DateTime @default(now())
   updated_at            DateTime @updatedAt
 
-  run  payroll_runs @relation(fields: [run_id], references: [id], onDelete: Cascade)
+  // Restrict (not Cascade): payroll history must never be silently destroyed
+  // by deleting the parent run — no delete endpoint exists for payroll_runs
+  // today, and if one is ever added it must archive/cancel the run rather
+  // than hard-delete it while entries exist.
+  run  payroll_runs @relation(fields: [run_id], references: [id], onDelete: Restrict)
   user users        @relation("payroll_entries", fields: [user_id], references: [id])
 
   // Sprint 3 Milestone 4: an employee may appear only once per payroll run.

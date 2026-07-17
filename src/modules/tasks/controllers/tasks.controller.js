@@ -57,11 +57,19 @@ export async function create_task_ctrl(req, res, next) {
   } catch (err) { next(err); }
 }
 
+const MANAGER_ROLES = ['ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER'];
+
 // PUT /project/:projectId/tasks/:taskId
 export async function update_task_ctrl(req, res, next) {
   try {
     const task = await find_task_by_id(req.params.taskId);
     if (!task) return fail(res, 'Task not found', 404);
+    // Only a manager-tier role or the task's own assignee may update it —
+    // this endpoint had no check at all before, letting any authenticated
+    // user edit any task on any project.
+    const is_manager = req.user.roles?.some((r) => MANAGER_ROLES.includes(r));
+    const is_assignee = task.assigned_to === req.user.id;
+    if (!is_manager && !is_assignee) return fail(res, 'Insufficient permissions', 403);
     const prev_assignee = task.assigned_to;
     const updated = await update_task(req.params.taskId, req.body);
     // Send assignment email if assignee changed

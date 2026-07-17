@@ -430,10 +430,14 @@ router.get('/projects', MANAGER, async (req, res, next) => {
  *       401:
  *         description: Unauthorized
  */
-router.get('/builder/schema', get_schema);
-router.post('/builder/run', run_report);
-router.get('/builder/saved', list_saved);
-router.post('/builder/saved', save_report);
-router.delete('/builder/saved/:id', delete_saved);
+// Report Builder previously had NO authorization check at all beyond
+// authenticate — any logged-in user could query arbitrary entities (including
+// payroll_entries/expense_transactions) via /builder/run. Now gated by the
+// same erp.reports.view permission the rest of this router already uses.
+router.get('/builder/schema', MANAGER, get_schema);
+router.post('/builder/run', MANAGER, run_report);
+router.get('/builder/saved', MANAGER, list_saved);
+router.post('/builder/saved', MANAGER, save_report);
+router.delete('/builder/saved/:id', MANAGER, delete_saved);
 
 export default router;

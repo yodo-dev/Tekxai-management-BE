@@ -3,13 +3,17 @@ import prisma from '../../../shared/database/client.js';
 function app_error(m, c = 400) { const e = new Error(m); e.status_code = c; return e; }
 
 const DEPT_INCLUDE = {
+  business_unit: { select: { id: true, name: true, code: true } },
   divisions: { where: { deleted_at: null }, orderBy: { name: 'asc' } },
   _count: { select: { users: true } },
 };
 
-export async function list_departments({ search } = {}) {
+// Sprint 1 (Organization Hierarchy Migration): business_unit_id filter added
+// for the new Department-list "filter by Business Unit" requirement.
+export async function list_departments({ search, business_unit_id } = {}) {
   const where = { deleted_at: null };
   if (search) where.name = { contains: search, mode: 'insensitive' };
+  if (business_unit_id) where.business_unit_id = business_unit_id;
   return prisma.departments.findMany({
   take: 500, where, include: DEPT_INCLUDE, orderBy: { name: 'asc' } });
 }

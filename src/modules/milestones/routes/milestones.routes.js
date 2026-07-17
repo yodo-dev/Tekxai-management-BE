@@ -90,7 +90,9 @@ router.post('/',                 MANAGER, create_milestone_ctrl);
  *       401:
  *         description: Unauthorized
  */
-router.put('/:milestoneId',      update_milestone_ctrl);
+// Previously unguarded (only create/delete had the MANAGER check) — any
+// authenticated user could update any project's milestones.
+router.put('/:milestoneId',      MANAGER, update_milestone_ctrl);
 
 /**
  * @swagger

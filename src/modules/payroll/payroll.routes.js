@@ -5,7 +5,11 @@ import { list_runs, create_run, calculate_run, get_run, update_run_status, get_p
 const router = Router();
 router.use(authenticate);
 
-const HR_ADMIN = can_or_role('erp.users.view', 'ADMIN', 'SUPER_ADMIN', 'HR');
+// Previously borrowed the unrelated erp.users.view key — now uses dedicated
+// erp.payroll.* keys registered for this module.
+const HR_ADMIN = can_or_role('erp.payroll.view', 'ADMIN', 'SUPER_ADMIN', 'HR');
+const PAYROLL_CREATE = can_or_role('erp.payroll.create', 'ADMIN', 'SUPER_ADMIN', 'HR');
+const PAYROLL_EDIT = can_or_role('erp.payroll.edit', 'ADMIN', 'SUPER_ADMIN', 'HR');
 
 /**
  * @swagger
@@ -45,7 +49,7 @@ router.get('/',                              HR_ADMIN, list_runs);
  *       401:
  *         description: Unauthorized
  */
-router.post('/',                             HR_ADMIN, create_run);
+router.post('/',                             PAYROLL_CREATE, create_run);
 
 /**
  * @swagger
@@ -96,7 +100,7 @@ router.get('/:id',                           HR_ADMIN, get_run);
  *           request are kept (not rolled back), and the response states how many of how many
  *           employees were processed before stopping.
  */
-router.post('/:id/calculate',               HR_ADMIN, calculate_run);
+router.post('/:id/calculate',               PAYROLL_EDIT, calculate_run);
 
 /**
  * @swagger
@@ -137,7 +141,7 @@ router.post('/:id/calculate',               HR_ADMIN, calculate_run);
  *           reading it and writing it (e.g. a simultaneous calculate/status-advance request won
  *           the race) — refresh and retry.
  */
-router.patch('/:id/status',                 HR_ADMIN, update_run_status);
+router.patch('/:id/status',                 PAYROLL_EDIT, update_run_status);
 
 /**
  * @swagger
