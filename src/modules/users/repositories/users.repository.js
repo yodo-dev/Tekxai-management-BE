@@ -124,8 +124,17 @@ export async function create_user({ email, password_hash, first_name, last_name,
       },
     });
 
-    if (role_id) {
-      await tx.user_roles.create({ data: { user_id: user.id, role_id } });
+    // Every creation path must leave the user with a role — Quick Add always
+    // collects one, but Add Employee's wizard doesn't yet, so fall back to
+    // the same default ('EMPLOYEE') already used by invite redemption and
+    // Google SSO auto-provisioning, rather than leaving user_roles empty.
+    let effective_role_id = role_id;
+    if (!effective_role_id) {
+      const default_role = await tx.roles.findFirst({ where: { name: 'EMPLOYEE' } });
+      effective_role_id = default_role?.id;
+    }
+    if (effective_role_id) {
+      await tx.user_roles.create({ data: { user_id: user.id, role_id: effective_role_id } });
     }
 
     await tx.user_settings.create({ data: { user_id: user.id } });
@@ -164,6 +173,8 @@ export async function update_user(id, data) {
   if (rest.department_id === null || rest.department_id === '') delete update_data.department_id;
   if (rest.designation_id === null || rest.designation_id === '') update_data.designation_id = null;
   if (rest.grade_id === null || rest.grade_id === '') update_data.grade_id = null;
+  if (rest.hire_date === '' || rest.hire_date === null) delete update_data.hire_date;
+  else if (rest.hire_date !== undefined) update_data.hire_date = new Date(rest.hire_date);
 
   await prisma.users.update({
     where: { id },
