@@ -162,7 +162,7 @@ const MEETING_INCLUDE = {
 };
 
 export async function list_meetings({
-  room_id, status, organizer_id, participant_id, from, to, search, page = 1, limit = 20,
+  room_id, status, organizer_id, participant_id, project_id, from, to, search, page = 1, limit = 20,
 } = {}) {
   page = +page || 1; limit = +limit || 20;
   const skip = (page - 1) * limit;
@@ -170,6 +170,7 @@ export async function list_meetings({
   if (room_id) where.room_id = room_id;
   if (status) where.status = status;
   if (organizer_id) where.organizer_id = organizer_id;
+  if (project_id) where.project_id = project_id;
   if (participant_id) where.participants = { some: { user_id: participant_id } };
   if (from || to) {
     where.scheduled_at = {};
@@ -204,7 +205,7 @@ export async function get_meeting(id) {
 }
 
 export async function create_meeting({
-  room_id, title, scheduled_at, organizer_id, previous_meeting_id, participant_ids = [],
+  room_id, title, scheduled_at, organizer_id, previous_meeting_id, project_id, participant_ids = [],
 }) {
   const room = await prisma.meeting_rooms.findFirst({ where: { id: room_id, deleted_at: null } });
   if (!room) throw app_error('Meeting room not found', 404);
@@ -216,10 +217,16 @@ export async function create_meeting({
     if (prev.room_id !== room_id) throw app_error('Follow-up meeting must be in the same room', 400);
   }
 
+  if (project_id) {
+    const project = await prisma.projects.findFirst({ where: { id: project_id, deleted_at: null } });
+    if (!project) throw app_error('project_id not found', 404);
+  }
+
   const meeting = await prisma.meetings.create({
     data: {
       room_id, title: title.trim(), scheduled_at: new Date(scheduled_at), organizer_id,
       previous_meeting_id: previous_meeting_id || null,
+      project_id: project_id || null,
       participants: {
         create: [
           { user_id: organizer_id },

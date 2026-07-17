@@ -482,6 +482,7 @@ model projects {
   dependencies       project_dependencies[]
   weekly_updates     client_weekly_updates[]
   documents          project_documents[]
+  meetings           meetings[]
   extension_requests extension_requests[]
   invoices           crm_invoices[]
   support_tickets    support_tickets[]
@@ -2895,6 +2896,7 @@ model meetings {
   status              String    @default("SCHEDULED") // SCHEDULED | COMPLETED | CANCELLED
   closed_at           DateTime?
   previous_meeting_id String?
+  project_id          String?
   created_at          DateTime  @default(now())
   updated_at          DateTime  @updatedAt
   deleted_at          DateTime?
@@ -2903,6 +2905,7 @@ model meetings {
   organizer        users                  @relation("meeting_organizer", fields: [organizer_id], references: [id], onDelete: Restrict)
   previous_meeting meetings?              @relation("meeting_follow_up", fields: [previous_meeting_id], references: [id], onDelete: SetNull)
   follow_ups       meetings[]             @relation("meeting_follow_up")
+  project          projects?              @relation(fields: [project_id], references: [id], onDelete: SetNull)
   participants     meeting_participants[]
   notes            meeting_notes[]
   decisions        meeting_decisions[]
@@ -2913,6 +2916,7 @@ model meetings {
   @@index([organizer_id])
   @@index([status])
   @@index([scheduled_at])
+  @@index([project_id])
   @@index([previous_meeting_id])
 }
 

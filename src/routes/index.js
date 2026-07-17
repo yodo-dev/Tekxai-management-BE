@@ -21,6 +21,9 @@ import tracking_links_routes from '../modules/tracking-links/routes/tracking-lin
 import weekly_updates_routes  from '../modules/weekly-updates/routes/weekly-updates.routes.js';
 import project_documents_routes from '../modules/project-documents/routes/project-documents.routes.js';
 import dependencies_routes  from '../modules/dependencies/routes/dependencies.routes.js';
+import project_discussions_routes from '../modules/project-discussions/routes/project-discussions.routes.js';
+import { get_communication_timeline_ctrl } from '../modules/project-discussions/controllers/project-discussions.controller.js';
+import { authenticate as authenticate_mw } from '../shared/middleware/authenticate.js';
 import project_timeline_routes from '../modules/activity-logs/routes/project-timeline.routes.js';
 import timesheets_routes    from '../modules/timesheets/routes/timesheets.routes.js';
 import invites_routes       from '../modules/invites/routes/invites.routes.js';
@@ -94,6 +97,8 @@ router.use('/project/:projectId/tasks',      tasks_routes);
 router.use('/project/:projectId/milestones', milestones_routes);
 router.use('/project/:projectId/devops-access', devops_access_routes);
 router.use('/project/:projectId/dependencies', dependencies_routes);
+router.use('/project/:projectId/discussions', project_discussions_routes);
+router.get('/project/:projectId/communication-timeline', authenticate_mw, get_communication_timeline_ctrl);
 router.use('/project/:projectId/tracking-links', tracking_links_routes);
 router.use('/project/:projectId/weekly-updates', weekly_updates_routes);
 router.use('/project/:projectId/documents', project_documents_routes);
