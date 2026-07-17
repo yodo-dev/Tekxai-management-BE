@@ -583,6 +583,39 @@ model devops_access_tracking {
   email_smtp_access_status  String    @default("NOT_APPLICABLE")
   aws_access_status         String    @default("NOT_APPLICABLE") // GRANTED | PENDING | LIMITED | NOT_APPLICABLE
   devops_remarks            String?
+
+  // Git Repository
+  git_provider              String?
+  git_repo_url              String?
+  git_organization          String?
+  git_default_branch        String?
+
+  // Hosting
+  hosting_provider          String?
+  hosting_environment       String? // PRODUCTION | STAGING | DEVELOPMENT
+  hosting_server            String?
+  hosting_region            String?
+
+  // Domain
+  domain_name               String?
+  domain_dns_provider       String?
+  domain_ssl_status         String? // ACTIVE | EXPIRING | EXPIRED | NOT_CONFIGURED
+  domain_expiry_date        DateTime?
+
+  // Database
+  database_provider         String?
+  database_version          String?
+  database_backup_status    String? // ENABLED | DISABLED | UNKNOWN
+
+  // Storage / CDN / third-party services
+  storage_provider          String?
+  cdn_provider               String?
+  smtp_provider             String?
+  third_party_services      String?
+  api_keys_status           String    @default("NOT_APPLICABLE") // GRANTED | PENDING | NOT_APPLICABLE
+  point_of_contact          String?
+  credentials_verified_date DateTime?
+
   created_at                DateTime  @default(now())
   updated_at                DateTime  @updatedAt
 

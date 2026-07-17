@@ -11,7 +11,39 @@ const DEFAULTS = {
   email_smtp_access_status: 'NOT_APPLICABLE',
   aws_access_status: 'NOT_APPLICABLE',
   devops_remarks: null,
+  git_provider: null,
+  git_repo_url: null,
+  git_organization: null,
+  git_default_branch: null,
+  hosting_provider: null,
+  hosting_environment: null,
+  hosting_server: null,
+  hosting_region: null,
+  domain_name: null,
+  domain_dns_provider: null,
+  domain_ssl_status: null,
+  domain_expiry_date: null,
+  database_provider: null,
+  database_version: null,
+  database_backup_status: null,
+  storage_provider: null,
+  cdn_provider: null,
+  smtp_provider: null,
+  third_party_services: null,
+  api_keys_status: 'NOT_APPLICABLE',
+  point_of_contact: null,
+  credentials_verified_date: null,
 };
+
+const PASSTHROUGH_STRING_FIELDS = [
+  'git_provider', 'git_repo_url', 'git_organization', 'git_default_branch',
+  'hosting_provider', 'hosting_environment', 'hosting_server', 'hosting_region',
+  'domain_name', 'domain_dns_provider', 'domain_ssl_status',
+  'database_provider', 'database_version', 'database_backup_status',
+  'storage_provider', 'cdn_provider', 'smtp_provider', 'third_party_services',
+  'api_keys_status', 'point_of_contact',
+];
+const PASSTHROUGH_DATE_FIELDS = ['domain_expiry_date', 'credentials_verified_date'];
 
 // Access fields that count toward the "access completion score" (out of 6).
 export const ACCESS_SCORE_FIELDS = [
@@ -49,6 +81,13 @@ export async function upsert_devops_access(project_id, data) {
   if (email_smtp_access_status !== undefined) payload.email_smtp_access_status = email_smtp_access_status;
   if (aws_access_status !== undefined) payload.aws_access_status = aws_access_status;
   if (devops_remarks !== undefined) payload.devops_remarks = devops_remarks?.trim() || null;
+
+  for (const field of PASSTHROUGH_STRING_FIELDS) {
+    if (data[field] !== undefined) payload[field] = data[field]?.trim?.() || data[field] || null;
+  }
+  for (const field of PASSTHROUGH_DATE_FIELDS) {
+    if (data[field] !== undefined) payload[field] = data[field] ? new Date(data[field]) : null;
+  }
 
   return prisma.devops_access_tracking.upsert({
     where: { project_id },

@@ -41,6 +41,17 @@ const DIFF_FIELD_LABELS = {
   email_smtp_access_status: 'Email/SMTP access',
   aws_access_status: 'AWS access',
   devops_remarks: 'DevOps remarks',
+  git_provider: 'Git provider',
+  git_repo_url: 'Repository URL',
+  hosting_provider: 'Hosting provider',
+  hosting_environment: 'Hosting environment',
+  domain_name: 'Domain',
+  domain_ssl_status: 'SSL status',
+  database_provider: 'Database provider',
+  database_backup_status: 'Database backup status',
+  api_keys_status: 'API keys status',
+  point_of_contact: 'Point of contact',
+  credentials_verified_date: 'Credentials verified date',
 };
 
 function describe_devops_diff(before, after) {
