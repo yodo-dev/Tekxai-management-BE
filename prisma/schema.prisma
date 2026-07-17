@@ -479,6 +479,7 @@ model projects {
   crm_handoffs       crm_handoffs[]
   devops_access      devops_access_tracking?
   tracking_links     project_tracking_links[]
+  dependencies       project_dependencies[]
   weekly_updates     client_weekly_updates[]
   documents          project_documents[]
   extension_requests extension_requests[]
@@ -584,6 +585,26 @@ model devops_access_tracking {
   devops_remarks            String?
   created_at                DateTime  @default(now())
   updated_at                DateTime  @updatedAt
+
+  project projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@index([project_id])
+}
+
+model project_dependencies {
+  id           String    @id @default(cuid())
+  project_id   String
+  name         String
+  type         String // GITHUB | SERVER | DOMAIN | SMTP | OPENAI | ANTHROPIC | GEMINI | STRIPE | TWILIO | FIREBASE | SUPABASE | AWS | DIGITALOCEAN | CLOUDFLARE | GOOGLE_OAUTH | APPLE_DEVELOPER | PLAY_STORE | OTHER
+  category     String? // e.g. "Infrastructure", "Payments", "AI", "Auth" — free-form grouping label
+  owner        String?
+  status       String    @default("NOT_STARTED") // NOT_STARTED | WAITING | ACTIVE | BLOCKED | COMPLETED
+  vendor       String?
+  external_url String?
+  notes        String?
+  blocking     Boolean   @default(false)
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
 
   project projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
 

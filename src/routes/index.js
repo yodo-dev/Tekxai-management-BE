@@ -20,6 +20,7 @@ import devops_access_routes from '../modules/devops-access/routes/devops-access.
 import tracking_links_routes from '../modules/tracking-links/routes/tracking-links.routes.js';
 import weekly_updates_routes  from '../modules/weekly-updates/routes/weekly-updates.routes.js';
 import project_documents_routes from '../modules/project-documents/routes/project-documents.routes.js';
+import dependencies_routes  from '../modules/dependencies/routes/dependencies.routes.js';
 import project_timeline_routes from '../modules/activity-logs/routes/project-timeline.routes.js';
 import timesheets_routes    from '../modules/timesheets/routes/timesheets.routes.js';
 import invites_routes       from '../modules/invites/routes/invites.routes.js';
@@ -92,6 +93,7 @@ router.use('/project',           projects_routes);
 router.use('/project/:projectId/tasks',      tasks_routes);
 router.use('/project/:projectId/milestones', milestones_routes);
 router.use('/project/:projectId/devops-access', devops_access_routes);
+router.use('/project/:projectId/dependencies', dependencies_routes);
 router.use('/project/:projectId/tracking-links', tracking_links_routes);
 router.use('/project/:projectId/weekly-updates', weekly_updates_routes);
 router.use('/project/:projectId/documents', project_documents_routes);
