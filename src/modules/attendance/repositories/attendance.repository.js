@@ -31,11 +31,26 @@ export async function get_user_shift(user_id) {
   return normalize_shift(default_shift);
 }
 
-/** List all shifts */
+/** List all shifts, each annotated with its currently-active assignees —
+ * admin-side visibility into shift assignments (Shift Management had no way
+ * to see who's on a shift after assigning them; employees could only see
+ * their own via get_user_shift/my-shift). */
 export async function find_all_shifts() {
+  const now = new Date();
   const shifts = await prisma.shift_schedules.findMany({
-  take: 500, orderBy: { name: 'asc' } });
-  return shifts.map(normalize_shift);
+    take: 500,
+    orderBy: { name: 'asc' },
+    include: {
+      employee_shifts: {
+        where: { start_date: { lte: now }, OR: [{ end_date: null }, { end_date: { gte: now } }] },
+        select: { user: { select: { id: true, first_name: true, last_name: true } } },
+      },
+    },
+  });
+  return shifts.map((s) => {
+    const { employee_shifts, ...rest } = s;
+    return { ...normalize_shift(rest), assigned_employees: employee_shifts.map((e) => e.user) };
+  });
 }
 
 /** Create or update a shift */

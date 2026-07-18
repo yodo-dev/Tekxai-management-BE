@@ -251,7 +251,7 @@ export async function create_project({ title, description, start_date, end_date,
   return find_project_by_id(project_id);
 }
 
-export async function update_project(id, { title, description, status, progress, progress_mode, project_type, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, budget, budget_currency, budget_spent, member_ids, members }) {
+export async function update_project(id, { title, description, status, progress, progress_mode, project_type, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, budget, budget_currency, budget_spent, member_ids, members, confirm_remove_all_members }) {
   // See create_project note above — read-after-write must happen post-commit.
   await prisma.$transaction(async (tx) => {
     const data = {};
@@ -275,10 +275,38 @@ export async function update_project(id, { title, description, status, progress,
     await tx.projects.update({ where: { id }, data });
 
     if (Array.isArray(members) || Array.isArray(member_ids)) {
-      await tx.project_members.deleteMany({ where: { project_id: id } });
       const member_rows = to_member_rows(id, { member_ids, members });
-      if (member_rows.length > 0) {
-        await tx.project_members.createMany({ data: member_rows, skipDuplicates: true });
+
+      // Safety guard: a genuinely empty incoming list combined with an
+      // existing non-empty membership is far more likely to be stale/
+      // partially-loaded frontend state (see ProjectDetailsSlideOver's
+      // members prefill) than an intentional "remove everyone" action.
+      // Callers that really do want to clear membership must pass
+      // confirm_remove_all_members explicitly — otherwise this update is
+      // skipped as a no-op rather than silently wiping real members.
+      if (member_rows.length === 0 && !confirm_remove_all_members) {
+        const existing_count = await tx.project_members.count({ where: { project_id: id } });
+        if (existing_count > 0) {
+          return; // skip member replacement; all other fields still saved above
+        }
+      }
+
+      const existing = await tx.project_members.findMany({ where: { project_id: id }, select: { user_id: true, role: true } });
+      const existing_by_user = new Map(existing.map((m) => [m.user_id, m.role]));
+      const incoming_by_user = new Map(member_rows.map((m) => [m.user_id, m.role]));
+
+      const to_remove = existing.filter((m) => !incoming_by_user.has(m.user_id)).map((m) => m.user_id);
+      const to_create = member_rows.filter((m) => !existing_by_user.has(m.user_id));
+      const to_update = member_rows.filter((m) => existing_by_user.has(m.user_id) && existing_by_user.get(m.user_id) !== m.role);
+
+      if (to_remove.length) {
+        await tx.project_members.deleteMany({ where: { project_id: id, user_id: { in: to_remove } } });
+      }
+      if (to_create.length) {
+        await tx.project_members.createMany({ data: to_create, skipDuplicates: true });
+      }
+      for (const m of to_update) {
+        await tx.project_members.updateMany({ where: { project_id: id, user_id: m.user_id }, data: { role: m.role } });
       }
     }
   });
