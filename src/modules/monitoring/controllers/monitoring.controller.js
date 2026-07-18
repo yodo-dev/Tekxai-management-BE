@@ -59,8 +59,10 @@ export async function bulk_delete_screenshots(req,res,next){
 
 export async function update_productivity(req,res,next){try{const{date,active_seconds=0,idle_seconds=0,mouse_events=0,keyboard_events=0}=req.body;const total=+active_seconds+(+idle_seconds);const score=total>0?Math.round((+active_seconds/total)*100):0;const s=await prisma.productivity_sessions.upsert({where:{user_id_date:{user_id:req.user.id,date:new Date(date||new Date().toISOString().split('T')[0])}},update:{active_seconds:+active_seconds,idle_seconds:+idle_seconds,mouse_events:+mouse_events,keyboard_events:+keyboard_events,productivity_score:score},create:{user_id:req.user.id,date:new Date(date||new Date().toISOString().split('T')[0]),active_seconds:+active_seconds,idle_seconds:+idle_seconds,mouse_events:+mouse_events,keyboard_events:+keyboard_events,productivity_score:score}});return ok(res,s);}catch(e){next(e);}}
 
-export async function get_productivity(req,res,next){try{const{from,to}=req.query;const where={...scoped_user_id_where(req)};if(from||to){where.date={};if(from)where.date.gte=new Date(from);if(to){const d=new Date(to);d.setHours(23,59,59,999);where.date.lte=d;}}const records=await prisma.productivity_sessions.findMany({
-  take: 500,where,orderBy:{date:'desc'},include:{user:{select:{id:true,first_name:true,last_name:true}}}});return ok(res,{records,total:records.length});}catch(e){next(e);}}
+export async function get_productivity(req,res,next){try{const{from,to,page=1,limit=20}=req.query;const skip=(+page-1)*+limit;const where={...scoped_user_id_where(req)};if(from||to){where.date={};if(from)where.date.gte=new Date(from);if(to){const d=new Date(to);d.setHours(23,59,59,999);where.date.lte=d;}}const[total,records]=await Promise.all([
+  prisma.productivity_sessions.count({where}),
+  prisma.productivity_sessions.findMany({skip,take:+limit,where,orderBy:{date:'desc'},include:{user:{select:{id:true,first_name:true,last_name:true}}}}),
+]);return ok(res,{records,total,page:+page,limit:+limit});}catch(e){next(e);}}
 
 export async function log_app_usage(req, res, next) {
   try {
