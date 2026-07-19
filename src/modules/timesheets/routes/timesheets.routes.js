@@ -8,6 +8,7 @@ import {
   clock_out,
   create_entry_ctrl,
   delete_entry_ctrl,
+  delete_time_off_ctrl,
   force_checkout,
   get_time_off_policies,
   list_time_off_ctrl,
@@ -284,6 +285,27 @@ router.post('/time-off/:id/approve',           APPROVE, approve_time_off_ctrl);
  *         description: Unauthorized
  */
 router.post('/time-off/:id/reject',            APPROVE, reject_time_off_ctrl);
+
+/**
+ * @swagger
+ * /timesheet/time-off/{id}:
+ *   delete:
+ *     summary: Delete a time-off request record (admin cleanup, e.g. a stray request left after the employee was deleted)
+ *     tags: [Timesheets]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Request deleted
+ *       404:
+ *         description: Not found
+ *       401:
+ *         description: Unauthorized
+ */
+router.delete('/time-off/:id',                 APPROVE, delete_time_off_ctrl);
 
 /**
  * @swagger

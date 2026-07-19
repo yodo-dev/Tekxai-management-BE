@@ -12,6 +12,7 @@ import {
   create_entry,
   create_time_off_request,
   delete_entry,
+  delete_time_off_request,
   find_all_weekly_entries,
   find_edit_requests,
   find_entry_by_id,
@@ -203,7 +204,11 @@ export async function requests(req, res, next) {
     const is_admin = req.user.roles.some((r) =>
       ['ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER'].includes(r)
     );
-    const filter = is_admin ? {} : { user_id: req.user.id };
+    // This endpoint backs the admin "Pending Requests" queue specifically
+    // (as opposed to my_requests, which returns full self-history) — only
+    // PENDING items belong here, otherwise every approved/rejected request
+    // ever made would permanently clutter the queue.
+    const filter = { status: 'PENDING', ...(is_admin ? {} : { user_id: req.user.id }) };
     const [edit_reqs, time_off_reqs] = await Promise.all([
       find_edit_requests(filter),
       find_time_off_requests(filter),
@@ -375,6 +380,24 @@ export async function reject_time_off_ctrl(req, res, next) {
       type: 'ATTENDANCE',
     }).catch(() => null);
     return ok(res, result, 'Time-off request rejected');
+  } catch (err) { next(err); }
+}
+
+// DELETE /timesheet/time-off/:id — admin cleanup of a stray request record
+// (e.g. left behind after the requesting employee was deleted), distinct
+// from reject: only releases the pending-balance reservation if the request
+// was still PENDING (APPROVED/REJECTED already settled their balance effect
+// and this is a record cleanup, not a new business decision on the leave).
+export async function delete_time_off_ctrl(req, res, next) {
+  try {
+    const pending = await prisma.time_off_requests.findUnique({ where: { id: req.params.id } });
+    if (!pending) return fail(res, 'Time-off request not found', 404);
+
+    if (pending.status === 'PENDING') {
+      await restore_leave(pending.user_id, pending.policy_id, pending.days);
+    }
+    await delete_time_off_request(req.params.id);
+    return ok(res, null, 'Time-off request deleted');
   } catch (err) { next(err); }
 }
 

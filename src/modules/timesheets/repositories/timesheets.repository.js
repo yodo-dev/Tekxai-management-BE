@@ -192,7 +192,10 @@ export async function create_edit_request({ entry_id, user_id, new_check_in, new
 }
 
 export async function find_edit_requests({ status, user_id } = {}) {
-  const where = {};
+  // Requests from a soft-deleted employee (deleted_at set) are excluded —
+  // otherwise they'd linger forever in the admin queue with no valid
+  // employee left to action them against.
+  const where = { user: { deleted_at: null } };
   if (status) where.status = status;
   if (user_id) where.user_id = user_id;
   return prisma.timesheet_edit_requests.findMany({
@@ -240,7 +243,8 @@ export async function create_time_off_request({ user_id, policy_id, start_date, 
 }
 
 export async function find_time_off_requests({ user_id, status } = {}) {
-  const where = {};
+  // See find_edit_requests — same exclusion of soft-deleted employees.
+  const where = { user: { deleted_at: null } };
   if (user_id) where.user_id = user_id;
   if (status) where.status = status;
   return prisma.time_off_requests.findMany({
@@ -252,6 +256,10 @@ export async function find_time_off_requests({ user_id, status } = {}) {
     orderBy: { created_at: 'desc' },
     take: 500,
   });
+}
+
+export async function delete_time_off_request(id) {
+  return prisma.time_off_requests.delete({ where: { id } });
 }
 
 export async function update_time_off_status(id, status, manager_comment, reviewed_by) {
