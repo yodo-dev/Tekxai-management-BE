@@ -1,7 +1,3 @@
-
-
-SELECT pg_catalog.set_config('search_path', '', false);
-
 CREATE TABLE public.meeting_action_items (
     id text NOT NULL,
     meeting_id text NOT NULL,
