@@ -1,5 +1,4 @@
 
-\restrict lKiFvEBzPcWVyFXNgWqlU0UrcDdVWrbdwmisWulksLqyXhoOFmefvAatWnnV3E2
 
 SELECT pg_catalog.set_config('search_path', '', false);
 
@@ -222,4 +221,3 @@ ALTER TABLE ONLY public.meetings
 ALTER TABLE ONLY public.meetings
     ADD CONSTRAINT meetings_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.meeting_rooms(id) ON UPDATE CASCADE ON DELETE CASCADE;
 
-\unrestrict lKiFvEBzPcWVyFXNgWqlU0UrcDdVWrbdwmisWulksLqyXhoOFmefvAatWnnV3E2
