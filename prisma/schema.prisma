@@ -101,6 +101,7 @@ model users {
   onboarding_tasks              onboarding_tasks[]
   offboarding_tasks             offboarding_tasks[]
   contracts                     contracts[]
+  hr_documents                  hr_documents[]
   policy_acknowledgements       policy_acknowledgements[]
   employee_profile              employee_profiles?
   employee_documents            employee_documents[]
@@ -252,14 +253,14 @@ model otp_codes {
 // above Department (target hierarchy: Business Unit -> Department ->
 // Designation -> Grade). Additive only — no existing column removed/renamed.
 model business_units {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   name        String
-  code        String?   @unique
+  code        String?  @unique
   description String?
-  is_active   Boolean   @default(true)
-  sort_order  Int       @default(0)
-  created_at  DateTime  @default(now())
-  updated_at  DateTime  @updatedAt
+  is_active   Boolean  @default(true)
+  sort_order  Int      @default(0)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
 
   departments departments[]
 
@@ -267,18 +268,18 @@ model business_units {
 }
 
 model departments {
-  id          String    @id @default(cuid())
-  name        String
-  code        String?   @unique
-  description String?
-  manager_id  String?
+  id               String    @id @default(cuid())
+  name             String
+  code             String?   @unique
+  description      String?
+  manager_id       String?
   // Sprint 1: nullable FK to business_units — existing departments are not
   // backfilled/migrated this sprint (Phase 5: backward compatibility), so
   // this must stay optional until Sprint 2 makes it required.
   business_unit_id String?
-  created_at  DateTime  @default(now())
-  updated_at  DateTime  @updatedAt
-  deleted_at  DateTime?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+  deleted_at       DateTime?
 
   business_unit   business_units?   @relation(fields: [business_unit_id], references: [id], onDelete: SetNull)
   divisions       divisions[]
@@ -586,39 +587,39 @@ model devops_access_tracking {
   devops_remarks            String?
 
   // Git Repository
-  git_provider              String?
-  git_repo_url              String?
-  git_organization          String?
-  git_default_branch        String?
+  git_provider       String?
+  git_repo_url       String?
+  git_organization   String?
+  git_default_branch String?
 
   // Hosting
-  hosting_provider          String?
-  hosting_environment       String? // PRODUCTION | STAGING | DEVELOPMENT
-  hosting_server            String?
-  hosting_region            String?
+  hosting_provider    String?
+  hosting_environment String? // PRODUCTION | STAGING | DEVELOPMENT
+  hosting_server      String?
+  hosting_region      String?
 
   // Domain
-  domain_name               String?
-  domain_dns_provider       String?
-  domain_ssl_status         String? // ACTIVE | EXPIRING | EXPIRED | NOT_CONFIGURED
-  domain_expiry_date        DateTime?
+  domain_name         String?
+  domain_dns_provider String?
+  domain_ssl_status   String? // ACTIVE | EXPIRING | EXPIRED | NOT_CONFIGURED
+  domain_expiry_date  DateTime?
 
   // Database
-  database_provider         String?
-  database_version          String?
-  database_backup_status    String? // ENABLED | DISABLED | UNKNOWN
+  database_provider      String?
+  database_version       String?
+  database_backup_status String? // ENABLED | DISABLED | UNKNOWN
 
   // Storage / CDN / third-party services
   storage_provider          String?
-  cdn_provider               String?
+  cdn_provider              String?
   smtp_provider             String?
   third_party_services      String?
   api_keys_status           String    @default("NOT_APPLICABLE") // GRANTED | PENDING | NOT_APPLICABLE
   point_of_contact          String?
   credentials_verified_date DateTime?
 
-  created_at                DateTime  @default(now())
-  updated_at                DateTime  @updatedAt
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   project projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
 
@@ -626,19 +627,19 @@ model devops_access_tracking {
 }
 
 model project_dependencies {
-  id           String    @id @default(cuid())
+  id           String   @id @default(cuid())
   project_id   String
   name         String
   type         String // GITHUB | SERVER | DOMAIN | SMTP | OPENAI | ANTHROPIC | GEMINI | STRIPE | TWILIO | FIREBASE | SUPABASE | AWS | DIGITALOCEAN | CLOUDFLARE | GOOGLE_OAUTH | APPLE_DEVELOPER | PLAY_STORE | OTHER
   category     String? // e.g. "Infrastructure", "Payments", "AI", "Auth" — free-form grouping label
   owner        String?
-  status       String    @default("NOT_STARTED") // NOT_STARTED | WAITING | ACTIVE | BLOCKED | COMPLETED
+  status       String   @default("NOT_STARTED") // NOT_STARTED | WAITING | ACTIVE | BLOCKED | COMPLETED
   vendor       String?
   external_url String?
   notes        String?
-  blocking     Boolean   @default(false)
-  created_at   DateTime  @default(now())
-  updated_at   DateTime  @updatedAt
+  blocking     Boolean  @default(false)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
 
   project projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
 
@@ -1870,6 +1871,162 @@ model contracts {
   template contract_templates? @relation(fields: [template_id], references: [id], onDelete: SetNull)
 
   @@index([user_id])
+}
+
+// ─── HR Documents ───────────────────────────────────────────────────────────
+// Generalized replacement for the old ad-hoc contracts/contract_templates
+// pair: adds categories, unlimited document types, real template versioning
+// (edits never mutate a live version in place), a centralized placeholder
+// registry, and per-signer signatures. contracts/contract_templates are left
+// untouched for backward compatibility — nothing reads/writes them anymore
+// going forward, but existing data and API contracts keep working.
+
+model hr_document_categories {
+  id          String   @id @default(cuid())
+  code        String   @unique // EMPLOYMENT | LEGAL | PERFORMANCE | ASSETS | COMPENSATION | BENEFITS | COMPLIANCE | OFFBOARDING | CUSTOM | ...
+  name        String
+  description String?
+  is_active   Boolean  @default(true)
+  sort_order  Int      @default(0)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  document_types hr_document_types[]
+  templates      hr_document_templates[]
+  hrDocuments    hr_documents[]
+
+  @@index([is_active])
+}
+
+model hr_document_types {
+  id          String   @id @default(cuid())
+  category_id String
+  code        String // unique within a category, not globally — e.g. OFFER_LETTER
+  name        String
+  description String?
+  is_active   Boolean  @default(true)
+  sort_order  Int      @default(0)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  category    hr_document_categories  @relation(fields: [category_id], references: [id], onDelete: Cascade)
+  templates   hr_document_templates[]
+  hrDocuments hr_documents[]
+
+  @@unique([category_id, code])
+  @@index([category_id])
+}
+
+// A template's own row is a stable identity (name, category/type, current
+// pointer); actual content lives in versions. Editing content always creates
+// a new hr_document_template_versions row and repoints current_version_id —
+// it never mutates an existing version, so any hr_documents row that pinned
+// a version stays byte-for-byte reproducible forever.
+model hr_document_templates {
+  id                 String   @id @default(cuid())
+  category_id        String
+  type_id            String
+  name               String
+  is_active          Boolean  @default(true)
+  current_version_id String?  @unique
+  created_by         String?
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  category        hr_document_categories          @relation(fields: [category_id], references: [id], onDelete: Restrict)
+  type            hr_document_types               @relation(fields: [type_id], references: [id], onDelete: Restrict)
+  current_version hr_document_template_versions?  @relation("template_current_version", fields: [current_version_id], references: [id], onDelete: SetNull)
+  versions        hr_document_template_versions[] @relation("template_all_versions")
+  documents       hr_documents[]
+
+  @@index([category_id])
+  @@index([type_id])
+}
+
+model hr_document_template_versions {
+  id           String   @id @default(cuid())
+  template_id  String
+  version      Int
+  content      String // raw text/HTML with {{placeholder}} tokens
+  placeholders Json     @default("[]") // list of token strings referenced, informational/for FE display
+  created_by   String?
+  created_at   DateTime @default(now())
+
+  template            hr_document_templates  @relation("template_all_versions", fields: [template_id], references: [id], onDelete: Cascade)
+  current_of_template hr_document_templates? @relation("template_current_version")
+  documents           hr_documents[]
+
+  @@unique([template_id, version])
+  @@index([template_id])
+}
+
+// A generated document is fully immutable content-wise once created —
+// content/template_version_id are never updated after insert. Only status,
+// signatures, and file_key (once a PDF is rendered) change afterward.
+model hr_documents {
+  id                   String    @id @default(cuid())
+  user_id              String // the employee the document is about
+  category_id          String
+  type_id              String
+  template_id          String?
+  template_version_id  String?
+  title                String
+  content              String // rendered snapshot at generation time
+  status               String    @default("DRAFT") // DRAFT | GENERATED | SENT | VIEWED | SIGNED | REJECTED | CANCELLED | EXPIRED | ARCHIVED
+  file_key             String? // PDF storage key, set once rendered
+  valid_from           DateTime?
+  valid_until          DateTime?
+  sent_at              DateTime?
+  viewed_at            DateTime?
+  rejected_at          DateTime?
+  rejection_reason     String?
+  cancelled_at         DateTime?
+  archived_at          DateTime?
+  previous_document_id String? // renewal chain — points at the document this one renews
+  created_by           String?
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
+
+  user              users                          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  category          hr_document_categories         @relation(fields: [category_id], references: [id], onDelete: Restrict)
+  type              hr_document_types              @relation(fields: [type_id], references: [id], onDelete: Restrict)
+  template          hr_document_templates?         @relation(fields: [template_id], references: [id], onDelete: SetNull)
+  template_version  hr_document_template_versions? @relation(fields: [template_version_id], references: [id], onDelete: SetNull)
+  previous_document hr_documents?                  @relation("document_renewal_chain", fields: [previous_document_id], references: [id], onDelete: SetNull)
+  renewals          hr_documents[]                 @relation("document_renewal_chain")
+  signatures        hr_document_signatures[]
+
+  @@index([user_id])
+  @@index([category_id])
+  @@index([type_id])
+  @@index([status])
+}
+
+model hr_document_signatures {
+  id             String    @id @default(cuid())
+  document_id    String
+  signer_role    String // EMPLOYEE | HR | COMPANY
+  signer_user_id String?
+  signature_data String? // typed-name or base64 image, capture method agnostic
+  signed_at      DateTime?
+  ip_address     String?
+  created_at     DateTime  @default(now())
+
+  document hr_documents @relation(fields: [document_id], references: [id], onDelete: Cascade)
+
+  @@index([document_id])
+}
+
+// Minimal singleton — only field set the placeholder registry's {{company_*}}
+// tokens need. Additive; nothing else in the app reads/writes this yet.
+model company_settings {
+  id         String   @id @default(cuid())
+  name       String   @default("")
+  address    String?
+  phone      String?
+  email      String?
+  logo_url   String?
+  updated_at DateTime @updatedAt
 }
 
 // ─── Company Policies (Phase 8) ───────────────────────────────────────────────
