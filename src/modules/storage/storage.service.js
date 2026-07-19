@@ -2,6 +2,13 @@
  * Storage Service — S3 / Cloudflare R2 compatible
  * Falls back to local/mock URLs in development when AWS keys not set.
  */
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const UPLOAD_DIR = path.join(__dirname, '../../../uploads');
+const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:4000';
 
 const BUCKET = process.env.S3_BUCKET || 'tekxai-erp';
 const REGION = process.env.S3_REGION || 'us-east-1';
@@ -39,9 +46,18 @@ export async function get_presigned_upload_url(key, mime_type, expires_in = 300)
 
 /** Generate a presigned URL for download (GET) */
 export async function get_presigned_download_url(key, expires_in = 3600) {
+  // A file whose upload_buffer() call failed (missing creds, or a live S3
+  // error like a permission-denied bucket) falls back to local disk — check
+  // that first regardless of whether an S3 client is configured, since it's
+  // the authoritative signal of where the object actually landed.
+  const local_path = path.join(UPLOAD_DIR, path.basename(key));
+  if (fs.existsSync(local_path)) {
+    return `${APP_BASE_URL}/uploads/${path.basename(key)}`;
+  }
+
   const s3 = await get_s3_client();
   if (!s3) {
-    return `http://localhost:4000/api/v1/storage/dev-file/${encodeURIComponent(key)}`;
+    return `${APP_BASE_URL}/api/v1/storage/dev-file/${encodeURIComponent(key)}`;
   }
   const { GetObjectCommand } = await import('@aws-sdk/client-s3');
   const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');

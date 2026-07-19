@@ -8,7 +8,7 @@ import {
   preview_render_ctrl,
   list_documents_ctrl, get_document_ctrl, generate_document_ctrl, renew_document_ctrl,
   send_document_ctrl, view_document_ctrl, reject_document_ctrl, cancel_document_ctrl, archive_document_ctrl,
-  sign_document_ctrl,
+  sign_document_ctrl, download_document_pdf_ctrl,
 } from '../controllers/hr-documents.controller.js';
 
 const router = Router();
@@ -58,5 +58,8 @@ router.post('/:id/archive', MANAGE, archive_document_ctrl);
 // Signatures — any authenticated user can sign (their own signature row);
 // no MANAGE gate since employees must be able to sign their own documents.
 router.post('/:id/sign', sign_document_ctrl);
+
+// PDF download — employee portal + HR, ownership-checked in controller.
+router.get('/:id/pdf', download_document_pdf_ctrl);
 
 export default router;

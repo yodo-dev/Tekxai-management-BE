@@ -4,6 +4,8 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import swaggerUi from 'swagger-ui-express';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { env_config } from './config/env.js';
 import { swagger_spec } from './config/swagger.js';
 import api_routes from './routes/index.js';
@@ -36,6 +38,12 @@ app.use(
 );
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Local-disk fallback storage (used by /storage/upload and generated PDFs
+// when no AWS credentials are configured) — was written to disk but never
+// actually served; wire it up so those file_url values resolve.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Rate limit auth endpoints
 app.use(

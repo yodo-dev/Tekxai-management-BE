@@ -103,6 +103,8 @@ export const PERMISSION_DEFINITIONS = [
   { key: 'erp.payroll.view',             label: 'Payroll – View',              workspace: 'erp', module: 'payroll',          action: 'view'   },
   { key: 'erp.payroll.create',           label: 'Payroll – Create',            workspace: 'erp', module: 'payroll',          action: 'create' },
   { key: 'erp.payroll.edit',             label: 'Payroll – Edit',              workspace: 'erp', module: 'payroll',          action: 'edit'   },
+  { key: 'erp.hr_documents.view',        label: 'HR Documents – View',         workspace: 'erp', module: 'hr_documents',      action: 'view'   },
+  { key: 'erp.hr_documents.manage',      label: 'HR Documents – Manage',       workspace: 'erp', module: 'hr_documents',      action: 'manage' },
   // Webhooks previously borrowed the unrelated erp.users.view key.
   { key: 'erp.webhooks.manage',          label: 'Webhooks – Manage',           workspace: 'erp', module: 'webhooks',         action: 'manage' },
   // Admin activity-log listing endpoint had no permission check at all despite
@@ -208,6 +210,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'erp.meetings.view', 'erp.meetings.create', 'erp.meetings.edit', 'erp.meetings.delete', 'erp.meetings.manage',
     'erp.tickets.view', 'erp.tickets.create', 'erp.tickets.edit', 'erp.tickets.approve',
     'erp.payroll.view', 'erp.payroll.create', 'erp.payroll.edit',
+    'erp.hr_documents.view', 'erp.hr_documents.manage',
     'erp.webhooks.manage',
     'erp.activity-logs.view',
     'erp.executive-analytics.view',
@@ -253,6 +256,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'erp.meetings.view', 'erp.meetings.create', 'erp.meetings.edit',
     'erp.tickets.view', 'erp.tickets.create', 'erp.tickets.edit', 'erp.tickets.approve',
     'erp.payroll.view', 'erp.payroll.create', 'erp.payroll.edit',
+    'erp.hr_documents.view', 'erp.hr_documents.manage',
     'erp.executive-analytics.view',
     // HR is granted monitoring-view to match the pre-existing sidebar/route
     // access HR already had to /hr/monitoring — the API previously silently

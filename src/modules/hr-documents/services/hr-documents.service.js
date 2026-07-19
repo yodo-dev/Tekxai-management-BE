@@ -1,6 +1,8 @@
 import * as repo from '../repositories/hr-documents.repository.js';
 import { render_document_for_user } from './placeholder-engine.service.js';
 import { create_notification } from '../../notifications/services/notifications.service.js';
+import { render_document_pdf, store_document_pdf } from './pdf.service.js';
+import { get_presigned_download_url } from '../../storage/storage.service.js';
 
 function app_error(message, status_code = 400) {
   const e = new Error(message);
@@ -203,3 +205,20 @@ export async function sign_document(id, { signer_role, signer_user_id, signature
 export const get_document = repo.get_document;
 export const list_documents = repo.list_documents;
 export const set_document_file_key = repo.set_document_file_key;
+
+// ── PDF (Phase 3) ─────────────────────────────────────────────────────────
+
+// PDF is generated once, lazily, from the document's immutable `content` and
+// cached via `file_key` — subsequent calls just re-presign the same object
+// instead of re-rendering, since content never changes after creation.
+export async function get_document_pdf_url(id) {
+  const doc = await repo.get_document(id);
+  let file_key = doc.file_key;
+  if (!file_key) {
+    const buffer = await render_document_pdf(doc);
+    file_key = await store_document_pdf(doc.id, buffer);
+    await repo.set_document_file_key(doc.id, file_key);
+  }
+  const url = await get_presigned_download_url(file_key);
+  return { url, file_key };
+}

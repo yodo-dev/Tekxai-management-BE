@@ -182,6 +182,15 @@ export async function archive_document_ctrl(req, res, next) {
   catch (e) { return next(e); }
 }
 
+// ── PDF / Download ────────────────────────────────────────────────────────
+
+export async function download_document_pdf_ctrl(req, res, next) {
+  try {
+    await assert_owns_or_hr(req, req.params.id);
+    return res.json({ success: true, payload: await service.get_document_pdf_url(req.params.id) });
+  } catch (e) { return next(e); }
+}
+
 // ── Signatures ────────────────────────────────────────────────────────────
 
 export async function sign_document_ctrl(req, res, next) {
