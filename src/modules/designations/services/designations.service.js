@@ -35,3 +35,16 @@ export async function delete_designation(id) {
   await get_designation(id);
   return prisma.designations.update({ where: { id }, data: { deleted_at: new Date() } });
 }
+
+export async function bulk_delete_designations(ids) {
+  const results = [];
+  for (const id of ids) {
+    try {
+      await delete_designation(id);
+      results.push({ id, success: true });
+    } catch (e) {
+      results.push({ id, success: false, message: e.message || 'Failed to delete' });
+    }
+  }
+  return results;
+}

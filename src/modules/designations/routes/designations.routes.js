@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate, can_or_role } from '../../../shared/middleware/authenticate.js';
 import {
+  bulk_delete_designations_ctrl,
   create_designation_ctrl,
   delete_designation_ctrl,
   get_designation_ctrl,
@@ -120,5 +121,30 @@ router.put('/:id', EDIT, update_designation_ctrl);
  *         description: Unauthorized
  */
 router.delete('/:id', EDIT, delete_designation_ctrl);
+
+/**
+ * @swagger
+ * /designations/bulk-delete:
+ *   post:
+ *     summary: Bulk delete designations, returns per-item results
+ *     tags: [Designations]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ids]
+ *             properties:
+ *               ids: { type: array, items: { type: string } }
+ *     responses:
+ *       200:
+ *         description: Per-item delete results
+ *       400:
+ *         description: ids array required
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/bulk-delete', EDIT, bulk_delete_designations_ctrl);
 
 export default router;

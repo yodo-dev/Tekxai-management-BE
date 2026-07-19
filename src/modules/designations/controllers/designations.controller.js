@@ -1,4 +1,5 @@
 import {
+  bulk_delete_designations,
   create_designation,
   delete_designation,
   get_designation,
@@ -41,5 +42,17 @@ export async function delete_designation_ctrl(req, res, next) {
   try {
     await delete_designation(req.params.id);
     return res.json({ success: true, message: 'Designation deleted' });
+  } catch (e) { return next(e); }
+}
+
+export async function bulk_delete_designations_ctrl(req, res, next) {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'ids array required' });
+    }
+    const results = await bulk_delete_designations(ids);
+    const succeeded = results.filter(r => r.success).length;
+    return res.json({ success: true, message: `${succeeded} of ${ids.length} designation(s) deleted`, payload: { results } });
   } catch (e) { return next(e); }
 }

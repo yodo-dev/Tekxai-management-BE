@@ -93,7 +93,7 @@ export async function get_full_employee_record(user_id) {
     where: { ...id_filter, deleted_at: null },
     select: {
       id: true, email: true, first_name: true, last_name: true, phone: true, avatar: true,
-      department: true, division: true, position: true, designation: true, employee_id: true,
+      department: true, department_id: true, division: true, position: true, designation: true, employee_id: true,
       designation_ref: { select: { id: true, name: true } },
       grade: { select: { id: true, name: true, level: true } },
       supervisor: { select: { id: true, first_name: true, last_name: true } },
