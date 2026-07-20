@@ -13,17 +13,20 @@ const ENTITY_MAP={
   // Employee Summary / Department / Designation / Grade / Business Unit /
   // Supervisor / Hiring reports are all just filtered+grouped queries against
   // the same `users` entity, no new HR-specific endpoints.
-  users:{fields:{id:true,first_name:true,last_name:true,email:true,status:true,created_at:true,designation:true,designation_id:true,department_id:true,grade_id:true,business_unit:true,supervisor_id:true,hire_date:true,salary:true},filters:['status','created_at','designation','designation_id','department_id','grade_id','business_unit','supervisor_id','hire_date'],searchable:['first_name','last_name','email']},
+  // `numeric` (Sprint 1 Milestone 2.5): whitelists which fields KPI SUM/AVG/
+  // MIN/MAX may target — reuses the same field already exposed in `fields`,
+  // not a new surface. Optional; omitted entirely means COUNT-only.
+  users:{fields:{id:true,first_name:true,last_name:true,email:true,status:true,created_at:true,designation:true,designation_id:true,department_id:true,grade_id:true,business_unit:true,supervisor_id:true,hire_date:true,salary:true},filters:['status','created_at','designation','designation_id','department_id','grade_id','business_unit','supervisor_id','hire_date'],searchable:['first_name','last_name','email'],numeric:['salary']},
   // NOTE: 'deadline' was previously listed here but projects has no such column (it's
   // 'end_date') — selecting it made every default projects report throw. Fixed.
-  projects:{fields:{id:true,title:true,status:true,client_name:true,dev_status:true,progress:true,budget:true,budget_spent:true,owner_id:true,created_at:true,end_date:true},filters:['status','created_at','client_name','owner_id'],searchable:['title','client_name']},
+  projects:{fields:{id:true,title:true,status:true,client_name:true,dev_status:true,progress:true,budget:true,budget_spent:true,owner_id:true,created_at:true,end_date:true},filters:['status','created_at','client_name','owner_id'],searchable:['title','client_name'],numeric:['budget','budget_spent','progress']},
   tasks:{fields:{id:true,title:true,status:true,priority:true,project_id:true,milestone_id:true,assigned_to:true,created_at:true,due_date:true},filters:['status','priority','created_at','project_id','assigned_to'],searchable:['title']},
   milestones:{fields:{id:true,project_id:true,title:true,due_date:true,completed:true,blocked:true,created_at:true},filters:['project_id','completed','blocked','created_at'],searchable:['title']},
-  expense_transactions:{fields:{id:true,total_amount:true,transaction_type:true,category_id:true,date:true,title:true,paid_to:true,created_at:true},filters:['transaction_type','category_id','created_at'],searchable:['title','paid_to']},
-  payroll_entries:{fields:{id:true,base_salary:true,gross_amount:true,net_amount:true,tax_amount:true,present_days:true,working_days:true,status:true},filters:['status'],searchable:[]},
+  expense_transactions:{fields:{id:true,total_amount:true,transaction_type:true,category_id:true,date:true,title:true,paid_to:true,created_at:true},filters:['transaction_type','category_id','created_at'],searchable:['title','paid_to'],numeric:['total_amount']},
+  payroll_entries:{fields:{id:true,base_salary:true,gross_amount:true,net_amount:true,tax_amount:true,present_days:true,working_days:true,status:true},filters:['status'],searchable:[],numeric:['base_salary','gross_amount','net_amount','tax_amount']},
   support_tickets:{fields:{id:true,ticket_number:true,subject:true,status:true,priority:true,severity:true,ticket_type_id:true,department_id:true,assignee_id:true,approval_status:true,response_due_at:true,resolution_due_at:true,closed_at:true,created_at:true},filters:['status','priority','severity','ticket_type_id','department_id','assignee_id','approval_status','created_at'],searchable:['ticket_number','subject']},
   // Added for Reporting & BI Sprint 1 Milestone 1 — same additive registration pattern as above.
-  assets:{fields:{id:true,asset_tag:true,name:true,brand:true,model:true,category_id:true,department_id:true,location_id:true,status:true,condition:true,purchase_date:true,purchase_cost:true,warranty_expiry:true,created_at:true},filters:['category_id','department_id','location_id','status','created_at'],searchable:['asset_tag','name','brand','model']},
+  assets:{fields:{id:true,asset_tag:true,name:true,brand:true,model:true,category_id:true,department_id:true,location_id:true,status:true,condition:true,purchase_date:true,purchase_cost:true,warranty_expiry:true,created_at:true},filters:['category_id','department_id','location_id','status','brand','created_at'],searchable:['asset_tag','name','brand','model'],numeric:['purchase_cost']},
   time_off_requests:{fields:{id:true,user_id:true,leave_type:true,start_date:true,end_date:true,days:true,effective_days:true,status:true,created_at:true},filters:['user_id','leave_type','status','created_at'],searchable:[]},
   hr_documents:{fields:{id:true,user_id:true,category_id:true,type_id:true,title:true,status:true,valid_from:true,valid_until:true,created_at:true},filters:['user_id','category_id','type_id','status','created_at'],searchable:['title']},
   // Added for Sprint 1 Milestone 2 (HR Reports) — Lifecycle Report and Team Report.
@@ -32,7 +35,21 @@ const ENTITY_MAP={
 };
 
 export async function get_schema(req,res,next){
-  return ok(res,Object.entries(ENTITY_MAP).map(([entity,cfg])=>({entity,fields:Object.keys(cfg.fields),filterable:cfg.filters,searchable:cfg.searchable||[]})));
+  return ok(res,Object.entries(ENTITY_MAP).map(([entity,cfg])=>({entity,fields:Object.keys(cfg.fields),filterable:cfg.filters,searchable:cfg.searchable||[],numeric:cfg.numeric||[]})));
+}
+
+// Shared filter-to-`where` builder — used by run_report (via
+// build_report_query below), run_aggregate, and run_kpi so filter semantics
+// (whitelisting, created_at range handling) can never drift between the
+// three report types.
+function build_where(cfg,filters={}){
+  const where={};
+  for(const[key,val]of Object.entries(filters)){
+    if(!cfg.filters.includes(key)||val==null)continue;
+    if(key==='created_at'&&val.from){where.created_at={gte:new Date(val.from),...(val.to&&{lte:new Date(val.to)})};}
+    else where[key]=val;
+  }
+  return where;
 }
 
 // Shared query-building logic for run_report and the export endpoints below —
@@ -46,12 +63,7 @@ function build_report_query(body){
   let select={};
   if(columns?.length){for(const c of columns)if(cfg.fields[c]!==undefined)select[c]=true;}
   else select={...cfg.fields};
-  const where={};
-  for(const[key,val]of Object.entries(filters)){
-    if(!cfg.filters.includes(key)||val==null)continue;
-    if(key==='created_at'&&val.from){where.created_at={gte:new Date(val.from),...(val.to&&{lte:new Date(val.to)})};}
-    else where[key]=val;
-  }
+  const where=build_where(cfg,filters);
   if(search&&cfg.searchable?.length){
     where.OR=cfg.searchable.map((f)=>({[f]:{contains:String(search),mode:'insensitive'}}));
   }
@@ -140,17 +152,40 @@ export async function run_aggregate(req,res,next){
     if(!entity||!ENTITY_MAP[entity])return fail(res,`entity must be one of: ${Object.keys(ENTITY_MAP).join(', ')}`);
     const cfg=ENTITY_MAP[entity];
     if(!group_by||!cfg.filters.includes(group_by))return fail(res,`group_by must be one of: ${cfg.filters.join(', ')}`);
-    const where={};
-    for(const[key,val]of Object.entries(filters)){
-      if(!cfg.filters.includes(key)||val==null)continue;
-      if(key==='created_at'&&val.from){where.created_at={gte:new Date(val.from),...(val.to&&{lte:new Date(val.to)})};}
-      else where[key]=val;
-    }
+    const where=build_where(cfg,filters);
     const grouped=await prisma[entity].groupBy({by:[group_by],where,_count:{_all:true}});
     const rows=grouped
       .map((g)=>({[group_by]:g[group_by],count:g._count._all}))
       .sort((a,b)=>b.count-a.count);
     return ok(res,{entity,group_by,total:rows.reduce((s,r)=>s+r.count,0),rows});
+  }catch(e){next(e);}
+}
+
+const KPI_METRICS=['COUNT','SUM','AVG','MIN','MAX'];
+const KPI_AGG_KEY={SUM:'_sum',AVG:'_avg',MIN:'_min',MAX:'_max'};
+
+// Generic single-value KPI — answers "Total Employees" (COUNT), "Monthly
+// Expense" (SUM), "Average Salary" (AVG) etc. across any registered entity
+// with one endpoint instead of a bespoke stats route per module. For
+// non-COUNT metrics, `field` must be in the entity's `numeric` whitelist —
+// same reuse-the-existing-registration pattern as group_by on /aggregate.
+export async function run_kpi(req,res,next){
+  try{
+    const{entity,metric='COUNT',field,filters={}}=req.body;
+    if(!entity||!ENTITY_MAP[entity])return fail(res,`entity must be one of: ${Object.keys(ENTITY_MAP).join(', ')}`);
+    const cfg=ENTITY_MAP[entity];
+    const m=String(metric).toUpperCase();
+    if(!KPI_METRICS.includes(m))return fail(res,`metric must be one of: ${KPI_METRICS.join(', ')}`);
+    const where=build_where(cfg,filters);
+    if(m==='COUNT'){
+      const value=await prisma[entity].count({where});
+      return ok(res,{entity,metric:m,field:null,value});
+    }
+    if(!field||!cfg.numeric?.includes(field))return fail(res,`field must be one of: ${(cfg.numeric||[]).join(', ')||'(no numeric fields registered for this entity)'}`);
+    const agg_key=KPI_AGG_KEY[m];
+    const result=await prisma[entity].aggregate({where,[agg_key]:{[field]:true}});
+    const value=result[agg_key]?.[field]??0;
+    return ok(res,{entity,metric:m,field,value});
   }catch(e){next(e);}
 }
 
