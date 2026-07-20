@@ -22,7 +22,17 @@ const ENTITY_MAP={
   projects:{fields:{id:true,title:true,status:true,client_name:true,dev_status:true,progress:true,budget:true,budget_spent:true,owner_id:true,created_at:true,end_date:true},filters:['status','created_at','client_name','owner_id'],searchable:['title','client_name'],numeric:['budget','budget_spent','progress']},
   tasks:{fields:{id:true,title:true,status:true,priority:true,project_id:true,milestone_id:true,assigned_to:true,created_at:true,due_date:true},filters:['status','priority','created_at','project_id','assigned_to'],searchable:['title']},
   milestones:{fields:{id:true,project_id:true,title:true,due_date:true,completed:true,blocked:true,created_at:true},filters:['project_id','completed','blocked','created_at'],searchable:['title']},
-  expense_transactions:{fields:{id:true,total_amount:true,transaction_type:true,category_id:true,date:true,title:true,paid_to:true,created_at:true},filters:['transaction_type','category_id','created_at'],searchable:['title','paid_to'],numeric:['total_amount']},
+  // Extended for Sprint 1 Milestone 4 (Expense Reports): user_id (employee),
+  // date (the actual transaction date — Current Month/Year KPIs must filter
+  // on this, not created_at) and paid_to (free-text vendor, no dedicated
+  // vendor table exists) added to filters. ce_amount/tekxai_amount added to
+  // numeric for the existing cost-split reporting already used by
+  // /expenses/summary. NOTE: expense_transactions has no department_id,
+  // business_unit_id, project_id, status/approval, or is_recurring columns —
+  // "Expenses by Department/Business Unit/Project", "Pending Reimbursements",
+  // "Approved/Rejected Expenses", and "Recurring Expenses" are not
+  // implementable without a schema change, which is out of scope here.
+  expense_transactions:{fields:{id:true,total_amount:true,ce_amount:true,tekxai_amount:true,transaction_type:true,category_id:true,date:true,title:true,paid_to:true,user_id:true,created_at:true},filters:['transaction_type','category_id','created_at','date','paid_to','user_id'],searchable:['title','paid_to'],numeric:['total_amount','ce_amount','tekxai_amount']},
   payroll_entries:{fields:{id:true,base_salary:true,gross_amount:true,net_amount:true,tax_amount:true,present_days:true,working_days:true,status:true},filters:['status'],searchable:[],numeric:['base_salary','gross_amount','net_amount','tax_amount']},
   support_tickets:{fields:{id:true,ticket_number:true,subject:true,status:true,priority:true,severity:true,ticket_type_id:true,department_id:true,assignee_id:true,approval_status:true,response_due_at:true,resolution_due_at:true,closed_at:true,created_at:true},filters:['status','priority','severity','ticket_type_id','department_id','assignee_id','approval_status','created_at'],searchable:['ticket_number','subject']},
   // Added for Reporting & BI Sprint 1 Milestone 1 — same additive registration pattern as above.
@@ -45,13 +55,16 @@ export async function get_schema(req,res,next){
 
 // Shared filter-to-`where` builder — used by run_report (via
 // build_report_query below), run_aggregate, and run_kpi so filter semantics
-// (whitelisting, created_at range handling) can never drift between the
-// three report types.
+// (whitelisting, date-range handling) can never drift between the three
+// report types. Date-range detection is shape-based (`{from, to}`), not tied
+// to the field name 'created_at' — any registered date filter (expense
+// `date`, a future invoice `due_date`, etc.) gets range support for free,
+// which is what "future modules without architecture changes" requires.
 function build_where(cfg,filters={}){
   const where={};
   for(const[key,val]of Object.entries(filters)){
     if(!cfg.filters.includes(key)||val==null)continue;
-    if(key==='created_at'&&val.from){where.created_at={gte:new Date(val.from),...(val.to&&{lte:new Date(val.to)})};}
+    if(typeof val==='object'&&!Array.isArray(val)&&val.from){where[key]={gte:new Date(val.from),...(val.to&&{lte:new Date(val.to)})};}
     else where[key]=val;
   }
   return where;
@@ -151,18 +164,26 @@ export async function export_pdf(req,res,next){
 // groupBy query per module. group_by must be one of the entity's own
 // registered `filters` (same whitelist reused, not a new one) so this can
 // never aggregate on a column the entity didn't already choose to expose.
+// `metric_field` (Sprint 1 Milestone 4): optional — when given (and in the
+// entity's `numeric` whitelist), each group also gets a summed `value`
+// (e.g. total spend per category, not just row count) and rows sort by that
+// sum instead of count. Without it, behavior is unchanged (COUNT-only,
+// backward compatible with Milestones 1-3 callers).
 export async function run_aggregate(req,res,next){
   try{
-    const{entity,group_by,filters={}}=req.body;
+    const{entity,group_by,filters={},metric_field}=req.body;
     if(!entity||!ENTITY_MAP[entity])return fail(res,`entity must be one of: ${Object.keys(ENTITY_MAP).join(', ')}`);
     const cfg=ENTITY_MAP[entity];
     if(!group_by||!cfg.filters.includes(group_by))return fail(res,`group_by must be one of: ${cfg.filters.join(', ')}`);
+    if(metric_field&&!cfg.numeric?.includes(metric_field))return fail(res,`metric_field must be one of: ${(cfg.numeric||[]).join(', ')||'(no numeric fields registered for this entity)'}`);
     const where=build_where(cfg,filters);
-    const grouped=await prisma[entity].groupBy({by:[group_by],where,_count:{_all:true}});
+    const groupBy_args={by:[group_by],where,_count:{_all:true}};
+    if(metric_field)groupBy_args._sum={[metric_field]:true};
+    const grouped=await prisma[entity].groupBy(groupBy_args);
     const rows=grouped
-      .map((g)=>({[group_by]:g[group_by],count:g._count._all}))
-      .sort((a,b)=>b.count-a.count);
-    return ok(res,{entity,group_by,total:rows.reduce((s,r)=>s+r.count,0),rows});
+      .map((g)=>({[group_by]:g[group_by],count:g._count._all,...(metric_field&&{value:g._sum?.[metric_field]??0})}))
+      .sort((a,b)=>metric_field?b.value-a.value:b.count-a.count);
+    return ok(res,{entity,group_by,metric_field:metric_field||null,total:rows.reduce((s,r)=>s+r.count,0),rows});
   }catch(e){next(e);}
 }
 
