@@ -40,7 +40,17 @@ const ENTITY_MAP={
   // real columns already computed by the existing payroll calculation
   // service, not re-derived here.
   payroll_entries:{fields:{id:true,run_id:true,user_id:true,base_salary:true,gross_amount:true,net_amount:true,tax_amount:true,overtime_amount:true,bonus_amount:true,deductions:true,late_deduction:true,absence_penalty:true,present_days:true,working_days:true,status:true},filters:['status','run_id','user_id'],searchable:[],numeric:['base_salary','gross_amount','net_amount','tax_amount','overtime_amount','bonus_amount','deductions','late_deduction','absence_penalty']},
-  support_tickets:{fields:{id:true,ticket_number:true,subject:true,status:true,priority:true,severity:true,ticket_type_id:true,department_id:true,assignee_id:true,approval_status:true,response_due_at:true,resolution_due_at:true,closed_at:true,created_at:true},filters:['status','priority','severity','ticket_type_id','department_id','assignee_id','approval_status','created_at'],searchable:['ticket_number','subject']},
+  // Extended for Sprint 1 Milestone 6 (Tickets & Monitoring Reports):
+  // team_id/project_id/user_id(requester) added to filters+fields for
+  // Tickets-by-Team/Project/Requester. NOTE: SLA Breaches and Average
+  // Resolution Time are NOT registered/implementable here — SLA breach is a
+  // live `now()` comparison ORed across response_due_at/resolution_due_at
+  // (see list_tickets()'s own sla=overdue filter, tickets.service.js), and
+  // resolution time is a closed_at-minus-created_at delta — neither is a
+  // flat equality/range filter or a single-column aggregate the generic
+  // engine's build_where/run_kpi can express. Left as a documented gap
+  // rather than adding ticket-specific logic to this engine.
+  support_tickets:{fields:{id:true,ticket_number:true,subject:true,status:true,priority:true,severity:true,ticket_type_id:true,department_id:true,assignee_id:true,team_id:true,project_id:true,user_id:true,approval_status:true,response_due_at:true,resolution_due_at:true,resolved_at:true,closed_at:true,created_at:true},filters:['status','priority','severity','ticket_type_id','department_id','assignee_id','team_id','project_id','user_id','approval_status','created_at'],searchable:['ticket_number','subject']},
   // Added for Reporting & BI Sprint 1 Milestone 1 — same additive registration pattern as above.
   assets:{fields:{id:true,asset_tag:true,name:true,brand:true,model:true,category_id:true,department_id:true,location_id:true,status:true,condition:true,purchase_date:true,purchase_cost:true,warranty_expiry:true,created_at:true},filters:['category_id','department_id','location_id','status','brand','created_at'],searchable:['asset_tag','name','brand','model'],numeric:['purchase_cost']},
   time_off_requests:{fields:{id:true,user_id:true,leave_type:true,start_date:true,end_date:true,days:true,effective_days:true,status:true,created_at:true},filters:['user_id','leave_type','status','created_at'],searchable:[]},
@@ -73,6 +83,20 @@ const ENTITY_MAP={
   // legacy /report/bonus route's data source), now available through the
   // generic engine too.
   monthly_bonus_records:{fields:{id:true,user_id:true,period:true,average_score:true,performance_level:true,bonus_eligible:true,bonus_amount:true,approval_status:true,approved_at:true,created_at:true},filters:['user_id','period','approval_status','bonus_eligible','performance_level','created_at'],searchable:[],numeric:['bonus_amount','average_score']},
+  // Added for Sprint 1 Milestone 6 (Monitoring Reports) — real columns
+  // already computed/persisted by the existing monitoring capture flow
+  // (POST /monitoring/productivity, /monitoring/app-usage); nothing
+  // re-derived. "Productivity %" is AVG(productivity_score); "Productive vs
+  // Idle" is SUM(active_seconds) vs SUM(idle_seconds); "User Productivity"
+  // is group_by user_id with metric AVG productivity_score.
+  productivity_sessions:{fields:{id:true,user_id:true,date:true,active_seconds:true,idle_seconds:true,mouse_events:true,keyboard_events:true,productivity_score:true,created_at:true},filters:['user_id','date','created_at'],searchable:[],numeric:['active_seconds','idle_seconds','mouse_events','keyboard_events','productivity_score']},
+  // "Top Applications"/"Top Websites" are both this same entity grouped by
+  // app_name or url respectively (there is no separate website-usage table
+  // — website tracking is folded into app_usage_logs via the `url` column),
+  // ranked by SUM(duration_seconds). "Monitoring Time" is SUM(duration_seconds).
+  app_usage_logs:{fields:{id:true,session_id:true,user_id:true,app_name:true,url:true,duration_seconds:true,captured_at:true,created_at:true},filters:['user_id','session_id','app_name','url','created_at'],searchable:['app_name','url'],numeric:['duration_seconds']},
+  // "Screenshot Count" KPI + detail listing.
+  screenshots:{fields:{id:true,session_id:true,user_id:true,captured_at:true,created_at:true},filters:['user_id','session_id','created_at'],searchable:[]},
 };
 
 export async function get_schema(req,res,next){
@@ -191,25 +215,33 @@ export async function export_pdf(req,res,next){
 // registered `filters` (same whitelist reused, not a new one) so this can
 // never aggregate on a column the entity didn't already choose to expose.
 // `metric_field` (Sprint 1 Milestone 4): optional — when given (and in the
-// entity's `numeric` whitelist), each group also gets a summed `value`
+// entity's `numeric` whitelist), each group also gets an aggregated `value`
 // (e.g. total spend per category, not just row count) and rows sort by that
-// sum instead of count. Without it, behavior is unchanged (COUNT-only,
-// backward compatible with Milestones 1-3 callers).
+// instead of count. Without it, behavior is unchanged (COUNT-only, backward
+// compatible with Milestones 1-3 callers).
+// `metric` (Sprint 1 Milestone 6): optional, defaults to 'SUM' when
+// metric_field is given — 'AVG' enables per-group averages (e.g. average
+// productivity score per employee) alongside the existing per-group sums,
+// same whitelist/validation, no new endpoint.
+const AGG_METRICS=['SUM','AVG'];
 export async function run_aggregate(req,res,next){
   try{
-    const{entity,group_by,filters={},metric_field}=req.body;
+    const{entity,group_by,filters={},metric_field,metric='SUM'}=req.body;
     if(!entity||!ENTITY_MAP[entity])return fail(res,`entity must be one of: ${Object.keys(ENTITY_MAP).join(', ')}`);
     const cfg=ENTITY_MAP[entity];
     if(!group_by||!cfg.filters.includes(group_by))return fail(res,`group_by must be one of: ${cfg.filters.join(', ')}`);
     if(metric_field&&!cfg.numeric?.includes(metric_field))return fail(res,`metric_field must be one of: ${(cfg.numeric||[]).join(', ')||'(no numeric fields registered for this entity)'}`);
+    const m=String(metric).toUpperCase();
+    if(metric_field&&!AGG_METRICS.includes(m))return fail(res,`metric must be one of: ${AGG_METRICS.join(', ')}`);
+    const agg_key=m==='AVG'?'_avg':'_sum';
     const where=build_where(cfg,filters);
     const groupBy_args={by:[group_by],where,_count:{_all:true}};
-    if(metric_field)groupBy_args._sum={[metric_field]:true};
+    if(metric_field)groupBy_args[agg_key]={[metric_field]:true};
     const grouped=await prisma[entity].groupBy(groupBy_args);
     const rows=grouped
-      .map((g)=>({[group_by]:g[group_by],count:g._count._all,...(metric_field&&{value:g._sum?.[metric_field]??0})}))
+      .map((g)=>({[group_by]:g[group_by],count:g._count._all,...(metric_field&&{value:g[agg_key]?.[metric_field]??0})}))
       .sort((a,b)=>metric_field?b.value-a.value:b.count-a.count);
-    return ok(res,{entity,group_by,metric_field:metric_field||null,total:rows.reduce((s,r)=>s+r.count,0),rows});
+    return ok(res,{entity,group_by,metric_field:metric_field||null,metric:metric_field?m:null,total:rows.reduce((s,r)=>s+r.count,0),rows});
   }catch(e){next(e);}
 }
 
