@@ -33,7 +33,13 @@ const ENTITY_MAP={
   // "Approved/Rejected Expenses", and "Recurring Expenses" are not
   // implementable without a schema change, which is out of scope here.
   expense_transactions:{fields:{id:true,total_amount:true,ce_amount:true,tekxai_amount:true,transaction_type:true,category_id:true,date:true,title:true,paid_to:true,user_id:true,created_at:true},filters:['transaction_type','category_id','created_at','date','paid_to','user_id'],searchable:['title','paid_to'],numeric:['total_amount','ce_amount','tekxai_amount']},
-  payroll_entries:{fields:{id:true,base_salary:true,gross_amount:true,net_amount:true,tax_amount:true,present_days:true,working_days:true,status:true},filters:['status'],searchable:[],numeric:['base_salary','gross_amount','net_amount','tax_amount']},
+  // Extended for Sprint 1 Milestone 5 (Attendance & Payroll Reports):
+  // run_id/user_id added to filters so "Payroll by Employee"/"by Run" work;
+  // overtime_amount/bonus_amount/deductions/late_deduction/absence_penalty
+  // added to numeric for Overtime Cost / Bonus / Deductions reports —
+  // real columns already computed by the existing payroll calculation
+  // service, not re-derived here.
+  payroll_entries:{fields:{id:true,run_id:true,user_id:true,base_salary:true,gross_amount:true,net_amount:true,tax_amount:true,overtime_amount:true,bonus_amount:true,deductions:true,late_deduction:true,absence_penalty:true,present_days:true,working_days:true,status:true},filters:['status','run_id','user_id'],searchable:[],numeric:['base_salary','gross_amount','net_amount','tax_amount','overtime_amount','bonus_amount','deductions','late_deduction','absence_penalty']},
   support_tickets:{fields:{id:true,ticket_number:true,subject:true,status:true,priority:true,severity:true,ticket_type_id:true,department_id:true,assignee_id:true,approval_status:true,response_due_at:true,resolution_due_at:true,closed_at:true,created_at:true},filters:['status','priority','severity','ticket_type_id','department_id','assignee_id','approval_status','created_at'],searchable:['ticket_number','subject']},
   // Added for Reporting & BI Sprint 1 Milestone 1 — same additive registration pattern as above.
   assets:{fields:{id:true,asset_tag:true,name:true,brand:true,model:true,category_id:true,department_id:true,location_id:true,status:true,condition:true,purchase_date:true,purchase_cost:true,warranty_expiry:true,created_at:true},filters:['category_id','department_id','location_id','status','brand','created_at'],searchable:['asset_tag','name','brand','model'],numeric:['purchase_cost']},
@@ -47,6 +53,26 @@ const ENTITY_MAP={
   // schema; repair activity is logged here as type='REPAIR', so that's what
   // this report actually reflects (repair log entries, not a live status).
   asset_maintenance_logs:{fields:{id:true,asset_id:true,type:true,description:true,cost:true,performed_at:true,vendor_name:true,created_at:true},filters:['asset_id','type','created_at'],searchable:['description','vendor_name']},
+  // Added for Sprint 1 Milestone 5 (Attendance & Payroll Reports) — all real
+  // columns already computed/persisted by the existing attendance/payroll
+  // services (compute_violation, payroll calculate_run); nothing re-derived.
+  // "Late"/"Absent" reports are attendance_violations filtered by
+  // violation_type — these rows only exist once compute_violation() has
+  // already run, same as the module's own /attendance/violations endpoint.
+  attendance_violations:{fields:{id:true,user_id:true,entry_id:true,date:true,violation_type:true,late_mins:true,created_at:true},filters:['user_id','violation_type','date','created_at'],searchable:[],numeric:['late_mins']},
+  // Daily/Monthly attendance detail — one row per check-in/out.
+  timesheet_entries:{fields:{id:true,user_id:true,check_in:true,check_out:true,duration_sec:true,status:true,is_wfh:true,created_at:true},filters:['user_id','status','is_wfh','created_at'],searchable:[],numeric:['duration_sec']},
+  // Shift Assignment report — flat listing; resolving shift_id -> shift name
+  // is a frontend lookup against the existing /attendance/shifts list, same
+  // id-to-name pattern already used for category/department/location.
+  employee_shifts:{fields:{id:true,user_id:true,shift_id:true,start_date:true,end_date:true,created_at:true},filters:['user_id','shift_id','created_at'],searchable:[]},
+  // Payroll Run report — period/status-level totals, already computed by
+  // calculate_run() and stored here verbatim.
+  payroll_runs:{fields:{id:true,period_month:true,period_year:true,status:true,total_gross:true,total_net:true,total_deductions:true,created_at:true},filters:['status','period_month','period_year','created_at'],searchable:[],numeric:['total_gross','total_net','total_deductions']},
+  // Bonus report — reuses the existing monthly_bonus_records table (the
+  // legacy /report/bonus route's data source), now available through the
+  // generic engine too.
+  monthly_bonus_records:{fields:{id:true,user_id:true,period:true,average_score:true,performance_level:true,bonus_eligible:true,bonus_amount:true,approval_status:true,approved_at:true,created_at:true},filters:['user_id','period','approval_status','bonus_eligible','performance_level','created_at'],searchable:[],numeric:['bonus_amount','average_score']},
 };
 
 export async function get_schema(req,res,next){
