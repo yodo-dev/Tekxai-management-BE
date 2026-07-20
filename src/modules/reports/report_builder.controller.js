@@ -8,7 +8,12 @@ const ENTITY_MAP={
   // NOTE: 'role_name' was previously listed here but users has no such scalar column
   // (roles come through the many-to-many user_roles relation) — selecting it made every
   // default users report throw. Fixed, same class of bug as the 'deadline' fix below.
-  users:{fields:{id:true,first_name:true,last_name:true,email:true,status:true,created_at:true,designation:true,salary:true},filters:['status','created_at','designation'],searchable:['first_name','last_name','email']},
+  // Extended for Sprint 1 Milestone 2 (HR Reports): department_id/designation_id/
+  // grade_id/business_unit/supervisor_id/hire_date added to fields+filters so
+  // Employee Summary / Department / Designation / Grade / Business Unit /
+  // Supervisor / Hiring reports are all just filtered+grouped queries against
+  // the same `users` entity, no new HR-specific endpoints.
+  users:{fields:{id:true,first_name:true,last_name:true,email:true,status:true,created_at:true,designation:true,designation_id:true,department_id:true,grade_id:true,business_unit:true,supervisor_id:true,hire_date:true,salary:true},filters:['status','created_at','designation','designation_id','department_id','grade_id','business_unit','supervisor_id','hire_date'],searchable:['first_name','last_name','email']},
   // NOTE: 'deadline' was previously listed here but projects has no such column (it's
   // 'end_date') — selecting it made every default projects report throw. Fixed.
   projects:{fields:{id:true,title:true,status:true,client_name:true,dev_status:true,progress:true,budget:true,budget_spent:true,owner_id:true,created_at:true,end_date:true},filters:['status','created_at','client_name','owner_id'],searchable:['title','client_name']},
@@ -21,6 +26,9 @@ const ENTITY_MAP={
   assets:{fields:{id:true,asset_tag:true,name:true,brand:true,model:true,category_id:true,department_id:true,location_id:true,status:true,condition:true,purchase_date:true,purchase_cost:true,warranty_expiry:true,created_at:true},filters:['category_id','department_id','location_id','status','created_at'],searchable:['asset_tag','name','brand','model']},
   time_off_requests:{fields:{id:true,user_id:true,leave_type:true,start_date:true,end_date:true,days:true,effective_days:true,status:true,created_at:true},filters:['user_id','leave_type','status','created_at'],searchable:[]},
   hr_documents:{fields:{id:true,user_id:true,category_id:true,type_id:true,title:true,status:true,valid_from:true,valid_until:true,created_at:true},filters:['user_id','category_id','type_id','status','created_at'],searchable:['title']},
+  // Added for Sprint 1 Milestone 2 (HR Reports) — Lifecycle Report and Team Report.
+  employee_profiles:{fields:{id:true,user_id:true,employment_status:true,lifecycle_stage:true,employment_type:true,created_at:true},filters:['employment_status','lifecycle_stage','employment_type','created_at'],searchable:[]},
+  team_members:{fields:{id:true,team_id:true,user_id:true,role:true,joined_at:true},filters:['team_id','role'],searchable:[]},
 };
 
 export async function get_schema(req,res,next){
@@ -117,6 +125,32 @@ export async function export_pdf(req,res,next){
       pdf.text(columns.map((c)=>String(row[c]??'')).join('   |   '));
     }
     pdf.end();
+  }catch(e){next(e);}
+}
+
+// Generic "count by dimension" aggregate — answers every "Employees by
+// Department", "Assets by Category", "Expenses by Vendor" style report
+// across every registered entity with one endpoint, instead of a bespoke
+// groupBy query per module. group_by must be one of the entity's own
+// registered `filters` (same whitelist reused, not a new one) so this can
+// never aggregate on a column the entity didn't already choose to expose.
+export async function run_aggregate(req,res,next){
+  try{
+    const{entity,group_by,filters={}}=req.body;
+    if(!entity||!ENTITY_MAP[entity])return fail(res,`entity must be one of: ${Object.keys(ENTITY_MAP).join(', ')}`);
+    const cfg=ENTITY_MAP[entity];
+    if(!group_by||!cfg.filters.includes(group_by))return fail(res,`group_by must be one of: ${cfg.filters.join(', ')}`);
+    const where={};
+    for(const[key,val]of Object.entries(filters)){
+      if(!cfg.filters.includes(key)||val==null)continue;
+      if(key==='created_at'&&val.from){where.created_at={gte:new Date(val.from),...(val.to&&{lte:new Date(val.to)})};}
+      else where[key]=val;
+    }
+    const grouped=await prisma[entity].groupBy({by:[group_by],where,_count:{_all:true}});
+    const rows=grouped
+      .map((g)=>({[group_by]:g[group_by],count:g._count._all}))
+      .sort((a,b)=>b.count-a.count);
+    return ok(res,{entity,group_by,total:rows.reduce((s,r)=>s+r.count,0),rows});
   }catch(e){next(e);}
 }
 

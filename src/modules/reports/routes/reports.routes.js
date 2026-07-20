@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authenticate, authorize, can_or_role } from '../../../shared/middleware/authenticate.js';
 import prisma from '../../../shared/database/client.js';
-import { get_schema, run_report, list_saved, save_report, delete_saved, export_excel, export_pdf } from '../report_builder.controller.js';
+import { get_schema, run_report, run_aggregate, list_saved, save_report, delete_saved, export_excel, export_pdf } from '../report_builder.controller.js';
 import { list_projects } from '../../projects/services/projects.service.js';
 
 const router = Router();
@@ -439,6 +439,7 @@ router.get('/projects', MANAGER, async (req, res, next) => {
 // same erp.reports.view permission the rest of this router already uses.
 router.get('/builder/schema', MANAGER, get_schema);
 router.post('/builder/run', MANAGER, run_report);
+router.post('/builder/aggregate', MANAGER, run_aggregate);
 router.get('/builder/saved', MANAGER, list_saved);
 router.post('/builder/saved', MANAGER, save_report);
 router.delete('/builder/saved/:id', MANAGER, delete_saved);
