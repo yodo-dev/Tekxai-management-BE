@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import { authenticate, authorize, can_or_role } from '../../../shared/middleware/authenticate.js';
 import prisma from '../../../shared/database/client.js';
-import { get_schema, run_report, list_saved, save_report, delete_saved } from '../report_builder.controller.js';
+import { get_schema, run_report, list_saved, save_report, delete_saved, export_excel, export_pdf } from '../report_builder.controller.js';
 import { list_projects } from '../../projects/services/projects.service.js';
 
 const router = Router();
 router.use(authenticate);
 const MANAGER = can_or_role('erp.reports.view', 'ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
+// erp.reports.export already existed in the permission registry (unused) —
+// reused here rather than adding a new key, per "if something already exists, reuse it."
+const EXPORTER = can_or_role('erp.reports.export', 'ADMIN', 'SUPER_ADMIN', 'HR', 'DIVISION_MANAGER');
 
 // ── CSV helpers ───────────────────────────────────────────────────────────────
 
@@ -439,5 +442,55 @@ router.post('/builder/run', MANAGER, run_report);
 router.get('/builder/saved', MANAGER, list_saved);
 router.post('/builder/saved', MANAGER, save_report);
 router.delete('/builder/saved/:id', MANAGER, delete_saved);
+
+/**
+ * @swagger
+ * /report/builder/export/excel:
+ *   post:
+ *     summary: Export a report-builder query as an Excel file
+ *     tags: [Reports]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               entity: { type: string }
+ *               filters: { type: object }
+ *               columns: { type: array, items: { type: string } }
+ *               search: { type: string }
+ *               sort_by: { type: string }
+ *               sort_dir: { type: string }
+ *     responses:
+ *       200:
+ *         description: XLSX file stream
+ *       401:
+ *         description: Unauthorized
+ * /report/builder/export/pdf:
+ *   post:
+ *     summary: Export a report-builder query as a PDF file
+ *     tags: [Reports]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               entity: { type: string }
+ *               filters: { type: object }
+ *               columns: { type: array, items: { type: string } }
+ *               search: { type: string }
+ *               sort_by: { type: string }
+ *               sort_dir: { type: string }
+ *     responses:
+ *       200:
+ *         description: PDF file stream
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/builder/export/excel', EXPORTER, export_excel);
+router.post('/builder/export/pdf', EXPORTER, export_pdf);
 
 export default router;
