@@ -32,6 +32,11 @@ const ENTITY_MAP={
   // Added for Sprint 1 Milestone 2 (HR Reports) — Lifecycle Report and Team Report.
   employee_profiles:{fields:{id:true,user_id:true,employment_status:true,lifecycle_stage:true,employment_type:true,created_at:true},filters:['employment_status','lifecycle_stage','employment_type','created_at'],searchable:[]},
   team_members:{fields:{id:true,team_id:true,user_id:true,role:true,joined_at:true},filters:['team_id','role'],searchable:[]},
+  // Added for Sprint 1 Milestone 3 (Asset Reports) — "Assets Under Repair"
+  // detail report. There is no standing "UNDER_REPAIR" asset.status in the
+  // schema; repair activity is logged here as type='REPAIR', so that's what
+  // this report actually reflects (repair log entries, not a live status).
+  asset_maintenance_logs:{fields:{id:true,asset_id:true,type:true,description:true,cost:true,performed_at:true,vendor_name:true,created_at:true},filters:['asset_id','type','created_at'],searchable:['description','vendor_name']},
 };
 
 export async function get_schema(req,res,next){
