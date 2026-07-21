@@ -107,6 +107,18 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
     }
     if (lifecycle_stage) {
       where.employee_profile = { ...(where.employee_profile || {}), lifecycle_stage };
+    } else {
+      // Employee Lifecycle Workflow: Archived employees are hidden from the
+      // active roster by default (still reachable via GET /employee/:id, and
+      // still included in report_builder reports). A user without an
+      // employee_profile row at all (pre-existing employees never
+      // backfilled) is not archived, so must not be excluded here — hence
+      // the explicit "no profile OR not archived" OR, not a bare relation
+      // filter (which would otherwise silently drop every profile-less user).
+      where.AND = [
+        ...(where.AND || []),
+        { OR: [{ employee_profile: null }, { employee_profile: { lifecycle_stage: { not: 'ARCHIVED' } } }] },
+      ];
     }
     // Dedicated filters (distinct from the fuzzy `q` search below) — added
     // to replace the Employee Directory's temporary client-side filtering.

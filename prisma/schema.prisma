@@ -145,6 +145,12 @@ model users {
   meeting_decisions_made        meeting_decisions[]           @relation("meeting_decision_decider")
   meeting_action_items_assigned meeting_action_items[]        @relation("meeting_action_item_assignee")
   meeting_attachments_uploaded  meeting_attachments[]         @relation("meeting_attachment_uploader")
+  employee_access_items         employee_access_items[]
+  access_items_assigned         employee_access_items[]       @relation("access_item_assigner")
+  lifecycle_approvals_owned     lifecycle_approval_requests[]  @relation("lifecycle_approval_subject")
+  lifecycle_approvals_requested lifecycle_approval_requests[]  @relation("lifecycle_approval_requester")
+  lifecycle_approvals_decided   lifecycle_approval_requests[]  @relation("lifecycle_approval_decider")
+  milestone_assignments         milestone_members[]
 
   @@index([department_id])
   @@index([division_id])
@@ -570,15 +576,55 @@ model milestones {
   title       String
   description String?
   due_date    DateTime?
+  // Legacy booleans — kept for backward compat (existing dashboard/notification
+  // code reads these directly). Single write path going forward is the
+  // milestones.service.js status setter, which keeps these mirrored from
+  // `status` rather than letting them drift independently.
   completed   Boolean   @default(false)
   blocked     Boolean   @default(false)
-  created_at  DateTime  @default(now())
-  updated_at  DateTime  @updatedAt
+  // Project Management overhaul — full Milestone Management (previously the
+  // biggest gap vs. the external tracking sheet: no sequence, no status
+  // beyond two booleans, no estimates, no progress%, no assignment, no
+  // dependencies, no archive).
+  sequence         Int?
+  status           String    @default("NOT_STARTED") // NOT_STARTED | IN_PROGRESS | COMPLETED | BLOCKED
+  estimated_start  DateTime?
+  estimated_end    DateTime?
+  completed_date   DateTime?
+  progress_percent Int       @default(0)
+  remarks          String?
+  archived_at      DateTime?
+  // Scalar array of other milestone ids (same project) this one depends on —
+  // deliberately not a join table: no referential integrity is needed for a
+  // simple "blocked by" list, and this matches the existing scalar-array
+  // convention already used elsewhere in this schema (communication_channels,
+  // working_days).
+  depends_on_ids String[] @default([])
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
 
-  project projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  project projects          @relation(fields: [project_id], references: [id], onDelete: Cascade)
   tasks   tasks[]
+  members milestone_members[]
 
   @@index([project_id])
+}
+
+// Assigned Members for a milestone — distinct from project_members (project-
+// wide roster); a milestone can have multiple owners/assignees drawn from
+// that same roster.
+model milestone_members {
+  id           String   @id @default(cuid())
+  milestone_id String
+  user_id      String
+  assigned_at  DateTime @default(now())
+
+  milestone milestones @relation(fields: [milestone_id], references: [id], onDelete: Cascade)
+  user      users      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([milestone_id, user_id])
+  @@index([milestone_id])
+  @@index([user_id])
 }
 
 model devops_access_tracking {
@@ -599,6 +645,11 @@ model devops_access_tracking {
   domain_access_status      String    @default("NOT_APPLICABLE")
   email_smtp_access_status  String    @default("NOT_APPLICABLE")
   aws_access_status         String    @default("NOT_APPLICABLE") // GRANTED | PENDING | LIMITED | NOT_APPLICABLE
+  // Project Management overhaul — "Project Access" section. Same vocabulary
+  // as the fields above; azure mirrors aws in also supporting LIMITED.
+  openai_access_status      String    @default("NOT_APPLICABLE") // GRANTED | PENDING | NOT_APPLICABLE
+  stripe_access_status      String    @default("NOT_APPLICABLE") // GRANTED | PENDING | NOT_APPLICABLE
+  azure_access_status       String    @default("NOT_APPLICABLE") // GRANTED | PENDING | LIMITED | NOT_APPLICABLE
   devops_remarks            String?
 
   // Git Repository
@@ -683,6 +734,7 @@ model client_weekly_updates {
   method          String   @default("EMAIL") // same values as devops_access_tracking.point_of_communication
   summary         String
   client_response String?
+  attachment_url  String? // optional attachment/link for the Communication History timeline
   created_at      DateTime @default(now())
 
   project projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
@@ -1847,6 +1899,67 @@ model offboarding_tasks {
   user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([user_id])
+}
+
+// Employee Lifecycle Workflow — employee-level external access tracking.
+// Distinct from project-scoped devops_access_tracking/project_dependencies:
+// those track a PROJECT's access to third-party services, this tracks a
+// PERSON's access to company/vendor platforms (GitHub, Slack, AWS, ...).
+// Never merge the two — different entity, different lifecycle (this table
+// is read/written from the Employee Profile Lifecycle tab, not Project
+// Master).
+model employee_access_items {
+  id           String    @id @default(cuid())
+  user_id      String
+  platform     String // GITHUB | GITLAB | BITBUCKET | SLACK | MICROSOFT_365 | GOOGLE_WORKSPACE | VPN | AWS | AZURE | DIGITALOCEAN | OPENAI | CLAUDE | SMTP | DATABASE | JIRA | CLICKUP | FIGMA | HUBSTAFF | OTHER
+  identifier   String? // username/email on that platform
+  status       String    @default("ACTIVE") // ACTIVE | REVOKED | PENDING
+  granted_date DateTime?
+  revoked_date DateTime?
+  assigned_by  String?
+  remarks      String?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  user     users  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  assigner users? @relation("access_item_assigner", fields: [assigned_by], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([status])
+}
+
+// Employee Lifecycle Workflow — lightweight, lifecycle-scoped approval
+// mechanism. No generic, reusable Approval Engine exists anywhere in this
+// codebase (/admin/approvals is a frontend aggregator over three unrelated
+// hardcoded flows — requisitions, leave, tickets — not an engine anything
+// else can plug into), so this follows the same per-domain approval-table
+// pattern those already use (e.g. asset_requests), scoped to the lifecycle
+// transitions that need a sign-off step: CONFIRM_EMPLOYEE, EXTEND_PROBATION,
+// TERMINATE_PROBATION, ARCHIVE_EMPLOYEE. Approving executes the underlying
+// transition via set_lifecycle_stage() — this table never becomes a second
+// write path for lifecycle_stage.
+model lifecycle_approval_requests {
+  id            String    @id @default(cuid())
+  user_id       String
+  transition    String // CONFIRM_EMPLOYEE | EXTEND_PROBATION | TERMINATE_PROBATION | ARCHIVE_EMPLOYEE
+  from_stage    String
+  to_stage      String
+  status        String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  requested_by  String
+  decided_by    String?
+  decided_at    DateTime?
+  reason        String?
+  decision_note String?
+  metadata      Json? // e.g. { new_probation_end: "2026-08-01" } for EXTEND_PROBATION
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  user      users  @relation("lifecycle_approval_subject", fields: [user_id], references: [id], onDelete: Cascade)
+  requester users  @relation("lifecycle_approval_requester", fields: [requested_by], references: [id], onDelete: Cascade)
+  decider   users? @relation("lifecycle_approval_decider", fields: [decided_by], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([status])
 }
 
 // ─── Contracts (Phase 7) ──────────────────────────────────────────────────────

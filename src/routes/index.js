@@ -56,6 +56,9 @@ import policies_routes      from '../modules/policies/routes/policies.routes.js'
 import crm_routes              from '../modules/crm/routes/crm.routes.js';
 import chat_routes             from '../modules/chat/routes/chat.routes.js';
 import hr_profile_routes       from '../modules/hr-profile/routes/hr-profile.routes.js';
+import employee_lifecycle_routes from '../modules/hr-profile/routes/employee-lifecycle.routes.js';
+import lifecycle_approvals_routes from '../modules/lifecycle-approvals/routes/lifecycle-approvals.routes.js';
+import employee_access_routes  from '../modules/employee-access/routes/employee-access.routes.js';
 import employee_doc_routes     from '../modules/employee-documents/routes/employee-documents.routes.js';
 import requisitions_routes     from '../modules/requisitions/routes/requisitions.routes.js';
 import permissions_routes      from '../modules/permissions/routes/permissions.routes.js';
@@ -147,6 +150,9 @@ router.use('/crm',               crm_routes);
 
 // Extended HR
 router.use('/hr-profile',        hr_profile_routes);
+router.use('/employee-lifecycle', employee_lifecycle_routes);
+router.use('/lifecycle-approvals', lifecycle_approvals_routes);
+router.use('/employee-access',   employee_access_routes);
 router.use('/employee-doc',      employee_doc_routes);
 router.use('/requisition',       requisitions_routes);
 

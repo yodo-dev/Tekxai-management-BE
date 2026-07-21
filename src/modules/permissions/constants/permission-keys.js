@@ -180,6 +180,9 @@ export const PERMISSION_DEFINITIONS = [
   { key: 'hr.salary.approve',           label: 'HR Salary – Approve',       workspace: 'hr',  module: 'salary',           action: 'approve'},
   { key: 'hr.employee_profiles.view',   label: 'Employee Profiles – View',  workspace: 'hr',  module: 'employee_profiles',action: 'view'   },
   { key: 'hr.employee_profiles.edit',   label: 'Employee Profiles – Edit',  workspace: 'hr',  module: 'employee_profiles',action: 'edit'   },
+  { key: 'hr.lifecycle.view',           label: 'Employee Lifecycle – View', workspace: 'hr',  module: 'lifecycle',        action: 'view'   },
+  { key: 'hr.lifecycle.manage',         label: 'Employee Lifecycle – Manage', workspace: 'hr', module: 'lifecycle',       action: 'manage' },
+  { key: 'hr.lifecycle.approve',        label: 'Employee Lifecycle – Approve', workspace: 'hr', module: 'lifecycle',      action: 'approve'},
 ];
 
 // Default grants per role.
@@ -228,6 +231,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'hr.job_descriptions.view', 'hr.job_descriptions.manage',
     'hr.salary.view',
     'hr.employee_profiles.view', 'hr.employee_profiles.edit',
+    'hr.lifecycle.view', 'hr.lifecycle.manage', 'hr.lifecycle.approve',
   ],
   HR: [
     'hr.workspace.access', 'hr.dashboard.view',
@@ -244,6 +248,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'hr.job_descriptions.view', 'hr.job_descriptions.manage',
     'hr.salary.view', 'hr.salary.edit', 'hr.salary.approve',
     'hr.employee_profiles.view', 'hr.employee_profiles.edit',
+    'hr.lifecycle.view', 'hr.lifecycle.manage', 'hr.lifecycle.approve',
     'erp.workspace.access', 'erp.dashboard.view',
     'erp.timesheet.view', 'erp.timesheet.approve',
     'erp.attendance.view', 'erp.attendance.edit',

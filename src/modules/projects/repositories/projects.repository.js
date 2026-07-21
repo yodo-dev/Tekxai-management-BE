@@ -4,12 +4,26 @@ const PROJECT_INCLUDE = {
   owner: { select: { id: true, first_name: true, last_name: true, avatar: true, email: true } },
   team_leader: { select: { id: true, first_name: true, last_name: true, avatar: true, email: true } },
   members: { select: { role: true, user: { select: { id: true, first_name: true, last_name: true, avatar: true, email: true } } } },
-  milestones: { orderBy: { due_date: 'asc' }, select: { id: true, title: true, due_date: true, completed: true, blocked: true } },
+  // Archived milestones are excluded here (not deleted) — this is the list
+  // every downstream consumer (breakdown, active milestone, "milestones
+  // added") reads, and archived milestones are meant to disappear from the
+  // active picture the same way ARCHIVED-stage employees do elsewhere.
+  milestones: {
+    where: { archived_at: null },
+    orderBy: [{ sequence: 'asc' }, { due_date: 'asc' }],
+    select: {
+      id: true, title: true, due_date: true, completed: true, blocked: true,
+      sequence: true, status: true, progress_percent: true, estimated_start: true, estimated_end: true,
+      members: { select: { user: { select: { id: true, first_name: true, last_name: true, avatar: true } } } },
+    },
+  },
   devops_access: {
     select: {
       git_access_status: true, server_access_status: true, domain_access_status: true,
       email_smtp_access_status: true, aws_access_status: true,
-      point_of_communication: true, progress_shared_status: true,
+      openai_access_status: true, stripe_access_status: true, azure_access_status: true,
+      point_of_communication: true, progress_shared_status: true, progress_shared_date: true,
+      devops_remarks: true,
     },
   },
   _count: { select: { members: true } },
@@ -17,6 +31,24 @@ const PROJECT_INCLUDE = {
 
 const TERMINAL_STATUSES = ['COMPLETED', 'DELIVERED', 'ARCHIVED'];
 const ACCESS_SCORE_FIELDS = ['git_access_status', 'server_access_status', 'domain_access_status', 'email_smtp_access_status', 'aws_access_status'];
+
+// Progress-Shared recency bucket — Project Tracking Dashboard needs "Today /
+// Yesterday / 2 Days Ago / 3 Days Ago / 1 Week / Custom Date / Never"
+// computed from the existing progress_shared_date column, not a new stored
+// field. `stale` flags anything past the 3-day warning threshold (or never
+// shared at all).
+function compute_progress_shared_recency(date) {
+  if (!date) return { label: 'Never', days_ago: null, stale: true };
+  const days_ago = Math.floor((Date.now() - new Date(date).getTime()) / 86400000);
+  let label;
+  if (days_ago <= 0) label = 'Today';
+  else if (days_ago === 1) label = 'Yesterday';
+  else if (days_ago === 2) label = '2 Days Ago';
+  else if (days_ago === 3) label = '3 Days Ago';
+  else if (days_ago <= 7) label = '1 Week';
+  else label = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return { label, days_ago, stale: days_ago > 3 };
+}
 
 // Batch-fetch client portal access for a set of project ids in a single query
 // (avoids N+1 — client_project_access.project_id is a plain column, not a Prisma relation).
@@ -31,11 +63,26 @@ async function find_portal_map(project_ids) {
   return map;
 }
 
+function milestone_owner_name(m) {
+  const first = m.members?.[0]?.user;
+  return first ? `${first.first_name || ''} ${first.last_name || ''}`.trim() || first.id : null;
+}
+
 function compute_milestone_breakdown(milestones = []) {
   const completed = milestones.filter((m) => m.completed).length;
   const blocked = milestones.filter((m) => !m.completed && m.blocked).length;
   const remaining = milestones.filter((m) => !m.completed).length;
-  const current = milestones.find((m) => !m.completed && !m.blocked) || null;
+  // "Active Milestone" — lowest-sequence (fallback: earliest due date) that
+  // isn't completed or blocked. Sequence is nullable (not every milestone
+  // has one set), so unsequenced milestones sort after sequenced ones.
+  const candidates = milestones.filter((m) => !m.completed && !m.blocked);
+  const current = [...candidates].sort((a, b) => {
+    if (a.sequence != null && b.sequence != null) return a.sequence - b.sequence;
+    if (a.sequence != null) return -1;
+    if (b.sequence != null) return 1;
+    if (a.due_date && b.due_date) return new Date(a.due_date) - new Date(b.due_date);
+    return 0;
+  })[0] || null;
   const now = new Date();
   const overdue = milestones.filter((m) => !m.completed && m.due_date && new Date(m.due_date) < now).length;
   return { completed, remaining, blocked, current, overdue };
@@ -90,6 +137,13 @@ function normalize_project(p, { is_saved = false, portal = null } = {}) {
     client_name: p.client_name,
     dev_status: p.dev_status,
     // Persisted correctly by create_project/update_project but previously
+    // dropped here (same class of bug as the budget fix below — confirmed via
+    // smoke test: priority/business_unit_id/project_code all round-tripped
+    // to null despite being set correctly in the database).
+    priority: p.priority,
+    business_unit_id: p.business_unit_id,
+    project_code: p.project_code,
+    // Persisted correctly by create_project/update_project but previously
     // dropped here — the API returned no budget at all despite the DB
     // having the right value (Priority 1, confirmed root cause).
     budget: p.budget,
@@ -106,6 +160,22 @@ function normalize_project(p, { is_saved = false, portal = null } = {}) {
       return acc;
     }, {}),
     milestones,
+    milestones_added: milestones.length > 0,
+    // "Active Milestone" as its own shape (name/due date/progress/owner) —
+    // breakdown.current already has due_date/progress_percent, this just
+    // adds the resolved owner name so the dashboard column needs nothing
+    // else computed client-side.
+    active_milestone: breakdown.current
+      ? {
+          id: breakdown.current.id,
+          title: breakdown.current.title,
+          due_date: breakdown.current.due_date,
+          progress_percent: breakdown.current.progress_percent || 0,
+          owner: milestone_owner_name(breakdown.current)
+            || (p.team_leader ? `${p.team_leader.first_name || ''} ${p.team_leader.last_name || ''}`.trim() : null)
+            || null,
+        }
+      : null,
     current_milestone: breakdown.current,
     pending_milestones_count: breakdown.remaining,
     milestone_breakdown: {
@@ -124,12 +194,23 @@ function normalize_project(p, { is_saved = false, portal = null } = {}) {
       ? {
           point_of_communication: devops.point_of_communication,
           progress_shared_status: devops.progress_shared_status,
+          progress_shared_date: devops.progress_shared_date,
+          progress_shared_recency: compute_progress_shared_recency(devops.progress_shared_date),
           git_access_status: devops.git_access_status,
           server_access_status: devops.server_access_status,
           domain_access_status: devops.domain_access_status,
           email_smtp_access_status: devops.email_smtp_access_status,
+          aws_access_status: devops.aws_access_status,
+          openai_access_status: devops.openai_access_status,
+          stripe_access_status: devops.stripe_access_status,
+          azure_access_status: devops.azure_access_status,
+          devops_remarks: devops.devops_remarks,
         }
       : null,
+    // Direct name lists for dashboard columns that show people, not counts —
+    // member_role_counts above already gives counts for badges.
+    frontend_developers: (p.members || []).filter((m) => m.role === 'FRONTEND').map((m) => `${m.user.first_name || ''} ${m.user.last_name || ''}`.trim()),
+    backend_developers: (p.members || []).filter((m) => m.role === 'BACKEND').map((m) => `${m.user.first_name || ''} ${m.user.last_name || ''}`.trim()),
     client_portal: portal
       ? { enabled: true, portal_user: portal.client?.name || null, status: portal.client?.status || null, access_level: portal.access_level }
       : { enabled: false, portal_user: null, status: null, access_level: null },
@@ -430,9 +511,15 @@ export async function get_dashboard_stats() {
   const by_status = {};
   for (const p of projects) by_status[p.status] = (by_status[p.status] || 0) + 1;
 
+  const active_projects = projects.filter((p) => !TERMINAL_STATUSES.includes(p.status));
+  const now = new Date();
+  const in_7_days = new Date(now.getTime() + 7 * 86400000);
+
   const stats = {
     total: projects.length,
     by_status,
+    // "Projects Delayed" in the Executive Dashboard spec is this same figure
+    // — not duplicated under a second key.
     overdue: projects.filter((p) => p.is_overdue).length,
     blocked: projects.filter((p) => p.status === 'BLOCKED' || p.milestone_breakdown.blocked > 0).length,
     delivered: projects.filter((p) => p.status === 'DELIVERED' || p.status === 'COMPLETED').length,
@@ -440,11 +527,23 @@ export async function get_dashboard_stats() {
     needs_qa: projects.filter((p) => p.status === 'QA').length,
     access_incomplete: projects.filter((p) => p.access_completion_score.percent < 100).length,
     milestones_overdue: projects.reduce((sum, p) => sum + p.milestone_breakdown.overdue, 0),
+    // Active (non-terminal) projects that haven't set up milestones at all —
+    // "Milestones Added: No" from the Project Tracking Dashboard spec, rolled
+    // up for the Executive Dashboard.
+    milestones_missing: active_projects.filter((p) => !p.milestones_added).length,
+    // Deliveries due within the next 7 days that aren't already overdue.
+    upcoming_deliveries: active_projects.filter((p) => !p.is_overdue && p.end_date && new Date(p.end_date) >= now && new Date(p.end_date) <= in_7_days).length,
     at_risk: projects.filter((p) => p.health_status !== 'HEALTHY').length,
     health: {
       healthy: projects.filter((p) => p.health_status === 'HEALTHY').length,
       warning: projects.filter((p) => p.health_status === 'WARNING').length,
       critical: projects.filter((p) => p.health_status === 'CRITICAL').length,
+    },
+    // Milestone Health — distinct from overall Project Health above: how
+    // many active projects have any blocked or overdue milestone at all.
+    milestone_health: {
+      healthy: active_projects.filter((p) => p.milestone_breakdown.blocked === 0 && p.milestone_breakdown.overdue === 0).length,
+      at_risk: active_projects.filter((p) => p.milestone_breakdown.blocked > 0 || p.milestone_breakdown.overdue > 0).length,
     },
   };
 

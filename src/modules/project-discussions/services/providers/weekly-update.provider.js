@@ -13,6 +13,6 @@ export async function fetch_weekly_update_events(project_id) {
     date: u.update_date,
     author: user_name(u.updater),
     summary: u.summary,
-    related_entity: { type: 'weekly_update', id: u.id, method: u.method, client_response: u.client_response },
+    related_entity: { type: 'weekly_update', id: u.id, method: u.method, client_response: u.client_response, attachment_url: u.attachment_url },
   }));
 }

@@ -10,6 +10,9 @@ const DEFAULTS = {
   domain_access_status: 'NOT_APPLICABLE',
   email_smtp_access_status: 'NOT_APPLICABLE',
   aws_access_status: 'NOT_APPLICABLE',
+  openai_access_status: 'NOT_APPLICABLE',
+  stripe_access_status: 'NOT_APPLICABLE',
+  azure_access_status: 'NOT_APPLICABLE',
   devops_remarks: null,
   git_provider: null,
   git_repo_url: null,
@@ -46,10 +49,18 @@ const PASSTHROUGH_STRING_FIELDS = [
 const PASSTHROUGH_DATE_FIELDS = ['domain_expiry_date', 'credentials_verified_date'];
 
 // Access fields that count toward the "access completion score" (out of 6).
+// Deliberately NOT extended with openai/stripe/azure below — those are
+// tracked and displayed independently but don't change the meaning/scale of
+// this existing composite (already relied on by health_score, the
+// Executive Dashboard, and the "access incomplete" KPI filter).
 export const ACCESS_SCORE_FIELDS = [
   'git_access_status', 'server_access_status', 'domain_access_status',
   'email_smtp_access_status', 'aws_access_status',
 ];
+
+// Project Access — OpenAI/Stripe/Azure, same status vocabulary as the
+// fields above, surfaced independently (see comment on ACCESS_SCORE_FIELDS).
+export const EXTENDED_ACCESS_FIELDS = ['openai_access_status', 'stripe_access_status', 'azure_access_status'];
 
 export async function find_devops_access_by_project(project_id) {
   const record = await prisma.devops_access_tracking.findUnique({ where: { project_id } });
@@ -81,6 +92,10 @@ export async function upsert_devops_access(project_id, data) {
   if (email_smtp_access_status !== undefined) payload.email_smtp_access_status = email_smtp_access_status;
   if (aws_access_status !== undefined) payload.aws_access_status = aws_access_status;
   if (devops_remarks !== undefined) payload.devops_remarks = devops_remarks?.trim() || null;
+
+  for (const field of EXTENDED_ACCESS_FIELDS) {
+    if (data[field] !== undefined) payload[field] = data[field];
+  }
 
   for (const field of PASSTHROUGH_STRING_FIELDS) {
     if (data[field] !== undefined) payload[field] = data[field]?.trim?.() || data[field] || null;

@@ -1,53 +1,76 @@
 import {
-  create_milestone, delete_milestone, find_milestone_by_id,
-  find_milestones_by_project, update_milestone,
-} from '../repositories/milestones.repository.js';
+  archive_milestone_svc, create_milestone_svc, delete_milestone_svc, get_milestone,
+  list_milestones, unarchive_milestone_svc, update_milestone_svc,
+} from '../services/milestones.service.js';
 import { log_activity } from '../../activity-logs/repositories/activity.repository.js';
+import { create_notification } from '../../notifications/services/notifications.service.js';
 import prisma from '../../../shared/database/client.js';
 
 function ok(res, payload, msg = 'OK', status = 200) {
   return res.status(status).json({ success: true, message: msg, payload });
 }
-function fail(res, msg, status = 400) {
-  return res.status(status).json({ success: false, message: msg });
+
+// Resolves each milestone's depends_on_ids into lightweight {id, title,
+// status} objects for display, silently dropping ids that no longer exist
+// (deleted milestone) rather than surfacing a broken reference.
+function with_resolved_dependencies(records) {
+  const by_id = new Map(records.map((m) => [m.id, m]));
+  return records.map((m) => ({
+    ...m,
+    depends_on: (m.depends_on_ids || [])
+      .map((id) => by_id.get(id))
+      .filter(Boolean)
+      .map((d) => ({ id: d.id, title: d.title, status: d.status })),
+  }));
 }
 
-export async function list_milestones(req, res, next) {
+export async function list_milestones_ctrl(req, res, next) {
   try {
-    const records = await find_milestones_by_project(req.params.projectId);
-    return ok(res, { records, total: records.length });
+    const records = await list_milestones(req.params.projectId, { include_archived: req.query.include_archived === 'true' });
+    return ok(res, { records: with_resolved_dependencies(records), total: records.length });
   } catch (err) { next(err); }
 }
 
 export async function create_milestone_ctrl(req, res, next) {
   try {
-    const { title, description, due_date } = req.body;
-    if (!title?.trim()) return fail(res, 'title is required');
-    const m = await create_milestone({ project_id: req.params.projectId, title, description, due_date });
+    const m = await create_milestone_svc(req.params.projectId, req.body);
     log_activity({
       user_id: req.user.id, action: 'CREATE', entity_type: 'project', entity_id: req.params.projectId,
       description: `Created milestone "${m.title}"`,
     }).catch(() => {});
+
+    if (Array.isArray(req.body.assigned_user_ids) && req.body.assigned_user_ids.length > 0) {
+      const project = await prisma.projects.findUnique({ where: { id: req.params.projectId }, select: { title: true } });
+      for (const user_id of req.body.assigned_user_ids) {
+        create_notification({
+          user_id,
+          title: 'Assigned to Milestone',
+          message: `You were assigned to milestone "${m.title}" on ${project?.title || 'a project'}.`,
+          type: 'PROJECT',
+        }).catch(() => null);
+      }
+    }
+
     return ok(res, m, 'Milestone created', 201);
   } catch (err) { next(err); }
 }
 
 export async function update_milestone_ctrl(req, res, next) {
   try {
-    const existing = await find_milestone_by_id(req.params.milestoneId);
-    if (!existing) return fail(res, 'Milestone not found', 404);
-    const m = await update_milestone(req.params.milestoneId, req.body);
-    const change = req.body.completed !== undefined
-      ? (req.body.completed ? 'completed' : 'reopened')
-      : req.body.blocked !== undefined
-        ? (req.body.blocked ? 'marked as blocked' : 'unblocked')
+    const existing = await get_milestone(req.params.milestoneId);
+    const m = await update_milestone_svc(req.params.milestoneId, req.body);
+
+    const change = req.body.status !== undefined
+      ? `status changed to ${req.body.status.replace(/_/g, ' ')}`
+      : req.body.progress_percent !== undefined
+        ? `progress updated to ${req.body.progress_percent}%`
         : 'updated';
     log_activity({
       user_id: req.user.id, action: 'UPDATE', entity_type: 'project', entity_id: req.params.projectId,
       description: `Milestone "${m.title}" ${change}`,
     }).catch(() => {});
 
-    if (req.body.blocked === true) {
+    if (req.body.status === 'BLOCKED' && existing.status !== 'BLOCKED') {
       prisma.projects.findUnique({ where: { id: req.params.projectId }, select: { title: true, owner_id: true, leader_id: true } })
         .then((project) => {
           if (!project) return;
@@ -69,16 +92,35 @@ export async function update_milestone_ctrl(req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function archive_milestone_ctrl(req, res, next) {
+  try {
+    const m = await archive_milestone_svc(req.params.milestoneId);
+    log_activity({
+      user_id: req.user.id, action: 'UPDATE', entity_type: 'project', entity_id: req.params.projectId,
+      description: `Milestone "${m.title}" archived`,
+    }).catch(() => {});
+    return ok(res, m, 'Milestone archived');
+  } catch (err) { next(err); }
+}
+
+export async function unarchive_milestone_ctrl(req, res, next) {
+  try {
+    const m = await unarchive_milestone_svc(req.params.milestoneId);
+    log_activity({
+      user_id: req.user.id, action: 'UPDATE', entity_type: 'project', entity_id: req.params.projectId,
+      description: `Milestone "${m.title}" unarchived`,
+    }).catch(() => {});
+    return ok(res, m, 'Milestone unarchived');
+  } catch (err) { next(err); }
+}
+
 export async function delete_milestone_ctrl(req, res, next) {
   try {
-    const existing = await find_milestone_by_id(req.params.milestoneId);
-    await delete_milestone(req.params.milestoneId);
-    if (existing) {
-      log_activity({
-        user_id: req.user.id, action: 'DELETE', entity_type: 'project', entity_id: req.params.projectId,
-        description: `Deleted milestone "${existing.title}"`,
-      }).catch(() => {});
-    }
+    const existing = await delete_milestone_svc(req.params.milestoneId);
+    log_activity({
+      user_id: req.user.id, action: 'DELETE', entity_type: 'project', entity_id: req.params.projectId,
+      description: `Deleted milestone "${existing.title}"`,
+    }).catch(() => {});
     return ok(res, null, 'Milestone deleted');
   } catch (err) { next(err); }
 }

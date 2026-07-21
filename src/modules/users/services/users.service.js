@@ -80,6 +80,14 @@ export async function create_new_user(body, actor_user_id) {
 
 export async function update_existing_user(id, body, actor_user_id) {
   await get_user(id); // throws 404 if not found
+
+  // Employee Lifecycle Workflow: ARCHIVED is terminal and read-only — block
+  // every generic profile edit once an employee is archived (mirrors the
+  // same guard in hr-profile.service.js's upsert_hr_profile).
+  const current_profile = await prisma.employee_profiles.findUnique({ where: { user_id: id }, select: { lifecycle_stage: true } });
+  if (current_profile?.lifecycle_stage === 'ARCHIVED') {
+    throw field_error('This employee is Archived. The profile is read-only and cannot be edited.', 'lifecycle_stage', 'ARCHIVED_READ_ONLY', 409);
+  }
   // `status`, `lifecycle_stage`, and designation_id/grade_id/department_id
   // are all stripped here defensively — each has exactly one write path
   // (set_employment_status / set_lifecycle_stage / change_user_designation

@@ -29,9 +29,9 @@ export async function create_update_ctrl(req, res, next) {
   try {
     const { valid, message } = validate_create_update(req.body);
     if (!valid) return fail(res, message);
-    const { update_date, method, summary, client_response } = req.body;
+    const { update_date, method, summary, client_response, attachment_url } = req.body;
     const record = await create_update({
-      project_id: req.params.projectId, update_date, updated_by: req.user.id, method, summary, client_response,
+      project_id: req.params.projectId, update_date, updated_by: req.user.id, method, summary, client_response, attachment_url,
     });
     log_activity({
       user_id: req.user.id, action: 'CREATE', entity_type: 'project', entity_id: req.params.projectId,

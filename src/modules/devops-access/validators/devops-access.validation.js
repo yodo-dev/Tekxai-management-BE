@@ -1,6 +1,14 @@
-export const COMM_CHANNELS = ['EMAIL', 'CLICKUP', 'SLACK', 'TEAMS', 'WHATSAPP', 'GOOGLE_MEET', 'ZOOM', 'OTHER'];
+// Project Management overhaul — Point of Communication now also covers
+// Discord/Skype/Upwork/Fiverr/Phone (previously EMAIL/CLICKUP/SLACK/TEAMS/
+// WHATSAPP/GOOGLE_MEET/ZOOM/OTHER only).
+export const COMM_CHANNELS = ['EMAIL', 'CLICKUP', 'SLACK', 'TEAMS', 'WHATSAPP', 'DISCORD', 'SKYPE', 'ZOOM', 'UPWORK', 'FIVERR', 'PHONE', 'GOOGLE_MEET', 'OTHER'];
 export const ACCESS_STATUSES = ['GRANTED', 'PENDING', 'NOT_APPLICABLE'];
 export const AWS_ACCESS_STATUSES = ['GRANTED', 'PENDING', 'LIMITED', 'NOT_APPLICABLE'];
+// Project Access — OpenAI/Stripe use the plain 3-value vocabulary; Azure
+// mirrors AWS in also supporting LIMITED.
+export const OPENAI_ACCESS_STATUSES = ACCESS_STATUSES;
+export const STRIPE_ACCESS_STATUSES = ACCESS_STATUSES;
+export const AZURE_ACCESS_STATUSES = AWS_ACCESS_STATUSES;
 export const PROGRESS_SHARED_STATUSES = ['NOT_SHARED', 'SHARED', 'AWAITING_FEEDBACK', 'CLIENT_APPROVED'];
 export const HOSTING_ENVIRONMENTS = ['PRODUCTION', 'STAGING', 'DEVELOPMENT'];
 export const DOMAIN_SSL_STATUSES = ['ACTIVE', 'EXPIRING', 'EXPIRED', 'NOT_CONFIGURED'];
@@ -18,6 +26,15 @@ export function validate_devops_access(body) {
   }
   if (body.aws_access_status !== undefined && !AWS_ACCESS_STATUSES.includes(body.aws_access_status)) {
     return { valid: false, message: `aws_access_status must be one of ${AWS_ACCESS_STATUSES.join(', ')}` };
+  }
+  if (body.openai_access_status !== undefined && !OPENAI_ACCESS_STATUSES.includes(body.openai_access_status)) {
+    return { valid: false, message: `openai_access_status must be one of ${OPENAI_ACCESS_STATUSES.join(', ')}` };
+  }
+  if (body.stripe_access_status !== undefined && !STRIPE_ACCESS_STATUSES.includes(body.stripe_access_status)) {
+    return { valid: false, message: `stripe_access_status must be one of ${STRIPE_ACCESS_STATUSES.join(', ')}` };
+  }
+  if (body.azure_access_status !== undefined && !AZURE_ACCESS_STATUSES.includes(body.azure_access_status)) {
+    return { valid: false, message: `azure_access_status must be one of ${AZURE_ACCESS_STATUSES.join(', ')}` };
   }
   if (body.progress_shared_status !== undefined && !PROGRESS_SHARED_STATUSES.includes(body.progress_shared_status)) {
     return { valid: false, message: `progress_shared_status must be one of ${PROGRESS_SHARED_STATUSES.join(', ')}` };

@@ -21,7 +21,7 @@ export const PROJECT_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 // bringing the enforced list up to parity with what the UI already showed.
 export const PROJECT_MEMBER_ROLES = [
   'FRONTEND', 'BACKEND', 'TEAM_LEAD', 'QA', 'DEVOPS', 'UI_UX',
-  'AI_ENGINEER', 'BUSINESS_ANALYST', 'SALES', 'ESTIMATOR', 'MEMBER',
+  'AI_ENGINEER', 'BUSINESS_ANALYST', 'SALES', 'ESTIMATOR', 'OTHER', 'MEMBER',
 ];
 
 // `members` is the new shape ([{ user_id, role }]) accepted alongside the
@@ -56,6 +56,16 @@ function validate_priority_field(body) {
   return { valid: true };
 }
 
+// Target Delivery Date cannot be before Start Date — only checked when both
+// are present in the same payload (a partial update touching only one of
+// the two can't know the other's stored value here).
+function validate_date_order(body) {
+  if (body.start_date && body.end_date && new Date(body.end_date) < new Date(body.start_date)) {
+    return { valid: false, message: 'Target Delivery Date cannot be before Start Date' };
+  }
+  return { valid: true };
+}
+
 export function validate_create_project(body) {
   if (!body?.title?.trim()) return { valid: false, message: 'Project title required' };
   if (body.status !== undefined && !ALL_STATUSES.includes(body.status)) {
@@ -73,6 +83,8 @@ export function validate_create_project(body) {
   if (!members_check.valid) return members_check;
   const budget_check = validate_budget_fields(body);
   if (!budget_check.valid) return budget_check;
+  const date_check = validate_date_order(body);
+  if (!date_check.valid) return date_check;
   return { valid: true };
 }
 
@@ -93,6 +105,8 @@ export function validate_update_project(body) {
   if (!members_check.valid) return members_check;
   const budget_check = validate_budget_fields(body);
   if (!budget_check.valid) return budget_check;
+  const date_check = validate_date_order(body);
+  if (!date_check.valid) return date_check;
   return { valid: true };
 }
 

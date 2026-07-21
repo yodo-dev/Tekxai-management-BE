@@ -21,7 +21,7 @@ export async function find_latest_update(project_id) {
   });
 }
 
-export async function create_update({ project_id, update_date, updated_by, method, summary, client_response }) {
+export async function create_update({ project_id, update_date, updated_by, method, summary, client_response, attachment_url }) {
   return prisma.client_weekly_updates.create({
     data: {
       project_id,
@@ -30,6 +30,7 @@ export async function create_update({ project_id, update_date, updated_by, metho
       method: method || 'EMAIL',
       summary,
       client_response: client_response || null,
+      attachment_url: attachment_url || null,
     },
     include: UPDATER_INCLUDE,
   });

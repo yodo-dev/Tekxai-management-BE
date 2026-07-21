@@ -21,7 +21,7 @@ const ENTITY_MAP={
   // 'end_date') — selecting it made every default projects report throw. Fixed.
   projects:{fields:{id:true,title:true,status:true,client_name:true,dev_status:true,progress:true,budget:true,budget_spent:true,owner_id:true,created_at:true,end_date:true},filters:['status','created_at','client_name','owner_id'],searchable:['title','client_name'],numeric:['budget','budget_spent','progress']},
   tasks:{fields:{id:true,title:true,status:true,priority:true,project_id:true,milestone_id:true,assigned_to:true,created_at:true,due_date:true},filters:['status','priority','created_at','project_id','assigned_to'],searchable:['title']},
-  milestones:{fields:{id:true,project_id:true,title:true,due_date:true,completed:true,blocked:true,created_at:true},filters:['project_id','completed','blocked','created_at','due_date'],searchable:['title']},
+  milestones:{fields:{id:true,project_id:true,title:true,due_date:true,completed:true,blocked:true,sequence:true,status:true,progress_percent:true,estimated_start:true,estimated_end:true,completed_date:true,archived_at:true,created_at:true},filters:['project_id','completed','blocked','status','archived_at','created_at','due_date'],searchable:['title','remarks']},
   // Extended for Sprint 1 Milestone 4 (Expense Reports): user_id (employee),
   // date (the actual transaction date — Current Month/Year KPIs must filter
   // on this, not created_at) and paid_to (free-text vendor, no dedicated

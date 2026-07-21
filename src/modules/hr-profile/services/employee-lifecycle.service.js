@@ -6,6 +6,8 @@ import { validate_lifecycle_stage, NOTIFY_STAGES, LIFECYCLE_STAGE_LABELS } from 
 import { create_notification } from '../../notifications/services/notifications.service.js';
 import { trigger_employee_confirmed } from '../../automation/services/automation.service.js';
 import { seed_default_offboarding_tasks } from '../../offboarding/services/offboarding.service.js';
+import { request_lifecycle_approval, get_lifecycle_approval } from '../../lifecycle-approvals/services/lifecycle-approvals.service.js';
+import { decide_approval_request } from '../../lifecycle-approvals/repositories/lifecycle-approvals.repository.js';
 
 function app_error(message, status_code = 400) {
   const e = new Error(message);
@@ -135,4 +137,323 @@ export async function set_lifecycle_stage(user_id, new_stage, actor_user_id) {
   }
 
   return { lifecycle_stage: new_stage, changed: true };
+}
+
+// ─── Employee Lifecycle Workflow — transition orchestration ─────────────────
+//
+// Everything below wraps set_lifecycle_stage() (still the one write path for
+// lifecycle_stage) with the pre-conditions, hard gates, and approval routing
+// the Employee Lifecycle Workflow requires. None of it changes
+// set_lifecycle_stage() itself or its frozen ONBOARDING/ARCHIVED Employment
+// Status sync above.
+
+function assert_current_stage(current, expected, action_label) {
+  if (current !== expected) {
+    throw app_error(
+      `Cannot ${action_label}: employee is currently at "${LIFECYCLE_STAGE_LABELS[current] || current || 'no stage'}", expected "${LIFECYCLE_STAGE_LABELS[expected] || expected}".`,
+      409
+    );
+  }
+}
+
+async function notify_hr_users({ title, message }) {
+  const hr_users = await prisma.users.findMany({
+    where: { deleted_at: null, roles: { some: { role: { name: 'HR' } } } },
+    select: { id: true },
+  });
+  await Promise.all(hr_users.map((u) => create_notification({ user_id: u.id, title, message, type: 'HR' }).catch(() => null)));
+}
+
+// ── Readiness (compute-on-read, nothing persisted) ───────────────────────────
+
+// ONBOARDING readiness — same "compute on read" pattern as
+// projects.repository.js's health_score/access_completion_score. Reuses
+// onboarding_tasks, employee_profiles, employee_documents; nothing new
+// stored, nothing auto-promoted.
+export async function get_onboarding_readiness(user_id) {
+  const [tasks, profile, documents] = await Promise.all([
+    prisma.onboarding_tasks.findMany({ where: { user_id } }),
+    prisma.employee_profiles.findUnique({ where: { user_id } }),
+    prisma.employee_documents.findMany({ where: { user_id } }),
+  ]);
+
+  const total_tasks = tasks.length;
+  const completed_tasks = tasks.filter((t) => t.is_completed).length;
+  const tasks_complete = total_tasks > 0 && completed_tasks === total_tasks;
+
+  const missing_requirements = [];
+  if (total_tasks === 0) missing_requirements.push('No onboarding tasks assigned yet');
+  else if (!tasks_complete) missing_requirements.push(`${total_tasks - completed_tasks} onboarding task(s) incomplete`);
+  if (!profile) missing_requirements.push('Employee profile not created');
+  if (documents.length === 0) missing_requirements.push('No documents uploaded');
+
+  return {
+    total_tasks,
+    completed_tasks,
+    tasks_complete,
+    has_profile: !!profile,
+    document_count: documents.length,
+    ready: tasks_complete && !!profile,
+    missing_requirements,
+  };
+}
+
+// OFFBOARDING readiness — feeds both the Exit Clearance UI and the hard gate
+// in archive_employee() below. checklist/asset/approval are each
+// independently blocking.
+export async function get_offboarding_readiness(user_id) {
+  const [tasks, active_assignments, approvals] = await Promise.all([
+    prisma.offboarding_tasks.findMany({ where: { user_id } }),
+    prisma.asset_assignments.findMany({ where: { user_id, is_active: true }, include: { asset: true } }),
+    prisma.lifecycle_approval_requests.findMany({
+      where: { user_id, transition: 'ARCHIVE_EMPLOYEE' },
+      orderBy: { created_at: 'desc' },
+    }),
+  ]);
+
+  const total_tasks = tasks.length;
+  const completed_tasks = tasks.filter((t) => t.is_completed).length;
+  const checklist_complete = total_tasks > 0 && completed_tasks === total_tasks;
+
+  const outstanding_assets = active_assignments.map((a) => a.asset?.name || a.asset?.asset_tag || 'Unnamed asset');
+  const latest_approval = approvals[0] || null;
+  const approval_complete = latest_approval?.status === 'APPROVED';
+
+  const blocking_reasons = [];
+  if (!checklist_complete) {
+    blocking_reasons.push(total_tasks === 0 ? 'Offboarding checklist not started' : `${total_tasks - completed_tasks} offboarding task(s) incomplete`);
+  }
+  if (outstanding_assets.length > 0) {
+    blocking_reasons.push(`${outstanding_assets.length} outstanding asset(s): ${outstanding_assets.join(', ')}`);
+  }
+  if (!approval_complete) {
+    blocking_reasons.push(
+      latest_approval?.status === 'PENDING' ? 'Archive approval is pending' : 'Archive approval has not been requested yet'
+    );
+  }
+
+  return {
+    total_tasks,
+    completed_tasks,
+    checklist_complete,
+    outstanding_assets,
+    outstanding_asset_count: outstanding_assets.length,
+    latest_approval,
+    approval_complete,
+    ready: checklist_complete && outstanding_assets.length === 0 && approval_complete,
+    blocking_reasons,
+  };
+}
+
+// Derived probation summary (start/end/status/remaining days) for the
+// Lifecycle tab — no new columns, reads employee_profiles' existing fields.
+export async function get_probation_summary(user_id) {
+  const profile = await prisma.employee_profiles.findUnique({
+    where: { user_id },
+    select: { probation_start: true, probation_end: true, probation_status: true },
+  });
+  if (!profile) return null;
+
+  let remaining_days = null;
+  if (profile.probation_end) {
+    remaining_days = Math.ceil((new Date(profile.probation_end).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+  }
+
+  return { ...profile, remaining_days };
+}
+
+// ── Direct transitions (no approval gate) ────────────────────────────────────
+//
+// ONBOARDING->PROBATION, ACTIVE_EMPLOYMENT->NOTICE_PERIOD, and
+// NOTICE_PERIOD->EXIT_CLEARANCE are routine HR/manager actions today (no
+// existing approval flow gates any of them), so they stay direct — matching
+// how every other HR action in this codebase already works (permission
+// check + audit log + notification, no separate sign-off step).
+
+export async function move_to_probation(user_id, actor_user_id) {
+  const current = await get_lifecycle_stage(user_id);
+  assert_current_stage(current, 'ONBOARDING', 'move this employee to Probation');
+  return set_lifecycle_stage(user_id, 'PROBATION', actor_user_id);
+}
+
+// Entering Notice Period is the one direct transition with its own
+// downstream automation: seeds the offboarding checklist immediately
+// (reusing the same idempotent seed_default_offboarding_tasks() the
+// EXIT_CLEARANCE path already calls — safe to call at both points, the
+// second call is always a no-op) and notifies HR. The reporting manager is
+// already notified by set_lifecycle_stage()'s NOTIFY_STAGES block below —
+// not duplicated here. Access is deliberately left untouched (no revocation)
+// per the approved architecture.
+export async function enter_notice_period(user_id, actor_user_id, { notice_period_days } = {}) {
+  const current = await get_lifecycle_stage(user_id);
+  assert_current_stage(current, 'ACTIVE_EMPLOYMENT', 'move this employee to Notice Period');
+
+  const result = await set_lifecycle_stage(user_id, 'NOTICE_PERIOD', actor_user_id);
+
+  if (notice_period_days != null) {
+    await prisma.employee_profiles.update({
+      where: { user_id },
+      data: { notice_period_days: +notice_period_days },
+    }).catch(() => {});
+  }
+
+  await seed_default_offboarding_tasks(user_id, actor_user_id).catch(() => {});
+
+  const employee = await prisma.users.findUnique({ where: { id: user_id }, select: { first_name: true, last_name: true } });
+  const employee_name = `${employee?.first_name || ''} ${employee?.last_name || ''}`.trim() || 'An employee';
+  await notify_hr_users({
+    title: 'Employee Entered Notice Period',
+    message: `${employee_name} has entered their notice period. Offboarding tasks have been created — access remains active until Exit Clearance.`,
+  }).catch(() => {});
+
+  return result;
+}
+
+export async function move_to_exit_clearance(user_id, actor_user_id) {
+  const current = await get_lifecycle_stage(user_id);
+  assert_current_stage(current, 'NOTICE_PERIOD', 'move this employee to Exit Clearance');
+  return set_lifecycle_stage(user_id, 'EXIT_CLEARANCE', actor_user_id);
+}
+
+// EXIT_CLEARANCE -> ARCHIVED — the hard gate. Cannot run until the
+// offboarding checklist is complete, no assets remain outstanding, and an
+// APPROVED "Archive Employee" approval request exists for this employee.
+// `_internal_skip_approval_check` is set only by approve_lifecycle_transition
+// below, for the split-second where the approval being approved is still
+// PENDING (it becomes APPROVED right after this function returns) — the
+// checklist/asset gates are never skipped, only the approval-existence check.
+export async function archive_employee(user_id, actor_user_id, { _internal_skip_approval_check = false } = {}) {
+  const current = await get_lifecycle_stage(user_id);
+  assert_current_stage(current, 'EXIT_CLEARANCE', 'archive this employee');
+
+  const readiness = await get_offboarding_readiness(user_id);
+
+  if (!readiness.checklist_complete) {
+    throw app_error(`Cannot archive: offboarding checklist is incomplete (${readiness.blocking_reasons.join('; ')}).`, 409);
+  }
+  if (readiness.outstanding_asset_count > 0) {
+    throw app_error(`Cannot archive: ${readiness.outstanding_asset_count} outstanding asset(s) must be returned first (${readiness.outstanding_assets.join(', ')}).`, 409);
+  }
+  if (!_internal_skip_approval_check && !readiness.approval_complete) {
+    throw app_error('Cannot archive: an approved "Archive Employee" request is required first. Use "Request Archive" to start one.', 409);
+  }
+
+  return set_lifecycle_stage(user_id, 'ARCHIVED', actor_user_id);
+}
+
+// ── Approval-gated transitions ───────────────────────────────────────────────
+//
+// Probation confirmation/extension/termination and the final archive all go
+// through the lifecycle-scoped approval mechanism (lifecycle-approvals
+// module) — request_* creates a PENDING request; approving it (via
+// approve_lifecycle_transition, called from the lifecycle-approvals routes)
+// executes the underlying transition.
+
+export async function request_confirm_employee(user_id, actor_user_id, { reason } = {}) {
+  const current = await get_lifecycle_stage(user_id);
+  assert_current_stage(current, 'PROBATION', 'confirm this employee');
+  return request_lifecycle_approval({
+    user_id, transition: 'CONFIRM_EMPLOYEE', from_stage: 'PROBATION', to_stage: 'ACTIVE_EMPLOYMENT',
+    requested_by: actor_user_id, reason,
+  });
+}
+
+export async function request_extend_probation(user_id, actor_user_id, { new_probation_end, reason } = {}) {
+  if (!new_probation_end) throw app_error('new_probation_end is required', 422);
+  const current = await get_lifecycle_stage(user_id);
+  assert_current_stage(current, 'PROBATION', "extend this employee's probation");
+  return request_lifecycle_approval({
+    user_id, transition: 'EXTEND_PROBATION', from_stage: 'PROBATION', to_stage: 'PROBATION',
+    requested_by: actor_user_id, reason, metadata: { new_probation_end },
+  });
+}
+
+export async function request_terminate_probation(user_id, actor_user_id, { reason } = {}) {
+  const current = await get_lifecycle_stage(user_id);
+  assert_current_stage(current, 'PROBATION', 'terminate this employee during probation');
+  return request_lifecycle_approval({
+    user_id, transition: 'TERMINATE_PROBATION', from_stage: 'PROBATION', to_stage: 'EXIT_CLEARANCE',
+    requested_by: actor_user_id, reason,
+  });
+}
+
+export async function request_archive_employee(user_id, actor_user_id, { reason } = {}) {
+  const current = await get_lifecycle_stage(user_id);
+  assert_current_stage(current, 'EXIT_CLEARANCE', 'archive this employee');
+  return request_lifecycle_approval({
+    user_id, transition: 'ARCHIVE_EMPLOYEE', from_stage: 'EXIT_CLEARANCE', to_stage: 'ARCHIVED',
+    requested_by: actor_user_id, reason,
+  });
+}
+
+// Approving a request executes its underlying transition, then marks it
+// APPROVED — never the other order, so a request can never be left APPROVED
+// without the transition having actually happened.
+export async function approve_lifecycle_transition(approval_id, actor_user_id, decision_note) {
+  const request = await get_lifecycle_approval(approval_id);
+  if (request.status !== 'PENDING') {
+    throw app_error(`Only pending requests can be approved (this one is already ${request.status}).`, 409);
+  }
+
+  let transition_result;
+  switch (request.transition) {
+    case 'CONFIRM_EMPLOYEE': {
+      const current = await get_lifecycle_stage(request.user_id);
+      assert_current_stage(current, 'PROBATION', 'confirm this employee');
+      transition_result = await set_lifecycle_stage(request.user_id, 'ACTIVE_EMPLOYMENT', actor_user_id);
+      await prisma.employee_profiles.update({
+        where: { user_id: request.user_id },
+        data: { probation_status: 'CONFIRMED', confirmation_date: new Date() },
+      }).catch(() => {});
+      break;
+    }
+    case 'EXTEND_PROBATION': {
+      const current = await get_lifecycle_stage(request.user_id);
+      assert_current_stage(current, 'PROBATION', "extend this employee's probation");
+      const new_end = request.metadata?.new_probation_end;
+      if (!new_end) throw app_error('Approval request is missing new_probation_end metadata', 422);
+      await prisma.employee_profiles.update({
+        where: { user_id: request.user_id },
+        data: { probation_end: new Date(new_end), probation_status: 'EXTENDED' },
+      });
+      await log_activity({
+        user_id: actor_user_id, action: 'UPDATE', entity_type: 'employee', entity_id: request.user_id,
+        description: `Probation extended to ${new Date(new_end).toISOString().slice(0, 10)}`,
+      }).catch(() => {});
+      transition_result = { lifecycle_stage: current, changed: false, probation_end: new_end };
+      break;
+    }
+    case 'TERMINATE_PROBATION': {
+      const current = await get_lifecycle_stage(request.user_id);
+      assert_current_stage(current, 'PROBATION', 'terminate this employee during probation');
+      transition_result = await set_lifecycle_stage(request.user_id, 'EXIT_CLEARANCE', actor_user_id);
+      await prisma.employee_profiles.update({
+        where: { user_id: request.user_id },
+        data: { probation_status: 'FAILED', termination_date: new Date() },
+      }).catch(() => {});
+      break;
+    }
+    case 'ARCHIVE_EMPLOYEE': {
+      transition_result = await archive_employee(request.user_id, actor_user_id, { _internal_skip_approval_check: true });
+      break;
+    }
+    default:
+      throw app_error(`Unknown transition type: ${request.transition}`, 500);
+  }
+
+  const updated_request = await decide_approval_request(approval_id, { status: 'APPROVED', decided_by: actor_user_id, decision_note });
+
+  await log_activity({
+    user_id: actor_user_id, action: 'UPDATE', entity_type: 'employee', entity_id: request.user_id,
+    description: `Lifecycle approval granted: ${request.transition.replace(/_/g, ' ')}${decision_note ? ` — ${decision_note}` : ''}`,
+  }).catch(() => {});
+
+  await create_notification({
+    user_id: request.requested_by,
+    title: 'Lifecycle Approval Granted',
+    message: `Your ${request.transition.replace(/_/g, ' ')} request was approved.`,
+    type: 'HR',
+  }).catch(() => null);
+
+  return { approval: updated_request, transition: transition_result };
 }
