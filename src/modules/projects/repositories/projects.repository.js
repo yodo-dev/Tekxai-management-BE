@@ -215,7 +215,45 @@ function to_member_rows(project_id, { member_ids, members }) {
   return (member_ids || []).map((uid) => ({ project_id, user_id: uid }));
 }
 
-export async function create_project({ title, description, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, progress_mode, project_type, budget, budget_currency, member_ids = [], members }) {
+// Sprint 2 Milestone 5 — Project Master Consolidation, rule 3: projects.leader_id
+// is the only source of truth for Team Lead. This keeps project_members in
+// sync with it rather than letting the two disagree — demotes any stray
+// TEAM_LEAD-tagged row that isn't the current leader, then tags the leader
+// (creating a membership row if they weren't already a member). Idempotent
+// and cheap (at most 2 small writes), safe to call on every create/update.
+async function sync_team_lead_membership(tx, project_id, leader_id) {
+  const stale_leads = await tx.project_members.findMany({
+    where: { project_id, role: 'TEAM_LEAD', ...(leader_id ? { user_id: { not: leader_id } } : {}) },
+    select: { user_id: true },
+  });
+  if (stale_leads.length > 0) {
+    await tx.project_members.updateMany({
+      where: { project_id, user_id: { in: stale_leads.map((m) => m.user_id) } },
+      data: { role: 'MEMBER' },
+    });
+  }
+  if (leader_id) {
+    await tx.project_members.upsert({
+      where: { project_id_user_id: { project_id, user_id: leader_id } },
+      update: { role: 'TEAM_LEAD' },
+      create: { project_id, user_id: leader_id, role: 'TEAM_LEAD' },
+    });
+  }
+}
+
+// Sequential, human-readable code (PRJ-0001, PRJ-0002, ...) — counts every
+// project ever created (including soft-deleted) so codes never repeat even
+// after a delete. Project creation is a low-frequency, admin-only action, so
+// a count-based sequence inside the same transaction is sufficient; the
+// column's own @@unique constraint is the backstop if it's ever wrong.
+// Never accepted from client input — same convention as health_score/
+// access_completion_score, which are also always computed, never client-set.
+async function generate_project_code(tx) {
+  const count = await tx.projects.count();
+  return `PRJ-${String(count + 1).padStart(4, '0')}`;
+}
+
+export async function create_project({ title, description, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, progress_mode, project_type, priority, business_unit_id, budget, budget_currency, member_ids = [], members }) {
   // NOTE: the final read must happen *after* the transaction commits — calling
   // find_project_by_id (which uses the outer `prisma` client) from inside the
   // transaction callback reads via a separate connection that can't see the
@@ -235,8 +273,11 @@ export async function create_project({ title, description, start_date, end_date,
         dev_status: dev_status || null,
         progress_mode: progress_mode || 'MANUAL',
         project_type: project_type || 'CLIENT',
+        priority: priority || undefined,
+        business_unit_id: business_unit_id || null,
         budget: budget !== undefined && budget !== null && budget !== '' ? +budget : null,
         budget_currency: budget_currency || undefined,
+        project_code: await generate_project_code(tx),
       },
     });
 
@@ -245,13 +286,17 @@ export async function create_project({ title, description, start_date, end_date,
       await tx.project_members.createMany({ data: member_rows, skipDuplicates: true });
     }
 
+    // Milestone 5 rule 3 — leader_id is the only source of truth for Team
+    // Lead; keep project_members in sync from the moment the project exists.
+    await sync_team_lead_membership(tx, project.id, project.leader_id);
+
     return project.id;
   });
 
   return find_project_by_id(project_id);
 }
 
-export async function update_project(id, { title, description, status, progress, progress_mode, project_type, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, budget, budget_currency, budget_spent, member_ids, members, confirm_remove_all_members }) {
+export async function update_project(id, { title, description, status, progress, progress_mode, project_type, priority, business_unit_id, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, budget, budget_currency, budget_spent, member_ids, members, confirm_remove_all_members }) {
   // See create_project note above — read-after-write must happen post-commit.
   await prisma.$transaction(async (tx) => {
     const data = {};
@@ -261,6 +306,8 @@ export async function update_project(id, { title, description, status, progress,
     if (progress !== undefined) data.progress = progress;
     if (progress_mode !== undefined) data.progress_mode = progress_mode;
     if (project_type !== undefined) data.project_type = project_type;
+    if (priority !== undefined) data.priority = priority;
+    if (business_unit_id !== undefined) data.business_unit_id = business_unit_id || null;
     if (start_date !== undefined) data.start_date = start_date ? new Date(start_date) : null;
     if (end_date !== undefined)   data.end_date   = end_date   ? new Date(end_date)   : null;
     if (total_hours !== undefined) data.total_hours = total_hours;
@@ -272,7 +319,13 @@ export async function update_project(id, { title, description, status, progress,
     if (budget_currency !== undefined) data.budget_currency = budget_currency;
     if (budget_spent !== undefined) data.budget_spent = +budget_spent;
 
-    await tx.projects.update({ where: { id }, data });
+    const updated = await tx.projects.update({ where: { id }, data });
+
+    // Milestone 5 rule 3 — run as soon as leader_id itself changes, whether
+    // or not the member roster is also being touched in this same call.
+    if (leader_id !== undefined) {
+      await sync_team_lead_membership(tx, id, updated.leader_id);
+    }
 
     if (Array.isArray(members) || Array.isArray(member_ids)) {
       const member_rows = to_member_rows(id, { member_ids, members });
@@ -307,6 +360,14 @@ export async function update_project(id, { title, description, status, progress,
       }
       for (const m of to_update) {
         await tx.project_members.updateMany({ where: { project_id: id, user_id: m.user_id }, data: { role: m.role } });
+      }
+
+      // Milestone 5 rule 3 — leader_id itself wasn't part of this call (that
+      // case already ran above), but the roster was just replaced — make
+      // sure nothing in the incoming role list introduced a second,
+      // conflicting TEAM_LEAD tag.
+      if (leader_id === undefined) {
+        await sync_team_lead_membership(tx, id, updated.leader_id);
       }
     }
   });

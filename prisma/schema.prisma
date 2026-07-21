@@ -263,6 +263,7 @@ model business_units {
   updated_at  DateTime @updatedAt
 
   departments departments[]
+  projects    projects[]
 
   @@index([is_active])
 }
@@ -465,6 +466,12 @@ model projects {
   budget_spent    Float     @default(0)
   client_name     String?
   dev_status      String?
+  // Sprint 2 Milestone 5 — Project Master Consolidation. Additive fields only;
+  // project_type is deliberately untouched (see PROJECT_MASTER_AUDIT.md Risk
+  // #2 — it already drives ROI/revenue-attribution and must not be redefined).
+  project_code    String?   @unique // auto-generated at create (see generate_project_code() in the repository), never user-edited
+  priority        String?   @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  business_unit_id String?
   created_at      DateTime  @default(now())
   updated_at      DateTime  @updatedAt
   deleted_at      DateTime?
@@ -472,6 +479,7 @@ model projects {
   owner              users?                   @relation("project_owner", fields: [owner_id], references: [id], onDelete: SetNull)
   team_leader        users?                   @relation("project_leader", fields: [leader_id], references: [id], onDelete: SetNull)
   team               teams?                   @relation(fields: [team_id], references: [id], onDelete: SetNull)
+  business_unit      business_units?          @relation(fields: [business_unit_id], references: [id], onDelete: SetNull)
   members            project_members[]
   tasks              tasks[]
   milestones         milestones[]
@@ -490,6 +498,7 @@ model projects {
 
   @@index([owner_id])
   @@index([status])
+  @@index([business_unit_id])
 }
 
 model extension_requests {
@@ -575,7 +584,13 @@ model milestones {
 model devops_access_tracking {
   id                        String    @id @default(cuid())
   project_id                String    @unique
-  point_of_communication    String    @default("EMAIL") // EMAIL | CLICKUP | SLACK | TEAMS | WHATSAPP | GOOGLE_MEET | ZOOM | OTHER
+  point_of_communication    String    @default("EMAIL") // EMAIL | CLICKUP | SLACK | TEAMS | WHATSAPP | GOOGLE_MEET | ZOOM | OTHER — kept for backward compat as the legacy single-channel field; communication_channels below is the Milestone 5 multi-select superset, not a replacement.
+  // Sprint 2 Milestone 5 — Client Communication multi-select. Additive:
+  // point_of_communication above is untouched so existing readers keep working.
+  communication_channels    String[]  @default([]) // EMAIL | WHATSAPP | SLACK | DISCORD | TEAMS | CLICKUP | JIRA | GOOGLE_CHAT | ZOOM | GOOGLE_MEET | PHONE | OTHER
+  communication_link        String?
+  client_timezone           String?
+  meeting_frequency         String?
   progress_shared_to_client Boolean   @default(false) // kept for backward compat; derived from progress_shared_status
   progress_shared_status    String    @default("NOT_SHARED") // NOT_SHARED | SHARED | AWAITING_FEEDBACK | CLIENT_APPROVED
   progress_shared_date      DateTime?

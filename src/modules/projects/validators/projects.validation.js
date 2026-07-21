@@ -10,9 +10,19 @@ export const PROGRESS_MODES = ['MANUAL', 'AUTO'];
 // Enterprise Performance Platform M1 — distinguishes revenue-bearing client work from
 // internal/overhead work. See Tekxai-Operations-OS/08-Master-Gap-Analysis.md §11.5.
 export const PROJECT_TYPES = ['CLIENT', 'INTERNAL'];
+// Sprint 2 Milestone 5 — Project Master Consolidation. Additive: a new field,
+// not a redefinition of project_type (PROJECT_MASTER_AUDIT.md Risk #2).
+export const PROJECT_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 // Reuses the existing project_members.role column (previously always "MEMBER",
 // never enforced). See Tekxai-Operations-OS gap audit — Sprint 2 Phase 2.
-export const PROJECT_MEMBER_ROLES = ['FRONTEND', 'BACKEND', 'TEAM_LEAD', 'QA', 'DEVOPS', 'UI_UX', 'MEMBER'];
+// Milestone 5 closes a real, pre-existing drift: ProjectDetailsSlideOver's
+// Team tab already displayed AI_ENGINEER/BUSINESS_ANALYST/SALES/ESTIMATOR as
+// group labels, but this whitelist rejected them if ever actually assigned —
+// bringing the enforced list up to parity with what the UI already showed.
+export const PROJECT_MEMBER_ROLES = [
+  'FRONTEND', 'BACKEND', 'TEAM_LEAD', 'QA', 'DEVOPS', 'UI_UX',
+  'AI_ENGINEER', 'BUSINESS_ANALYST', 'SALES', 'ESTIMATOR', 'MEMBER',
+];
 
 // `members` is the new shape ([{ user_id, role }]) accepted alongside the
 // legacy `member_ids` (plain string array, defaults every row to MEMBER) for
@@ -39,6 +49,13 @@ function validate_budget_fields(body) {
   return { valid: true };
 }
 
+function validate_priority_field(body) {
+  if (body.priority !== undefined && body.priority !== null && !PROJECT_PRIORITIES.includes(body.priority)) {
+    return { valid: false, message: `priority must be one of ${PROJECT_PRIORITIES.join(', ')}` };
+  }
+  return { valid: true };
+}
+
 export function validate_create_project(body) {
   if (!body?.title?.trim()) return { valid: false, message: 'Project title required' };
   if (body.status !== undefined && !ALL_STATUSES.includes(body.status)) {
@@ -50,6 +67,8 @@ export function validate_create_project(body) {
   if (body.project_type !== undefined && !PROJECT_TYPES.includes(body.project_type)) {
     return { valid: false, message: `project_type must be one of ${PROJECT_TYPES.join(', ')}` };
   }
+  const priority_check = validate_priority_field(body);
+  if (!priority_check.valid) return priority_check;
   const members_check = validate_members_field(body);
   if (!members_check.valid) return members_check;
   const budget_check = validate_budget_fields(body);
@@ -68,6 +87,8 @@ export function validate_update_project(body) {
   if (body.project_type !== undefined && !PROJECT_TYPES.includes(body.project_type)) {
     return { valid: false, message: `project_type must be one of ${PROJECT_TYPES.join(', ')}` };
   }
+  const priority_check = validate_priority_field(body);
+  if (!priority_check.valid) return priority_check;
   const members_check = validate_members_field(body);
   if (!members_check.valid) return members_check;
   const budget_check = validate_budget_fields(body);

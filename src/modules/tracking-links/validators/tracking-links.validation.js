@@ -1,4 +1,7 @@
-export const LINK_TYPES = ['CLICKUP', 'GOOGLE_SHEET', 'NOTION', 'JIRA', 'GITHUB_PROJECT', 'LINEAR', 'OTHER'];
+export const LINK_TYPES = [
+  'GITHUB', 'STAGING', 'PRODUCTION', 'FIGMA', 'CLICKUP', 'GOOGLE_SHEET', 'NOTION',
+  'JIRA', 'GITHUB_PROJECT', 'LINEAR', 'API_DOCS', 'DOCUMENTATION', 'OTHER',
+];
 
 export function validate_create_link(body) {
   if (!body?.url?.trim()) return { valid: false, message: 'url is required' };
