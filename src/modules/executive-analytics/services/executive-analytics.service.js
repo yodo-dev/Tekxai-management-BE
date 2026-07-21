@@ -104,6 +104,7 @@ async function get_operations_intelligence({ month, year }, { employee_stats, pr
     screenshot_count,
     monitoring_active_users,
     top_applications,
+    expense_categories,
   ] = await Promise.all([
     get_ticket_stats(),
     get_expense_summary({ from: period_start, to: period_end }),
@@ -122,6 +123,11 @@ async function get_operations_intelligence({ month, year }, { employee_stats, pr
     compute_kpi({ entity: 'screenshots', metric: 'COUNT', filters: { created_at: today } }),
     compute_aggregate({ entity: 'productivity_sessions', group_by: 'user_id' }),
     compute_aggregate({ entity: 'app_usage_logs', group_by: 'app_name', metric_field: 'duration_seconds' }),
+    // Sprint 2 Milestone 4 — Root Cause Panels need category *names*, not
+    // just ids, for the expense breakdown below. A small reference-table
+    // lookup (same table list_categories() in expenses.controller.js reads,
+    // capped there at 500 rows) — not a duplicate of any aggregate query.
+    prisma.expense_categories.findMany({ select: { id: true, name: true } }),
   ]);
 
   // Budget utilization = sum(budget_spent)/sum(budget) across projects — both
@@ -134,6 +140,20 @@ async function get_operations_intelligence({ month, year }, { employee_stats, pr
   const budget_utilization_pct = budget_sum.value > 0 ? Math.round((spent_sum.value / budget_sum.value) * 1000) / 10 : null;
 
   const active_assets = (inventory.by_status || []).find((g) => g.status === 'ASSIGNED')?.count ?? null;
+
+  // Reused verbatim from get_expense_summary()'s own cat_totals — already
+  // computed above for this exact period as part of `monthly_expense`.
+  // Milestone 4's root-cause panel needs a per-category breakdown; mapping
+  // ids to names here avoids re-aggregating expense_transactions a second
+  // time (see build_root_cause() below).
+  const category_names = new Map(expense_categories.map((c) => [c.id, c.name]));
+  const expense_by_category = (expense_summary.cat_totals || [])
+    .map((c) => ({
+      category_id: c.category_id,
+      category_name: c.category_id ? (category_names.get(c.category_id) || 'Unknown') : 'Uncategorized',
+      total_amount: c._sum.total_amount || 0,
+    }))
+    .sort((a, b) => b.total_amount - a.total_amount);
 
   return {
     company_overview: {
@@ -157,6 +177,7 @@ async function get_operations_intelligence({ month, year }, { employee_stats, pr
       payroll_cost: payroll_cost.value,
       asset_value: depreciation.total_current_value,
       budget_utilization_pct,
+      expense_by_category,
     },
     productivity: {
       productivity_pct: avg_productivity.value != null ? Math.round(avg_productivity.value) : null,
@@ -205,6 +226,14 @@ export async function get_executive_dashboard({ month, year }) {
   // independently-fetched action_center_raw above — no DB calls here, so no
   // extra serial round-trip stacked onto the request.
   const action_center = build_action_center(shared, operations, insights.insights, action_center_raw);
+  const priority_alerts = prioritize_alerts(operations.alerts);
+  // Milestone 4 — Root Cause / Recommendations / Summary: all pure functions
+  // over data already computed above (post_sales.project_health, operations,
+  // insights, action_center) — zero additional DB calls beyond what
+  // Milestones 1-3 already fetch. See build_root_cause() etc. below.
+  const root_cause = build_root_cause(post_sales.project_health, operations, insights.insights);
+  const recommendations = get_recommendations(action_center);
+  const executive_summary = build_executive_summary(action_center, insights.insights, operations, recommendations);
 
   return {
     period: { month: +month, year: +year },
@@ -230,13 +259,20 @@ export async function get_executive_dashboard({ month, year }) {
     // onto the same single dashboard response rather than a second endpoint.
     // See get_executive_insights()/prioritize_alerts() below.
     ...insights,
-    priority_alerts: prioritize_alerts(operations.alerts),
+    priority_alerts,
     // New for Sprint 2 Milestone 3 — Executive Action Center: the same
     // already-computed alerts/insights values, plus a handful of new
     // independent lookups, bucketed into requires_attention / requires_review
     // / informational with a deterministic priority sort. See
     // get_action_center() below.
     action_center,
+    // New for Sprint 2 Milestone 4 — Decision Support: root-cause panels,
+    // deterministic recommendations, and an executive summary, all built
+    // from data already computed above. See build_root_cause(),
+    // get_recommendations(), build_executive_summary() below.
+    root_cause,
+    recommendations,
+    executive_summary,
   };
 }
 
@@ -289,6 +325,7 @@ async function get_executive_insights({ month, year }, { employee_stats, project
     payroll_current,
     payroll_previous,
     productivity_7d,
+    idle_time_7d,
     coverage_current,
     coverage_previous,
     attendance_7d,
@@ -304,6 +341,11 @@ async function get_executive_insights({ month, year }, { employee_stats, project
     compute_kpi({ entity: 'payroll_runs', metric: 'SUM', field: 'total_net', filters: { period_month: month, period_year: year } }),
     compute_kpi({ entity: 'payroll_runs', metric: 'SUM', field: 'total_net', filters: { period_month: prev_month.month, period_year: prev_month.year } }),
     trend_kpi({ entity: 'productivity_sessions', metric: 'AVG', field: 'productivity_score', date_field: 'date', days: 7 }),
+    // Sprint 2 Milestone 4 — Root Cause Panels' "Idle Time" factor for a
+    // productivity drop. Same trend_kpi() helper as every other trend here,
+    // just pointed at idle_seconds (already a registered numeric field on
+    // productivity_sessions) instead of a new bespoke query.
+    trend_kpi({ entity: 'productivity_sessions', metric: 'AVG', field: 'idle_seconds', date_field: 'date', days: 7 }),
     compute_aggregate({ entity: 'productivity_sessions', group_by: 'user_id', filters: { date: range_bounds(7, 0) } }),
     compute_aggregate({ entity: 'productivity_sessions', group_by: 'user_id', filters: { date: range_bounds(7, 7) } }),
     trend_kpi({ entity: 'attendance_violations', metric: 'COUNT', date_field: 'date', days: 7, extra_filters: { violation_type: 'LATE' } }),
@@ -349,6 +391,7 @@ async function get_executive_insights({ month, year }, { employee_stats, project
       },
       productivity: {
         productivity_trend_7d: productivity_7d,
+        idle_time_trend_7d: idle_time_7d,
         monitoring_coverage_trend_7d: { current: coverage_current_pct, previous: coverage_previous_pct, delta_pct: pct_delta(coverage_current_pct ?? 0, coverage_previous_pct ?? 0) },
         attendance_late_trend_7d: attendance_7d,
       },
@@ -492,4 +535,139 @@ function build_action_center({ project_dashboard }, operations, insights, raw) {
   ]);
 
   return { requires_attention, requires_review, informational };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sprint 2 Milestone 4 — Executive Drill-down & Decision Support.
+//
+// Root cause panels, recommendations, and the executive summary are all
+// pure functions over data Milestones 1-3 already computed (post_sales'
+// project_health, operations, insights, action_center) — the only genuinely
+// new fetches added anywhere for this milestone are the expense_categories
+// name lookup and the idle_seconds trend above, both single generic-engine
+// calls alongside everything else already in their respective Promise.all
+// blocks. Every drill-down `path` below points at an existing page — the
+// same module pages Milestones 1-3 already navigate to (several of which,
+// e.g. /admin/expenses, already render their own report_builder-backed
+// breakdown view) — per the sprint's "reuse existing pages, don't build a
+// second reporting surface" rule.
+// ─────────────────────────────────────────────────────────────────────────
+
+// "Why" behind each KPI that's currently moving in the wrong direction.
+// Nothing here is a new calculation — every factor is a field insights/
+// operations/post_sales already computed; this only assembles and labels
+// the subset that's non-zero/negative into a `factors` list per KPI.
+function build_root_cause(project_health, operations, insights) {
+  const panels = [];
+
+  const expense_trend = insights.financial.expense_trend_30d;
+  if (expense_trend.current > 0 && expense_trend.delta_pct > 0) {
+    panels.push({
+      key: 'expenses_increased',
+      kpi: 'Expenses',
+      summary: `Expenses up ${expense_trend.delta_pct}% over the last 30 days`,
+      factors: (operations.financial.expense_by_category || [])
+        .filter((c) => c.total_amount > 0)
+        .slice(0, 5)
+        .map((c) => ({ label: c.category_name, value: c.total_amount })),
+      path: '/admin/expenses',
+    });
+  }
+
+  const productivity_trend = insights.productivity.productivity_trend_7d;
+  if (productivity_trend.current != null && productivity_trend.delta_pct < 0) {
+    const factors = [];
+    const attendance = insights.productivity.attendance_late_trend_7d;
+    if (attendance.delta_pct > 0) factors.push({ label: 'Attendance Lateness Up', value: attendance.delta_pct });
+    const idle = insights.productivity.idle_time_trend_7d;
+    if (idle.current != null && idle.delta_pct > 0) factors.push({ label: 'Idle Time Up', value: idle.delta_pct });
+    const coverage = insights.productivity.monitoring_coverage_trend_7d;
+    if (coverage.delta_pct < 0) factors.push({ label: 'Monitoring Coverage Down (Missing Screenshots)', value: coverage.delta_pct });
+    panels.push({
+      key: 'productivity_dropped',
+      kpi: 'Productivity',
+      summary: `Productivity down ${Math.abs(productivity_trend.delta_pct)}% over the last 7 days`,
+      factors,
+      path: '/admin/monitoring',
+    });
+  }
+
+  const projects_at_risk_factors = [
+    { label: 'Missing Project Manager', value: project_health.missing_project_manager.count },
+    { label: 'Missing Team Members', value: project_health.missing_team_members.count },
+    { label: 'Over Budget', value: insights.delivery.budget_overrun_risk_count },
+    { label: 'Blocked', value: project_health.blocked_projects.count },
+  ].filter((f) => f.value > 0);
+  if (projects_at_risk_factors.length > 0) {
+    panels.push({
+      key: 'projects_at_risk',
+      kpi: 'Projects',
+      summary: `${insights.delivery.projects_at_risk} project(s) at risk`,
+      factors: projects_at_risk_factors,
+      path: '/admin/project-tracking',
+    });
+  }
+
+  return panels;
+}
+
+// Deterministic recommendation per action-center item — no AI, no
+// notification engine, just a fixed lookup table keyed by the same `key`
+// build_action_center() already assigns. Priority/path are reused directly
+// from the action-center item rather than re-derived.
+const RECOMMENDATION_RULES = {
+  unresolved_critical_tickets: { recommendation: 'Assign more agents to critical tickets', reason: (n) => `${n} critical ticket(s) unresolved` },
+  overdue_approvals: { recommendation: 'Clear pending approvals', reason: (n) => `${n} approval(s) overdue` },
+  payroll_not_processed: { recommendation: 'Run payroll for the current period', reason: () => 'Payroll has not been processed for the current period' },
+  probation_ending_soon: { recommendation: 'Schedule probation review meetings', reason: (n) => `${n} employee(s) have probation ending within 7 days` },
+  blocked_projects: { recommendation: 'Follow up with clients on blocked projects', reason: (n) => `${n} project(s) blocked` },
+  missing_attendance_today: { recommendation: 'Review attendance with HR', reason: (n) => `${n} employee(s) missing attendance today` },
+  overdue_milestones: { recommendation: 'Reprioritize overdue milestones', reason: (n) => `${n} milestone(s) overdue` },
+  pending_asset_returns: { recommendation: 'Follow up on pending asset requests', reason: (n) => `${n} asset request(s) pending` },
+  expense_trend_high: { recommendation: 'Review expense categories driving the increase', reason: () => 'Expenses trending up more than 50% over the prior 30 days' },
+  employees_without_managers: { recommendation: 'Assign supervisors to unmanaged employees', reason: (n) => `${n} employee(s) without a supervisor` },
+  missing_project_owners: { recommendation: 'Assign project managers', reason: (n) => `${n} project(s) missing an owner` },
+};
+
+// Shared by get_recommendations() and build_executive_summary() below —
+// both need "every actionable item regardless of bucket", just informational
+// items excluded (those aren't actionable by definition).
+function actionable_items(action_center) {
+  return [...action_center.requires_attention, ...action_center.requires_review];
+}
+
+function get_recommendations(action_center) {
+  return actionable_items(action_center)
+    .filter((item) => RECOMMENDATION_RULES[item.key])
+    .map((item) => {
+      const rule = RECOMMENDATION_RULES[item.key];
+      return { recommendation: rule.recommendation, reason: rule.reason(item.count), priority: item.priority, path: item.path };
+    });
+}
+
+// Single-paragraph roll-up counts, reusing action_center's own priority
+// buckets and the recommendation list above — no re-querying, no
+// re-aggregating, just counting/labeling what's already been computed.
+function build_executive_summary(action_center, insights, operations, recommendations) {
+  const attention_and_review = actionable_items(action_center);
+  const critical_issues = attention_and_review.filter((i) => i.priority === 'critical').length;
+  const high_priority_items = attention_and_review.filter((i) => i.priority === 'high').length;
+
+  const highlights = [];
+  const expense_trend = insights.financial.expense_trend_30d;
+  if (expense_trend.current > 0) highlights.push(`Expenses ${expense_trend.delta_pct >= 0 ? 'increased' : 'decreased'} ${Math.abs(expense_trend.delta_pct)}%`);
+  const productivity_trend = insights.productivity.productivity_trend_7d;
+  if (productivity_trend.current != null) highlights.push(`Productivity ${productivity_trend.delta_pct >= 0 ? 'increased' : 'decreased'} ${Math.abs(productivity_trend.delta_pct)}%`);
+  if (operations.operations.blocked_projects > 0) highlights.push(`${operations.operations.blocked_projects} project(s) blocked`);
+  const payroll_pending = action_center.requires_attention.some((i) => i.key === 'payroll_not_processed');
+  highlights.push(payroll_pending ? 'Payroll not yet processed for this period' : 'Payroll completed for this period');
+  const approvals_item = action_center.requires_attention.find((i) => i.key === 'overdue_approvals');
+  if (approvals_item) highlights.push(`${approvals_item.count} approval(s) pending`);
+
+  return {
+    critical_issues,
+    high_priority_items,
+    recommendations_count: recommendations.length,
+    highlights,
+  };
 }
