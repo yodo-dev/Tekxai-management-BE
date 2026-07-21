@@ -21,7 +21,7 @@ const ENTITY_MAP={
   // 'end_date') — selecting it made every default projects report throw. Fixed.
   projects:{fields:{id:true,title:true,status:true,client_name:true,dev_status:true,progress:true,budget:true,budget_spent:true,owner_id:true,created_at:true,end_date:true},filters:['status','created_at','client_name','owner_id'],searchable:['title','client_name'],numeric:['budget','budget_spent','progress']},
   tasks:{fields:{id:true,title:true,status:true,priority:true,project_id:true,milestone_id:true,assigned_to:true,created_at:true,due_date:true},filters:['status','priority','created_at','project_id','assigned_to'],searchable:['title']},
-  milestones:{fields:{id:true,project_id:true,title:true,due_date:true,completed:true,blocked:true,created_at:true},filters:['project_id','completed','blocked','created_at'],searchable:['title']},
+  milestones:{fields:{id:true,project_id:true,title:true,due_date:true,completed:true,blocked:true,created_at:true},filters:['project_id','completed','blocked','created_at','due_date'],searchable:['title']},
   // Extended for Sprint 1 Milestone 4 (Expense Reports): user_id (employee),
   // date (the actual transaction date — Current Month/Year KPIs must filter
   // on this, not created_at) and paid_to (free-text vendor, no dedicated
@@ -50,13 +50,13 @@ const ENTITY_MAP={
   // flat equality/range filter or a single-column aggregate the generic
   // engine's build_where/run_kpi can express. Left as a documented gap
   // rather than adding ticket-specific logic to this engine.
-  support_tickets:{fields:{id:true,ticket_number:true,subject:true,status:true,priority:true,severity:true,ticket_type_id:true,department_id:true,assignee_id:true,team_id:true,project_id:true,user_id:true,approval_status:true,response_due_at:true,resolution_due_at:true,resolved_at:true,closed_at:true,created_at:true},filters:['status','priority','severity','ticket_type_id','department_id','assignee_id','team_id','project_id','user_id','approval_status','created_at'],searchable:['ticket_number','subject']},
+  support_tickets:{fields:{id:true,ticket_number:true,subject:true,status:true,priority:true,severity:true,ticket_type_id:true,department_id:true,assignee_id:true,team_id:true,project_id:true,user_id:true,approval_status:true,response_due_at:true,resolution_due_at:true,resolved_at:true,closed_at:true,created_at:true},filters:['status','priority','severity','ticket_type_id','department_id','assignee_id','team_id','project_id','user_id','approval_status','created_at','resolved_at'],searchable:['ticket_number','subject']},
   // Added for Reporting & BI Sprint 1 Milestone 1 — same additive registration pattern as above.
   assets:{fields:{id:true,asset_tag:true,name:true,brand:true,model:true,category_id:true,department_id:true,location_id:true,status:true,condition:true,purchase_date:true,purchase_cost:true,warranty_expiry:true,created_at:true},filters:['category_id','department_id','location_id','status','brand','created_at'],searchable:['asset_tag','name','brand','model'],numeric:['purchase_cost']},
   time_off_requests:{fields:{id:true,user_id:true,leave_type:true,start_date:true,end_date:true,days:true,effective_days:true,status:true,created_at:true},filters:['user_id','leave_type','status','created_at','start_date'],searchable:[]},
   hr_documents:{fields:{id:true,user_id:true,category_id:true,type_id:true,title:true,status:true,valid_from:true,valid_until:true,created_at:true},filters:['user_id','category_id','type_id','status','created_at'],searchable:['title']},
   // Added for Sprint 1 Milestone 2 (HR Reports) — Lifecycle Report and Team Report.
-  employee_profiles:{fields:{id:true,user_id:true,employment_status:true,lifecycle_stage:true,employment_type:true,created_at:true},filters:['employment_status','lifecycle_stage','employment_type','created_at'],searchable:[]},
+  employee_profiles:{fields:{id:true,user_id:true,employment_status:true,lifecycle_stage:true,employment_type:true,probation_status:true,probation_end:true,termination_date:true,created_at:true},filters:['employment_status','lifecycle_stage','employment_type','created_at','probation_status','probation_end','termination_date'],searchable:[]},
   team_members:{fields:{id:true,team_id:true,user_id:true,role:true,joined_at:true},filters:['team_id','role'],searchable:[]},
   // Added for Sprint 1 Milestone 3 (Asset Reports) — "Assets Under Repair"
   // detail report. There is no standing "UNDER_REPAIR" asset.status in the
@@ -140,23 +140,33 @@ function build_report_query(body){
   return{cfg,select,where,orderBy};
 }
 
+// Pure computation, same extraction pattern as compute_aggregate/compute_kpi
+// below — lets executive-analytics (Sprint 2 Milestone 2) pull a small
+// unfiltered detail slice in-process (e.g. budget vs budget_spent per
+// project, a column-to-column comparison the generic filter/aggregate shape
+// can't express) without a bespoke query or an HTTP round-trip to itself.
+export async function compute_report(body){
+  const built=build_report_query(body);
+  if(built.error)throw{status:400,message:built.error};
+  const{select,where,orderBy}=built;
+  const{entity,page=1,limit=500}=body;
+  const take=Math.min(+limit||500,1000);
+  const skip=(Math.max(+page,1)-1)*take;
+  const[total,data]=await Promise.all([
+    prisma[entity].count({where}),
+    prisma[entity].findMany({where,select,orderBy,take,skip}),
+  ]);
+  return{entity,count:data.length,data,total,page:+page,limit:take};
+}
+
 export async function run_report(req,res,next){
   try{
-    const built=build_report_query(req.body);
-    if(built.error)return fail(res,built.error);
-    const{select,where,orderBy}=built;
-    const{entity,page=1,limit=500}=req.body;
-    const take=Math.min(+limit||500,1000);
-    const skip=(Math.max(+page,1)-1)*take;
-    const[total,data]=await Promise.all([
-      prisma[entity].count({where}),
-      prisma[entity].findMany({where,select,orderBy,take,skip}),
-    ]);
-    // count/data kept for backward compatibility with existing callers that
-    // only read those two keys — total/page/limit are additive, matching the
-    // {records,total,page,limit} shape used everywhere else in the API.
-    return ok(res,{entity,count:data.length,data,total,page:+page,limit:take});
-  }catch(e){next(e);}
+    const result=await compute_report(req.body);
+    return ok(res,result);
+  }catch(e){
+    if(e&&e.status)return fail(res,e.message,e.status);
+    next(e);
+  }
 }
 
 // Builds the full (unpaginated, up to 5000-row safety cap) result set for

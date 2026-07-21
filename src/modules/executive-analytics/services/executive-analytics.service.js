@@ -20,7 +20,7 @@ import { get_expense_summary } from '../../expenses/controllers/expenses.control
 import { get_requisition_stats } from '../../requisitions/controllers/requisitions.controller.js';
 import { get_depreciation_report, get_inventory_report } from '../../assets/services/assets.service.js';
 import { list_escalation_history } from '../../compliance-escalation/services/compliance-escalation.service.js';
-import { compute_kpi, compute_aggregate } from '../../reports/report_builder.controller.js';
+import { compute_kpi, compute_aggregate, compute_report } from '../../reports/report_builder.controller.js';
 
 function month_bounds(month, year) {
   const m = +month, y = +year;
@@ -80,15 +80,13 @@ function day_bounds(d = new Date()) {
 // generic Report Builder KPI/aggregate engine is used — never a new bespoke
 // query — per the sprint's "reuse first, generic engine second, never a third
 // parallel implementation" rule.
-async function get_operations_intelligence({ month, year }) {
+async function get_operations_intelligence({ month, year }, { employee_stats, project_dashboard }) {
   const now = new Date();
   const period_start = new Date(year, month - 1, 1).toISOString();
   const period_end = new Date(year, month, 1).toISOString();
   const today = day_bounds(now);
 
   const [
-    employee_stats,
-    project_dashboard,
     ticket_stats,
     expense_summary,
     requisition_stats,
@@ -107,8 +105,6 @@ async function get_operations_intelligence({ month, year }) {
     monitoring_active_users,
     top_applications,
   ] = await Promise.all([
-    get_employee_stats_summary(),
-    get_project_dashboard(),
     get_ticket_stats(),
     get_expense_summary({ from: period_start, to: period_end }),
     get_requisition_stats(),
@@ -185,11 +181,23 @@ async function get_operations_intelligence({ month, year }) {
 }
 
 export async function get_executive_dashboard({ month, year }) {
-  const [post_sales, company_roi, performers, operations] = await Promise.all([
+  // Fetched once and shared with both get_operations_intelligence() and
+  // get_executive_insights() below — each originally called these
+  // separately, which meant the (fairly expensive, up-to-1000-row) projects
+  // dashboard query ran twice per request. Phase 6 performance audit caught
+  // this; sharing the single result removes the duplicate query.
+  const [employee_stats, project_dashboard] = await Promise.all([
+    get_employee_stats_summary(),
+    get_project_dashboard(),
+  ]);
+  const shared = { employee_stats, project_dashboard };
+
+  const [post_sales, company_roi, performers, operations, insights] = await Promise.all([
     get_post_sales_dashboard(),
     get_company_roi_rollup({ month, year }),
     get_performer_rankings({ month, year }),
-    get_operations_intelligence({ month, year }),
+    get_operations_intelligence({ month, year }, shared),
+    get_executive_insights({ month, year }, shared),
   ]);
 
   return {
@@ -212,5 +220,150 @@ export async function get_executive_dashboard({ month, year }) {
     // pure orchestration over existing services + the generic report_builder
     // KPI/aggregate engine. See get_operations_intelligence() above.
     ...operations,
+    // New for Sprint 2 Milestone 2 — trends + prioritized alerts, layered
+    // onto the same single dashboard response rather than a second endpoint.
+    // See get_executive_insights()/prioritize_alerts() below.
+    ...insights,
+    priority_alerts: prioritize_alerts(operations.alerts),
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sprint 2 Milestone 2 — Executive Insights (trends + prioritized alerts).
+//
+// No new reporting architecture: every trend below is two report_builder
+// KPI calls (current window vs. the immediately-preceding window of equal
+// length) over a timestamp field already registered in ENTITY_MAP. This is
+// the same generic engine Milestone 1 used, just called twice with
+// different {from,to} filters — never a bespoke time-series table or a
+// second aggregation path.
+// ─────────────────────────────────────────────────────────────────────────
+
+function range_bounds(days, offset_days = 0) {
+  const now = new Date();
+  const to = new Date(now.getTime() - offset_days * 24 * 60 * 60 * 1000);
+  const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
+  return { from: from.toISOString(), to: to.toISOString() };
+}
+
+function pct_delta(current, previous) {
+  if (previous === 0 || previous == null) return current > 0 ? 100 : 0;
+  return Math.round(((current - previous) / previous) * 1000) / 10;
+}
+
+// current window vs. the immediately-preceding window of equal length —
+// e.g. days=30 compares "last 30 days" against "the 30 days before that".
+async function trend_kpi({ entity, metric = 'COUNT', field, date_field, days, extra_filters = {} }) {
+  const current_range = range_bounds(days, 0);
+  const previous_range = range_bounds(days, days);
+  const [current, previous] = await Promise.all([
+    compute_kpi({ entity, metric, field, filters: { ...extra_filters, [date_field]: current_range } }),
+    compute_kpi({ entity, metric, field, filters: { ...extra_filters, [date_field]: previous_range } }),
+  ]);
+  return { current: current.value, previous: previous.value, delta_pct: pct_delta(current.value, previous.value) };
+}
+
+async function get_executive_insights({ month, year }, { employee_stats, project_dashboard }) {
+  const now = new Date();
+  const next_7d = { from: now.toISOString(), to: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString() };
+  const prev_month = month === 1 ? { month: 12, year: year - 1 } : { month: month - 1, year };
+
+  const [
+    hiring_30d,
+    attrition_30d,
+    probation_ending_soon,
+    upcoming_milestones,
+    expense_30d,
+    payroll_current,
+    payroll_previous,
+    productivity_7d,
+    coverage_current,
+    coverage_previous,
+    attendance_7d,
+    ticket_volume_30d,
+    ticket_resolved_30d,
+    budget_rows,
+  ] = await Promise.all([
+    trend_kpi({ entity: 'users', metric: 'COUNT', date_field: 'created_at', days: 30 }),
+    trend_kpi({ entity: 'employee_profiles', metric: 'COUNT', date_field: 'termination_date', days: 30, extra_filters: { employment_status: 'TERMINATED' } }),
+    compute_kpi({ entity: 'employee_profiles', metric: 'COUNT', filters: { probation_status: 'ONGOING', probation_end: next_7d } }),
+    compute_kpi({ entity: 'milestones', metric: 'COUNT', filters: { completed: false, due_date: next_7d } }),
+    trend_kpi({ entity: 'expense_transactions', metric: 'SUM', field: 'total_amount', date_field: 'date', days: 30 }),
+    compute_kpi({ entity: 'payroll_runs', metric: 'SUM', field: 'total_net', filters: { period_month: month, period_year: year } }),
+    compute_kpi({ entity: 'payroll_runs', metric: 'SUM', field: 'total_net', filters: { period_month: prev_month.month, period_year: prev_month.year } }),
+    trend_kpi({ entity: 'productivity_sessions', metric: 'AVG', field: 'productivity_score', date_field: 'date', days: 7 }),
+    compute_aggregate({ entity: 'productivity_sessions', group_by: 'user_id', filters: { date: range_bounds(7, 0) } }),
+    compute_aggregate({ entity: 'productivity_sessions', group_by: 'user_id', filters: { date: range_bounds(7, 7) } }),
+    trend_kpi({ entity: 'attendance_violations', metric: 'COUNT', date_field: 'date', days: 7, extra_filters: { violation_type: 'LATE' } }),
+    trend_kpi({ entity: 'support_tickets', metric: 'COUNT', date_field: 'created_at', days: 30 }),
+    trend_kpi({ entity: 'support_tickets', metric: 'COUNT', date_field: 'resolved_at', days: 30 }),
+    // Budget-overrun risk needs a column-to-column comparison (budget_spent
+    // vs. budget per project) which the generic filter/aggregate shape can't
+    // express (same class of gap as ticket SLA — see report_builder.controller.js).
+    // compute_report() reuses the generic paginated-detail path to fetch the
+    // two numeric columns; the >, comparison itself is a one-line reduction
+    // over that reused data, not a new query or duplicated business rule.
+    compute_report({ entity: 'projects', columns: ['id', 'budget', 'budget_spent'], limit: 1000 }),
+  ]);
+
+  const budget_overrun_count = (budget_rows.data || []).filter((p) => p.budget != null && p.budget_spent != null && p.budget_spent > p.budget).length;
+  const payroll_trend_pct = pct_delta(payroll_current.value, payroll_previous.value);
+  const coverage_pct = (rows) => employee_stats.total > 0 ? Math.round(((rows.rows?.length || 0) / employee_stats.total) * 1000) / 10 : null;
+  const coverage_current_pct = coverage_pct(coverage_current);
+  const coverage_previous_pct = coverage_pct(coverage_previous);
+
+  return {
+    insights: {
+      workforce: {
+        hiring_trend_30d: hiring_30d,
+        employee_growth: employee_stats.total,
+        attrition_30d,
+        probation_ending_soon: probation_ending_soon.value,
+      },
+      delivery: {
+        projects_at_risk: project_dashboard.at_risk,
+        projects_blocked: project_dashboard.blocked,
+        upcoming_milestones_7d: upcoming_milestones.value,
+        budget_overrun_risk_count: budget_overrun_count,
+      },
+      financial: {
+        expense_trend_30d: expense_30d,
+        payroll_trend_mom: { current: payroll_current.value, previous: payroll_previous.value, delta_pct: payroll_trend_pct },
+        // Budget utilization has no historical snapshot to trend against —
+        // budget_spent is a live cumulative total, not a period-scoped value
+        // (see report_builder.controller.js's golden-rule comment on the
+        // same class of gap) — documented, not faked.
+        budget_utilization_trend: null,
+      },
+      productivity: {
+        productivity_trend_7d: productivity_7d,
+        monitoring_coverage_trend_7d: { current: coverage_current_pct, previous: coverage_previous_pct, delta_pct: pct_delta(coverage_current_pct ?? 0, coverage_previous_pct ?? 0) },
+        attendance_late_trend_7d: attendance_7d,
+      },
+      service_desk: {
+        ticket_volume_trend_30d: ticket_volume_30d,
+        resolution_trend_30d: ticket_resolved_30d,
+        // SLA breach *rate over time* would need historical snapshots of
+        // overdue state (same live now()-comparison gap documented for
+        // ticket_sla_overdue in get_operations_intelligence) — not tracked,
+        // so a trend can't be computed honestly; current-point value only.
+        sla_trend: null,
+      },
+    },
+  };
+}
+
+// Smart Alerts (Phase 4) — reuses the exact alert counts already computed in
+// get_operations_intelligence's `alerts` block; this only ranks/labels them
+// by severity. No new alert source, no new notification engine.
+function prioritize_alerts(alerts) {
+  const items = [
+    { key: 'overdue_tickets', label: 'Overdue Tickets', count: alerts.overdue_tickets, severity: alerts.overdue_tickets > 0 ? 'high' : 'none' },
+    { key: 'blocked_projects', label: 'Blocked Projects', count: alerts.blocked_projects, severity: alerts.blocked_projects > 0 ? 'high' : 'none' },
+    { key: 'overdue_approvals', label: 'Overdue Approvals', count: (alerts.overdue_approvals.requisitions_pending + alerts.overdue_approvals.tickets_pending + alerts.overdue_approvals.leave_pending), severity: 'medium' },
+    { key: 'compliance_reminders', label: 'Compliance Reminders', count: alerts.compliance_reminders, severity: alerts.compliance_reminders > 0 ? 'medium' : 'none' },
+    { key: 'probation_reminders', label: 'Probation Reminders', count: alerts.probation_reminders, severity: 'low' },
+  ];
+  const rank = { high: 0, medium: 1, low: 2, none: 3 };
+  return items.filter((i) => i.count > 0).sort((a, b) => rank[a.severity] - rank[b.severity] || b.count - a.count);
 }
