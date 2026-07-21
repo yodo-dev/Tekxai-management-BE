@@ -53,7 +53,7 @@ const ENTITY_MAP={
   support_tickets:{fields:{id:true,ticket_number:true,subject:true,status:true,priority:true,severity:true,ticket_type_id:true,department_id:true,assignee_id:true,team_id:true,project_id:true,user_id:true,approval_status:true,response_due_at:true,resolution_due_at:true,resolved_at:true,closed_at:true,created_at:true},filters:['status','priority','severity','ticket_type_id','department_id','assignee_id','team_id','project_id','user_id','approval_status','created_at'],searchable:['ticket_number','subject']},
   // Added for Reporting & BI Sprint 1 Milestone 1 — same additive registration pattern as above.
   assets:{fields:{id:true,asset_tag:true,name:true,brand:true,model:true,category_id:true,department_id:true,location_id:true,status:true,condition:true,purchase_date:true,purchase_cost:true,warranty_expiry:true,created_at:true},filters:['category_id','department_id','location_id','status','brand','created_at'],searchable:['asset_tag','name','brand','model'],numeric:['purchase_cost']},
-  time_off_requests:{fields:{id:true,user_id:true,leave_type:true,start_date:true,end_date:true,days:true,effective_days:true,status:true,created_at:true},filters:['user_id','leave_type','status','created_at'],searchable:[]},
+  time_off_requests:{fields:{id:true,user_id:true,leave_type:true,start_date:true,end_date:true,days:true,effective_days:true,status:true,created_at:true},filters:['user_id','leave_type','status','created_at','start_date'],searchable:[]},
   hr_documents:{fields:{id:true,user_id:true,category_id:true,type_id:true,title:true,status:true,valid_from:true,valid_until:true,created_at:true},filters:['user_id','category_id','type_id','status','created_at'],searchable:['title']},
   // Added for Sprint 1 Milestone 2 (HR Reports) — Lifecycle Report and Team Report.
   employee_profiles:{fields:{id:true,user_id:true,employment_status:true,lifecycle_stage:true,employment_type:true,created_at:true},filters:['employment_status','lifecycle_stage','employment_type','created_at'],searchable:[]},
@@ -224,29 +224,62 @@ export async function export_pdf(req,res,next){
 // productivity score per employee) alongside the existing per-group sums,
 // same whitelist/validation, no new endpoint.
 const AGG_METRICS=['SUM','AVG'];
+// Pure computation, no req/res — extracted so other backend modules (e.g.
+// executive-analytics) can reuse the exact same aggregate logic in-process
+// instead of duplicating a groupBy call or issuing an HTTP round-trip to
+// themselves. Throws {status, message} on validation failure; run_aggregate
+// (the HTTP handler below) is now a thin wrapper around this.
+export async function compute_aggregate({entity,group_by,filters={},metric_field,metric='SUM'}){
+  if(!entity||!ENTITY_MAP[entity])throw{status:400,message:`entity must be one of: ${Object.keys(ENTITY_MAP).join(', ')}`};
+  const cfg=ENTITY_MAP[entity];
+  if(!group_by||!cfg.filters.includes(group_by))throw{status:400,message:`group_by must be one of: ${cfg.filters.join(', ')}`};
+  if(metric_field&&!cfg.numeric?.includes(metric_field))throw{status:400,message:`metric_field must be one of: ${(cfg.numeric||[]).join(', ')||'(no numeric fields registered for this entity)'}`};
+  const m=String(metric).toUpperCase();
+  if(metric_field&&!AGG_METRICS.includes(m))throw{status:400,message:`metric must be one of: ${AGG_METRICS.join(', ')}`};
+  const agg_key=m==='AVG'?'_avg':'_sum';
+  const where=build_where(cfg,filters);
+  const groupBy_args={by:[group_by],where,_count:{_all:true}};
+  if(metric_field)groupBy_args[agg_key]={[metric_field]:true};
+  const grouped=await prisma[entity].groupBy(groupBy_args);
+  const rows=grouped
+    .map((g)=>({[group_by]:g[group_by],count:g._count._all,...(metric_field&&{value:g[agg_key]?.[metric_field]??0})}))
+    .sort((a,b)=>metric_field?b.value-a.value:b.count-a.count);
+  return{entity,group_by,metric_field:metric_field||null,metric:metric_field?m:null,total:rows.reduce((s,r)=>s+r.count,0),rows};
+}
+
 export async function run_aggregate(req,res,next){
   try{
-    const{entity,group_by,filters={},metric_field,metric='SUM'}=req.body;
-    if(!entity||!ENTITY_MAP[entity])return fail(res,`entity must be one of: ${Object.keys(ENTITY_MAP).join(', ')}`);
-    const cfg=ENTITY_MAP[entity];
-    if(!group_by||!cfg.filters.includes(group_by))return fail(res,`group_by must be one of: ${cfg.filters.join(', ')}`);
-    if(metric_field&&!cfg.numeric?.includes(metric_field))return fail(res,`metric_field must be one of: ${(cfg.numeric||[]).join(', ')||'(no numeric fields registered for this entity)'}`);
-    const m=String(metric).toUpperCase();
-    if(metric_field&&!AGG_METRICS.includes(m))return fail(res,`metric must be one of: ${AGG_METRICS.join(', ')}`);
-    const agg_key=m==='AVG'?'_avg':'_sum';
-    const where=build_where(cfg,filters);
-    const groupBy_args={by:[group_by],where,_count:{_all:true}};
-    if(metric_field)groupBy_args[agg_key]={[metric_field]:true};
-    const grouped=await prisma[entity].groupBy(groupBy_args);
-    const rows=grouped
-      .map((g)=>({[group_by]:g[group_by],count:g._count._all,...(metric_field&&{value:g[agg_key]?.[metric_field]??0})}))
-      .sort((a,b)=>metric_field?b.value-a.value:b.count-a.count);
-    return ok(res,{entity,group_by,metric_field:metric_field||null,metric:metric_field?m:null,total:rows.reduce((s,r)=>s+r.count,0),rows});
-  }catch(e){next(e);}
+    const result=await compute_aggregate(req.body);
+    return ok(res,result);
+  }catch(e){
+    if(e&&e.status)return fail(res,e.message,e.status);
+    next(e);
+  }
 }
 
 const KPI_METRICS=['COUNT','SUM','AVG','MIN','MAX'];
 const KPI_AGG_KEY={SUM:'_sum',AVG:'_avg',MIN:'_min',MAX:'_max'};
+
+// Same extraction as compute_aggregate above, for the same reason — lets
+// executive-analytics (and anything else in-process) reuse "Total Employees"
+// (COUNT), "Monthly Expense" (SUM) etc. without a bespoke stats route or a
+// self-HTTP-call.
+export async function compute_kpi({entity,metric='COUNT',field,filters={}}){
+  if(!entity||!ENTITY_MAP[entity])throw{status:400,message:`entity must be one of: ${Object.keys(ENTITY_MAP).join(', ')}`};
+  const cfg=ENTITY_MAP[entity];
+  const m=String(metric).toUpperCase();
+  if(!KPI_METRICS.includes(m))throw{status:400,message:`metric must be one of: ${KPI_METRICS.join(', ')}`};
+  const where=build_where(cfg,filters);
+  if(m==='COUNT'){
+    const value=await prisma[entity].count({where});
+    return{entity,metric:m,field:null,value};
+  }
+  if(!field||!cfg.numeric?.includes(field))throw{status:400,message:`field must be one of: ${(cfg.numeric||[]).join(', ')||'(no numeric fields registered for this entity)'}`};
+  const agg_key=KPI_AGG_KEY[m];
+  const result=await prisma[entity].aggregate({where,[agg_key]:{[field]:true}});
+  const value=result[agg_key]?.[field]??0;
+  return{entity,metric:m,field,value};
+}
 
 // Generic single-value KPI — answers "Total Employees" (COUNT), "Monthly
 // Expense" (SUM), "Average Salary" (AVG) etc. across any registered entity
@@ -255,22 +288,12 @@ const KPI_AGG_KEY={SUM:'_sum',AVG:'_avg',MIN:'_min',MAX:'_max'};
 // same reuse-the-existing-registration pattern as group_by on /aggregate.
 export async function run_kpi(req,res,next){
   try{
-    const{entity,metric='COUNT',field,filters={}}=req.body;
-    if(!entity||!ENTITY_MAP[entity])return fail(res,`entity must be one of: ${Object.keys(ENTITY_MAP).join(', ')}`);
-    const cfg=ENTITY_MAP[entity];
-    const m=String(metric).toUpperCase();
-    if(!KPI_METRICS.includes(m))return fail(res,`metric must be one of: ${KPI_METRICS.join(', ')}`);
-    const where=build_where(cfg,filters);
-    if(m==='COUNT'){
-      const value=await prisma[entity].count({where});
-      return ok(res,{entity,metric:m,field:null,value});
-    }
-    if(!field||!cfg.numeric?.includes(field))return fail(res,`field must be one of: ${(cfg.numeric||[]).join(', ')||'(no numeric fields registered for this entity)'}`);
-    const agg_key=KPI_AGG_KEY[m];
-    const result=await prisma[entity].aggregate({where,[agg_key]:{[field]:true}});
-    const value=result[agg_key]?.[field]??0;
-    return ok(res,{entity,metric:m,field,value});
-  }catch(e){next(e);}
+    const result=await compute_kpi(req.body);
+    return ok(res,result);
+  }catch(e){
+    if(e&&e.status)return fail(res,e.message,e.status);
+    next(e);
+  }
 }
 
 export async function list_saved(req,res,next){

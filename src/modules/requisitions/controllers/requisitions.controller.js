@@ -92,24 +92,26 @@ export async function update_cost_ctrl(req, res, next) {
   } catch (e) { return next(e); }
 }
 
+// Pure, no req/res — extracted so executive-analytics can reuse this in-process.
+export async function get_requisition_stats() {
+  const [counts, cost_agg] = await Promise.all([
+    prisma.requisitions.groupBy({ by: ['status'], _count: { id: true } }),
+    prisma.requisitions.aggregate({
+      _sum: { estimated_cost: true, actual_cost: true },
+    }),
+  ]);
+  const by_status = {};
+  for (const row of counts) by_status[row.status] = row._count.id;
+  return {
+    by_status,
+    total_estimated: cost_agg._sum.estimated_cost || 0,
+    total_actual: cost_agg._sum.actual_cost || 0,
+  };
+}
+
 export async function stats_ctrl(_req, res, next) {
   try {
-    const [counts, cost_agg] = await Promise.all([
-      prisma.requisitions.groupBy({ by: ['status'], _count: { id: true } }),
-      prisma.requisitions.aggregate({
-        _sum: { estimated_cost: true, actual_cost: true },
-      }),
-    ]);
-    const by_status = {};
-    for (const row of counts) by_status[row.status] = row._count.id;
-    return res.json({
-      success: true,
-      payload: {
-        by_status,
-        total_estimated: cost_agg._sum.estimated_cost || 0,
-        total_actual: cost_agg._sum.actual_cost || 0,
-      },
-    });
+    return res.json({ success: true, payload: await get_requisition_stats() });
   } catch (e) { return next(e); }
 }
 

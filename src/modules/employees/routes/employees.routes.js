@@ -252,35 +252,39 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
  *       401:
  *         description: Unauthorized
  */
+// Extracted to a named export (rather than an inline route handler) so
+// executive-analytics can reuse the exact same counts in-process — same
+// single-write-path rationale as report_builder's compute_kpi/compute_aggregate.
+export async function get_employee_stats_summary({ business_unit } = {}) {
+  const baseWhere = { deleted_at: null, ...(business_unit ? { business_unit } : {}) };
+
+  const [total, active, inactive, on_leave, suspended, pending, probation] = await Promise.all([
+    prisma.users.count({ where: baseWhere }),
+    prisma.users.count({ where: { ...baseWhere, status: 'ACTIVE' } }),
+    prisma.users.count({ where: { ...baseWhere, status: 'INACTIVE' } }),
+    prisma.time_off_requests.count({
+      where: { status: 'APPROVED', start_date: { lte: new Date() }, end_date: { gte: new Date() } },
+    }),
+    prisma.users.count({ where: { ...baseWhere, status: 'SUSPENDED' } }),
+    prisma.users.count({ where: { ...baseWhere, employee_profile: { profile_status: 'DRAFT' } } }),
+    prisma.users.count({ where: { ...baseWhere, employee_profile: { lifecycle_stage: 'PROBATION' } } }),
+  ]);
+
+  const now = new Date();
+  const [new_this_month] = await Promise.all([
+    prisma.users.count({
+      where: { ...baseWhere, hire_date: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } },
+    }),
+  ]);
+
+  return { total, active, inactive, on_leave, new_this_month, suspended, pending, probation };
+}
+
 // GET /api/v1/employee/stats — summary cards only
 router.get('/stats', ADMIN_HR, async (req, res, next) => {
   try {
-    const { business_unit } = req.query;
-    const baseWhere = { deleted_at: null, ...(business_unit ? { business_unit } : {}) };
-
-    const [total, active, inactive, on_leave, suspended, pending, probation] = await Promise.all([
-      prisma.users.count({ where: baseWhere }),
-      prisma.users.count({ where: { ...baseWhere, status: 'ACTIVE' } }),
-      prisma.users.count({ where: { ...baseWhere, status: 'INACTIVE' } }),
-      prisma.time_off_requests.count({
-        where: { status: 'APPROVED', start_date: { lte: new Date() }, end_date: { gte: new Date() } },
-      }),
-      prisma.users.count({ where: { ...baseWhere, status: 'SUSPENDED' } }),
-      prisma.users.count({ where: { ...baseWhere, employee_profile: { profile_status: 'DRAFT' } } }),
-      prisma.users.count({ where: { ...baseWhere, employee_profile: { lifecycle_stage: 'PROBATION' } } }),
-    ]);
-
-    const now = new Date();
-    const [new_this_month] = await Promise.all([
-      prisma.users.count({
-        where: { ...baseWhere, hire_date: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } },
-      }),
-    ]);
-
-    return res.json({
-      success: true,
-      payload: { total, active, inactive, on_leave, new_this_month, suspended, pending, probation },
-    });
+    const payload = await get_employee_stats_summary(req.query);
+    return res.json({ success: true, payload });
   } catch (err) { next(err); }
 });
 

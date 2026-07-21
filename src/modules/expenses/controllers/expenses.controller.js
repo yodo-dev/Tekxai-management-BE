@@ -247,41 +247,46 @@ export async function update_receipt(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// Pure, no req/res — extracted so executive-analytics can reuse this
+// in-process (same scope caveat as before: is_enabled accounts only).
+export async function get_expense_summary({ from, to } = {}) {
+  const dateFilter = {};
+  if (from) dateFilter.gte = new Date(from);
+  if (to)   dateFilter.lte = new Date(to);
+  const where = Object.keys(dateFilter).length ? { date: dateFilter } : {};
+
+  const accounts = await prisma.expense_accounts.findMany({
+    take: 500,
+    where: { is_enabled: true },
+    include: {
+      user: { select: { id: true, first_name: true, last_name: true } },
+      transactions: { where },
+    },
+  });
+
+  let total_received = 0, total_spent = 0, ce_spent = 0, tekxai_spent = 0;
+  const by_employee = [];
+  for (const acc of accounts) {
+    const summary = await compute_account_summary(acc, acc.transactions);
+    total_received += summary.total_received;
+    total_spent    += summary.total_spent;
+    ce_spent       += summary.ce_spent;
+    tekxai_spent   += summary.tekxai_spent;
+    by_employee.push({ user: acc.user, ...summary });
+  }
+
+  const cat_totals = await prisma.expense_transactions.groupBy({
+    by: ['category_id'],
+    where: { transaction_type: 'expense', ...where },
+    _sum: { total_amount: true, ce_amount: true, tekxai_amount: true },
+    orderBy: { _sum: { total_amount: 'desc' } },
+  });
+
+  return { total_received, total_spent, ce_spent, tekxai_spent, outstanding_balance: total_received - total_spent, by_employee, cat_totals };
+}
+
 export async function get_summary(req, res, next) {
   try {
-    const { from, to } = req.query;
-    const dateFilter = {};
-    if (from) dateFilter.gte = new Date(from);
-    if (to)   dateFilter.lte = new Date(to);
-    const where = Object.keys(dateFilter).length ? { date: dateFilter } : {};
-
-    const accounts = await prisma.expense_accounts.findMany({
-      take: 500,
-      where: { is_enabled: true },
-      include: {
-        user: { select: { id: true, first_name: true, last_name: true } },
-        transactions: { where },
-      },
-    });
-
-    let total_received = 0, total_spent = 0, ce_spent = 0, tekxai_spent = 0;
-    const by_employee = [];
-    for (const acc of accounts) {
-      const summary = await compute_account_summary(acc, acc.transactions);
-      total_received += summary.total_received;
-      total_spent    += summary.total_spent;
-      ce_spent       += summary.ce_spent;
-      tekxai_spent   += summary.tekxai_spent;
-      by_employee.push({ user: acc.user, ...summary });
-    }
-
-    const cat_totals = await prisma.expense_transactions.groupBy({
-      by: ['category_id'],
-      where: { transaction_type: 'expense', ...where },
-      _sum: { total_amount: true, ce_amount: true, tekxai_amount: true },
-      orderBy: { _sum: { total_amount: 'desc' } },
-    });
-
-    return ok(res, { total_received, total_spent, ce_spent, tekxai_spent, outstanding_balance: total_received - total_spent, by_employee, cat_totals });
+    return ok(res, await get_expense_summary(req.query));
   } catch (e) { next(e); }
 }
