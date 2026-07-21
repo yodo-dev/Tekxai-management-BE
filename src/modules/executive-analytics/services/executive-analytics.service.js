@@ -18,7 +18,7 @@ import { get_dashboard as get_project_dashboard } from '../../projects/services/
 import { get_ticket_stats, list_tickets } from '../../tickets/services/tickets.service.js';
 import { get_expense_summary } from '../../expenses/controllers/expenses.controller.js';
 import { get_requisition_stats } from '../../requisitions/controllers/requisitions.controller.js';
-import { get_depreciation_report, get_inventory_report } from '../../assets/services/assets.service.js';
+import { get_depreciation_report, get_inventory_report, list_asset_requests } from '../../assets/services/assets.service.js';
 import { list_escalation_history } from '../../compliance-escalation/services/compliance-escalation.service.js';
 import { compute_kpi, compute_aggregate, compute_report } from '../../reports/report_builder.controller.js';
 
@@ -192,13 +192,19 @@ export async function get_executive_dashboard({ month, year }) {
   ]);
   const shared = { employee_stats, project_dashboard };
 
-  const [post_sales, company_roi, performers, operations, insights] = await Promise.all([
+  const [post_sales, company_roi, performers, operations, insights, action_center_raw] = await Promise.all([
     get_post_sales_dashboard(),
     get_company_roi_rollup({ month, year }),
     get_performer_rankings({ month, year }),
     get_operations_intelligence({ month, year }, shared),
     get_executive_insights({ month, year }, shared),
+    get_action_center_raw({ month, year }, shared),
   ]);
+
+  // Combines operations/insights' already-resolved values with the
+  // independently-fetched action_center_raw above — no DB calls here, so no
+  // extra serial round-trip stacked onto the request.
+  const action_center = build_action_center(shared, operations, insights.insights, action_center_raw);
 
   return {
     period: { month: +month, year: +year },
@@ -225,6 +231,12 @@ export async function get_executive_dashboard({ month, year }) {
     // See get_executive_insights()/prioritize_alerts() below.
     ...insights,
     priority_alerts: prioritize_alerts(operations.alerts),
+    // New for Sprint 2 Milestone 3 — Executive Action Center: the same
+    // already-computed alerts/insights values, plus a handful of new
+    // independent lookups, bucketed into requires_attention / requires_review
+    // / informational with a deterministic priority sort. See
+    // get_action_center() below.
+    action_center,
   };
 }
 
@@ -366,4 +378,118 @@ function prioritize_alerts(alerts) {
   ];
   const rank = { high: 0, medium: 1, low: 2, none: 3 };
   return items.filter((i) => i.count > 0).sort((a, b) => rank[a.severity] - rank[b.severity] || b.count - a.count);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sprint 2 Milestone 3 — Executive Action Center.
+//
+// Every card here reuses a value already computed by operations/insights
+// above, an existing service function, or one extra generic report_builder
+// call — never a new bespoke query, never a new approval/assignment/
+// escalation/reminder flow. `path` is the existing page each card drills
+// into (Phase 3 — no new action pages). Two examples from the spec are
+// deliberately NOT included, with the reason recorded rather than faked:
+//   - "Departments exceeding budget": no department-level budget concept
+//     exists anywhere in the schema (only per-project budget/budget_spent).
+//   - "Inactive projects": no staleness/last-activity timestamp is computed
+//     anywhere a project's "inactive" state could be derived from.
+// ─────────────────────────────────────────────────────────────────────────
+
+const PRIORITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 };
+
+function sort_by_priority(items) {
+  // Deterministic: priority rank, then count descending, then label
+  // alphabetically — never depends on object insertion order.
+  return items
+    .filter((i) => i.count > 0)
+    .sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] || b.count - a.count || a.label.localeCompare(b.label));
+}
+
+// The DB-dependent half of the Action Center — deliberately has NO
+// dependency on operations/insights, so it can run in the same top-level
+// Promise.all as everything else in get_executive_dashboard() rather than
+// after it. (Originally awaited operations/insights first, which stacked an
+// extra serial round-trip onto every dashboard fetch — caught during the
+// Phase 6 performance audit via a live-fixture test that goes flaky when the
+// overall request slows down and starts overlapping with concurrent test
+// fixtures elsewhere in the suite.)
+async function get_action_center_raw({ month, year }, { employee_stats }) {
+  const [
+    critical_tickets_pending,
+    critical_tickets_in_progress,
+    payroll_completed_this_period,
+    checked_in_today,
+    pending_asset_returns,
+    active_users_detail,
+    project_owner_detail,
+    completed_payroll_this_period,
+  ] = await Promise.all([
+    compute_kpi({ entity: 'support_tickets', metric: 'COUNT', filters: { priority: 'high', status: 'pending' } }),
+    compute_kpi({ entity: 'support_tickets', metric: 'COUNT', filters: { priority: 'high', status: 'in_progress' } }),
+    compute_kpi({ entity: 'payroll_runs', metric: 'COUNT', filters: { period_month: +month, period_year: +year, status: 'COMPLETED' } }),
+    compute_aggregate({ entity: 'timesheet_entries', group_by: 'user_id', filters: { created_at: day_bounds() } }),
+    list_asset_requests({ status: 'PENDING', limit: 1 }),
+    // "Employees without managers" / "missing project owners" are a
+    // column-is-null check the generic filter shape can't express (build_where
+    // skips null filter values by design — see report_builder.controller.js).
+    // Same technique as Milestone 2's budget-overrun check: reuse the generic
+    // paginated-detail path (compute_report) and do the one-line null-count
+    // in JS, rather than a bespoke query.
+    compute_report({ entity: 'users', columns: ['id', 'supervisor_id'], filters: { status: 'ACTIVE' }, limit: 1000 }),
+    compute_report({ entity: 'projects', columns: ['id', 'owner_id', 'status'], limit: 1000 }),
+    compute_kpi({ entity: 'payroll_runs', metric: 'COUNT', filters: { period_month: +month, period_year: +year, status: 'PAID' } }),
+  ]);
+
+  const TERMINAL_PROJECT_STATUSES = ['COMPLETED', 'DELIVERED', 'ARCHIVED'];
+  return {
+    unresolved_critical_tickets: critical_tickets_pending.value + critical_tickets_in_progress.value,
+    missing_attendance_today: Math.max(0, employee_stats.total - (checked_in_today.rows?.length || 0)),
+    employees_without_managers: (active_users_detail.data || []).filter((u) => !u.supervisor_id).length,
+    missing_project_owners: (project_owner_detail.data || []).filter((p) => !p.owner_id && !TERMINAL_PROJECT_STATUSES.includes(p.status)).length,
+    payroll_not_processed: payroll_completed_this_period.value === 0 ? 1 : 0,
+    pending_asset_returns: pending_asset_returns.total,
+    completed_payroll_this_period: completed_payroll_this_period.value,
+  };
+}
+
+// Cheap, synchronous bucket-building — no DB calls here, everything was
+// already fetched (raw, in parallel with the rest of the dashboard) or reused
+// from operations/insights.
+function build_action_center({ project_dashboard }, operations, insights, raw) {
+  const {
+    unresolved_critical_tickets, missing_attendance_today, employees_without_managers,
+    missing_project_owners, payroll_not_processed, pending_asset_returns, completed_payroll_this_period,
+  } = raw;
+
+  const requires_attention = sort_by_priority([
+    { key: 'overdue_approvals', label: 'Overdue Approvals', count: operations.alerts.overdue_approvals.requisitions_pending + operations.alerts.overdue_approvals.tickets_pending + operations.alerts.overdue_approvals.leave_pending, priority: 'critical', path: '/admin/approvals' },
+    { key: 'blocked_projects', label: 'Blocked Projects', count: project_dashboard.blocked, priority: 'critical', path: '/admin/project-tracking' },
+    { key: 'overdue_milestones', label: 'Overdue Milestones', count: project_dashboard.milestones_overdue, priority: 'high', path: '/admin/project-tracking' },
+    { key: 'unresolved_critical_tickets', label: 'Unresolved Critical Tickets', count: unresolved_critical_tickets, priority: 'critical', path: '/admin/tickets' },
+    { key: 'probation_ending_soon', label: 'Probation Ending Soon', count: insights.workforce.probation_ending_soon, priority: 'high', path: '/hr/employee-directory' },
+    // Boolean-shaped card: 1 means "current period has no completed payroll
+    // run yet", 0 means it's handled — count drives display, not a literal
+    // number of missing runs (payroll runs are one-per-period).
+    { key: 'payroll_not_processed', label: 'Payroll Not Processed', count: payroll_not_processed, priority: 'high', path: '/admin/payroll' },
+    { key: 'missing_attendance_today', label: 'Missing Attendance Today', count: missing_attendance_today, priority: 'medium', path: '/admin/attendance' },
+    { key: 'pending_asset_returns', label: 'Pending Asset Requests', count: pending_asset_returns, priority: 'medium', path: '/admin/assets' },
+  ]);
+
+  const requires_review = sort_by_priority([
+    // "High expenses" — expense_trend_30d already shows spend trending up
+    // sharply (>50% over the prior 30 days); reused from insights.financial,
+    // not a new calculation.
+    { key: 'expense_trend_high', label: 'Expenses Trending Up', count: (insights.financial.expense_trend_30d.delta_pct > 50 && insights.financial.expense_trend_30d.current > 0) ? 1 : 0, priority: 'medium', path: '/admin/expenses' },
+    { key: 'employees_without_managers', label: 'Employees Without Managers', count: employees_without_managers, priority: 'medium', path: '/hr/employee-directory' },
+    { key: 'missing_project_owners', label: 'Projects Missing Owners', count: missing_project_owners, priority: 'medium', path: '/admin/project-tracking' },
+  ]);
+
+  const informational = sort_by_priority([
+    { key: 'new_employees', label: 'New Employees (30d)', count: insights.workforce.hiring_trend_30d.current, priority: 'low', path: '/hr/employee-directory' },
+    { key: 'completed_projects', label: 'Completed Projects', count: project_dashboard.delivered, priority: 'low', path: '/admin/project-tracking' },
+    { key: 'recently_resolved_tickets', label: 'Recently Resolved Tickets (30d)', count: insights.service_desk.resolution_trend_30d.current, priority: 'low', path: '/admin/tickets' },
+    { key: 'completed_payroll', label: 'Completed Payroll Runs', count: completed_payroll_this_period, priority: 'low', path: '/admin/payroll' },
+  ]);
+
+  return { requires_attention, requires_review, informational };
 }
