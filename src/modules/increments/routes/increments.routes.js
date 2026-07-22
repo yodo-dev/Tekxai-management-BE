@@ -169,11 +169,20 @@ router.put('/:userId/:id', ADMIN_HR, async (req, res, next) => {
       result = await approve_increment(req.params.id, req.user.id, notes);
     } else if (status === 'REJECTED') {
       result = await reject_increment(req.params.id, req.user.id, notes);
+    } else if (status !== undefined) {
+      // Any other status value would previously fall through to a raw
+      // prisma.update(req.body) below — a caller could set status to an
+      // arbitrary string and skip approve_increment/reject_increment
+      // entirely (no salary-profile sync, no audit trail). Reject explicitly
+      // instead of silently accepting it.
+      return res.status(400).json({ success: false, message: `status must be one of APPROVED, REJECTED` });
     } else {
+      // No status change requested — allow editing the DRAFT record's own
+      // notes only (never status, approved_by, approved_at, or user_id).
       const prisma = (await import('../../../shared/database/client.js')).default;
       result = await prisma.salary_increments.update({
         where: { id: req.params.id },
-        data: req.body,
+        data: { notes },
       });
     }
     return res.json({ success: true, payload: result });

@@ -130,8 +130,18 @@ export async function update_requisition_cost(id, data) {
   });
 }
 
+// Post-approval workflow transitions only (PROCUREMENT, FULFILLED,
+// ASSET_CREATED, CLOSED, DRAFT/SUBMITTED corrections) — APPROVED/REJECTED
+// must go through approve_requisition() so the decision is gated by
+// erp.requisitions.approve, not the broader ADMIN/HR role check this route
+// otherwise shares. Without this, PATCH /:id/status could set a requisition
+// to APPROVED without ever calling approve_requisition().
+const DECISION_STATUSES = ['APPROVED', 'REJECTED'];
 export async function update_requisition_status(id, status, approver_id, comment) {
   if (!STATUSES.includes(status)) throw Object.assign(new Error('Invalid status'), { status: 400 });
+  if (DECISION_STATUSES.includes(status)) {
+    throw Object.assign(new Error(`${status} must be set via POST /:id/approve, not this endpoint`), { status: 400 });
+  }
   const [approval, updated] = await prisma.$transaction([
     prisma.requisition_approvals.create({
       data: { requisition_id: id, approver_id, action: status, comment },
