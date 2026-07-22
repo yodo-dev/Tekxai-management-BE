@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const UPLOAD_DIR = path.join(__dirname, '../../../uploads');
+export const UPLOAD_DIR = path.join(__dirname, '../../../uploads');
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:4000';
 
 const BUCKET = process.env.S3_BUCKET || 'tekxai-erp';
@@ -65,8 +65,11 @@ export async function get_presigned_download_url(key, expires_in = 3600) {
   return getSignedUrl(s3, cmd, { expiresIn: expires_in });
 }
 
-/** Delete a file */
+/** Delete a file — handles both the S3 object and the local-disk fallback (upload_buffer()/local write both use the same basename-of-key filename under UPLOAD_DIR). */
 export async function delete_file(key) {
+  const local_path = path.join(UPLOAD_DIR, path.basename(key));
+  if (fs.existsSync(local_path)) fs.unlinkSync(local_path);
+
   const s3 = await get_s3_client();
   if (!s3) return;
   const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
@@ -80,11 +83,20 @@ export function get_public_url(key) {
   return `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
 }
 
-/** Upload a buffer directly to S3, returns public URL */
+/** Upload a buffer directly to S3, returns public URL. Returns null (instead
+ * of throwing) on any S3 failure — missing creds *and* live errors like a
+ * permission-denied bucket both need to fall through to the caller's local-
+ * disk fallback; get_presigned_download_url() already assumes this by
+ * checking local disk first regardless of S3 configuration. */
 export async function upload_buffer(key, buffer, mime_type) {
   const s3 = await get_s3_client();
   if (!s3) return null; // caller handles fallback
-  const { PutObjectCommand } = await import('@aws-sdk/client-s3');
-  await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: buffer, ContentType: mime_type }));
-  return get_public_url(key);
+  try {
+    const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+    await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: buffer, ContentType: mime_type }));
+    return get_public_url(key);
+  } catch (e) {
+    console.error('[storage] S3 upload failed, falling back to local disk:', e.message);
+    return null;
+  }
 }

@@ -1,16 +1,20 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '../../shared/middleware/authenticate.js';
 import prisma from '../../shared/database/client.js';
-import { get_presigned_upload_url, get_presigned_download_url, delete_file, upload_buffer, get_public_url } from './storage.service.js';
+import { get_presigned_upload_url, get_presigned_download_url, delete_file, upload_buffer, get_public_url, UPLOAD_DIR } from './storage.service.js';
 import { randomBytes } from 'crypto';
 import multer from 'multer';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { is_mime_allowed, is_extension_dangerous, can_modify_file } from './upload-validation.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const UPLOAD_DIR = path.join(__dirname, '../../../../uploads');
+// UPLOAD_DIR is imported from storage.service.js (single source of truth) —
+// this used to be recomputed here with one extra '../', pointing one
+// directory above the repo root instead of be-work/uploads. app.js's
+// `express.static` mount and storage.service.js's delete/lookup logic both
+// use be-work/uploads, so every locally-saved file was written to a
+// directory nothing else ever read from or cleaned up: uploads 404ed
+// immediately on their own returned file_url, and were never deleted.
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -88,6 +92,24 @@ router.post('/upload', upload.single('file'), async (req, res, next) => {
       fs.writeFileSync(path.join(UPLOAD_DIR, filename), req.file.buffer);
       file_url = `${req.protocol}://${req.get('host')}/uploads/${filename}`;
     }
+
+    // This is the direct-upload path every real feature (Employee Documents,
+    // Project Documents, HR Documents, avatars) actually uses — /presign is
+    // unused by any caller. Without a file_uploads row, DELETE /storage/:fileKey
+    // 404ed for every file uploaded this way (it only looked up rows created
+    // by /presign), leaving deletes silently unable to remove the underlying
+    // object and orphaning it in S3/disk forever.
+    await prisma.file_uploads.create({
+      data: {
+        user_id: req.user.id,
+        entity_type: req.body?.entity_type || null,
+        entity_id: req.body?.entity_id || null,
+        file_key: key,
+        file_name: req.file.originalname,
+        file_size: req.file.size,
+        mime_type: req.file.mimetype,
+      },
+    }).catch(() => {});
 
     return res.json({ success: true, payload: { file_url, file_key: key, file_name: req.file.originalname, file_size: req.file.size, mime_type: req.file.mimetype } });
   } catch (e) { next(e); }
