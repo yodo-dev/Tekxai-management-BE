@@ -1,6 +1,24 @@
 import prisma from '../../../shared/database/client.js';
 function ok(res,p,m='OK',s=200){return res.status(s).json({success:true,message:m,payload:p});}
 function fail(res,m,s=400){return res.status(s).json({success:false,message:m});}
+function is_global_admin(req){return req.user.roles?.some(r=>['SUPER_ADMIN','ADMIN'].includes(r));}
+
+// Shared membership gate for non-PUBLIC channels — used by every action that
+// reads or writes channel content (messages, threads, member list, channel
+// details). Chat-module audit found get_messages/send_message had no such
+// check at all (only get_channel/list_members/get_thread did), meaning a
+// non-member who obtained a PRIVATE/GROUP/DM channel's id could read or post
+// messages in it directly. PUBLIC channels are open to any authenticated
+// user by design, so this only gates non-PUBLIC types.
+async function assert_channel_access(channel_id,userId,req){
+  const ch=await prisma.channels.findUnique({where:{id:channel_id}});
+  if(!ch) return {ch:null};
+  if(ch.type!=='PUBLIC'){
+    const isMember=await prisma.channel_members.findUnique({where:{channel_id_user_id:{channel_id,user_id:userId}}});
+    if(!isMember&&!is_global_admin(req)) return {ch,denied:true};
+  }
+  return {ch};
+}
 
 // ─── Channels ────────────────────────────────────────────────────────────────
 
@@ -102,8 +120,32 @@ export async function archive_channel(req,res,next){
   }catch(e){next(e);}
 }
 
+// Hard delete — no such endpoint existed before (audit finding). Cascades at
+// the Prisma/DB level (channels→channel_members, channels→messages→
+// message_reactions all declared onDelete: Cascade in schema.prisma) handle
+// cleanup automatically; the single prisma.channels.delete() below is enough
+// to remove memberships, messages, and reactions with no orphan rows left
+// behind. Owner or global admin only — same gate as archive.
+export async function delete_channel(req,res,next){
+  try{
+    const ch=await prisma.channels.findUnique({where:{id:req.params.id},include:{members:{where:{user_id:req.user.id}}}});
+    if(!ch) return fail(res,'Not found',404);
+    if(!is_global_admin(req)&&ch.members[0]?.role!=='OWNER') return fail(res,'Only owner can delete',403);
+    await prisma.channels.delete({where:{id:req.params.id}});
+    return ok(res,null,'Channel deleted');
+  }catch(e){next(e);}
+}
+
 export async function join_channel(req,res,next){
   try{
+    // Previously had no gate at all — any authenticated user could self-add
+    // to ANY channel, including PRIVATE/DM/GROUP ones, bypassing the
+    // OWNER/ADMIN-only check enforced everywhere else (add_member). Self-join
+    // now only works for PUBLIC channels; anything else requires an existing
+    // member/OWNER to use add_member instead.
+    const ch=await prisma.channels.findUnique({where:{id:req.params.id}});
+    if(!ch) return fail(res,'Not found',404);
+    if(ch.type!=='PUBLIC'&&!is_global_admin(req)) return fail(res,'This channel requires an invite',403);
     const m=await prisma.channel_members.upsert({
       where:{channel_id_user_id:{channel_id:req.params.id,user_id:req.user.id}},
       update:{},
@@ -283,6 +325,9 @@ export async function create_private_channel(req,res,next){
 
 export async function get_messages(req,res,next){
   try{
+    const{ch,denied}=await assert_channel_access(req.params.id,req.user.id,req);
+    if(!ch) return fail(res,'Not found',404);
+    if(denied) return fail(res,'Access denied',403);
     const{page=1,limit=50}=req.query;
     const skip=(+page-1)*+limit;
     const msgs=await prisma.messages.findMany({
@@ -307,6 +352,9 @@ export async function get_messages(req,res,next){
 
 export async function send_message(req,res,next){
   try{
+    const{ch,denied}=await assert_channel_access(req.params.id,req.user.id,req);
+    if(!ch) return fail(res,'Not found',404);
+    if(denied) return fail(res,'Access denied',403);
     const{content,parent_id,file_url,file_name,file_size,mime_type}=req.body;
     if(!content?.trim()&&!file_url) return fail(res,'content or file_url required');
     const msg=await prisma.messages.create({

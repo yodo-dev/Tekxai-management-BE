@@ -5,7 +5,7 @@ import {
   delete_message, edit_message, get_channel, get_messages, get_or_create_dm,
   get_thread, join_channel, list_channels, list_members, list_users_for_chat,
   add_member, remove_member, update_member_role, update_channel, archive_channel,
-  remove_reaction, send_message,
+  delete_channel, remove_reaction, send_message,
 } from '../controllers/chat.controller.js';
 
 const router = Router();
@@ -191,6 +191,27 @@ router.put('/channels/:id', update_channel);
  *         description: Unauthorized
  */
 router.post('/channels/:id/archive', archive_channel);
+
+/**
+ * @swagger
+ * /chat/channels/{id}:
+ *   delete:
+ *     summary: Delete a channel (hard delete — cascades memberships, messages, reactions)
+ *     tags: [Chat]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Channel deleted
+ *       403:
+ *         description: Only owner or admin can delete
+ *       404:
+ *         description: Not found
+ */
+router.delete('/channels/:id', delete_channel);
 
 /**
  * @swagger

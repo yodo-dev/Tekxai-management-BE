@@ -1,4 +1,5 @@
 import prisma from '../../../shared/database/client.js';
+import { ensure_project_channel, rename_project_channel, set_project_channel_archived } from './project-chat.repository.js';
 
 const PROJECT_INCLUDE = {
   owner: { select: { id: true, first_name: true, last_name: true, avatar: true, email: true } },
@@ -385,6 +386,18 @@ export async function create_project({ title, description, start_date, end_date,
     // Lead; keep project_members in sync from the moment the project exists.
     await sync_team_lead_membership(tx, project.id, project.leader_id);
 
+    // Project ↔ Chat sync — every project gets a channel from the moment it
+    // exists, seeded with owner/leader/team, same transaction as everything
+    // else above so channel + project always commit together.
+    await ensure_project_channel(tx, {
+      project_id: project.id,
+      title: project.title,
+      owner_id: project.owner_id,
+      leader_id: project.leader_id,
+      member_user_ids: member_rows.map((m) => m.user_id),
+      created_by: project.owner_id || project.leader_id,
+    });
+
     return project.id;
   });
 
@@ -421,6 +434,15 @@ export async function update_project(id, { title, description, status, project_t
     // or not the member roster is also being touched in this same call.
     if (leader_id !== undefined) {
       await sync_team_lead_membership(tx, id, updated.leader_id);
+    }
+
+    // Project ↔ Chat sync — rename/archive the project's channel to match,
+    // independent of whether the member roster is also changing below.
+    if (title !== undefined) {
+      await rename_project_channel(tx, id, updated.title);
+    }
+    if (status !== undefined) {
+      await set_project_channel_archived(tx, id, status === 'ARCHIVED');
     }
 
     if (Array.isArray(members) || Array.isArray(member_ids)) {
@@ -465,6 +487,28 @@ export async function update_project(id, { title, description, status, project_t
       if (leader_id === undefined) {
         await sync_team_lead_membership(tx, id, updated.leader_id);
       }
+
+      // Project ↔ Chat sync — reflect the just-applied roster change in the
+      // project's channel (removes users dropped from the project, per the
+      // "remove users removed from project" requirement).
+      await ensure_project_channel(tx, {
+        project_id: id,
+        title: updated.title,
+        owner_id: updated.owner_id,
+        leader_id: updated.leader_id,
+        member_user_ids: member_rows.map((m) => m.user_id),
+      });
+    } else if (owner_id !== undefined || leader_id !== undefined) {
+      // Roster array wasn't touched this call, but owner/leader changed —
+      // still needs to flow through to channel OWNER-role assignment.
+      const current_members = await tx.project_members.findMany({ where: { project_id: id }, select: { user_id: true } });
+      await ensure_project_channel(tx, {
+        project_id: id,
+        title: updated.title,
+        owner_id: updated.owner_id,
+        leader_id: updated.leader_id,
+        member_user_ids: current_members.map((m) => m.user_id),
+      });
     }
   });
 
@@ -472,7 +516,12 @@ export async function update_project(id, { title, description, status, project_t
 }
 
 export async function delete_project(id) {
-  return prisma.projects.update({ where: { id }, data: { deleted_at: new Date() } });
+  const result = await prisma.projects.update({ where: { id }, data: { deleted_at: new Date() } });
+  // Project ↔ Chat sync — archive rather than delete the channel, matching
+  // the chat module's own convention (archive is the only removal mechanic,
+  // deliberately preserves messages/members rather than purging them).
+  await set_project_channel_archived(prisma, id, true).catch(() => {});
+  return result;
 }
 
 export async function find_saved_projects(user_id, { page = 1, limit = 20 } = {}) {
