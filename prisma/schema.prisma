@@ -460,7 +460,7 @@ model projects {
   status          String    @default("PENDING")
   project_type    String    @default("CLIENT") // CLIENT | INTERNAL. Enterprise Performance Platform M1 — distinguishes revenue-bearing client work from internal/overhead work. See Tekxai-Operations-OS/08-Master-Gap-Analysis.md §11.5.
   progress        Int       @default(0)
-  progress_mode   String    @default("MANUAL") // MANUAL | AUTO (auto = computed from milestone completion)
+  progress_mode   String    @default("AUTO") // always AUTO — MANUAL removed; progress is always computed from milestone completion (normalize_project()), never settable via the API. Column kept (not dropped) only so historical rows/any external report reading it still see a value.
   total_hours     Int       @default(0)
   start_date      DateTime?
   end_date        DateTime?

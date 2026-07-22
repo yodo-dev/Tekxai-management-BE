@@ -3,6 +3,7 @@ import prisma from '../../../shared/database/client.js';
 const PROJECT_INCLUDE = {
   owner: { select: { id: true, first_name: true, last_name: true, avatar: true, email: true } },
   team_leader: { select: { id: true, first_name: true, last_name: true, avatar: true, email: true } },
+  business_unit: { select: { id: true, name: true } },
   members: { select: { role: true, user: { select: { id: true, first_name: true, last_name: true, avatar: true, email: true } } } },
   // Archived milestones are excluded here (not deleted) — this is the list
   // every downstream consumer (breakdown, active milestone, "milestones
@@ -95,8 +96,11 @@ function normalize_project(p, { is_saved = false, portal = null } = {}) {
   const is_overdue = !!(p.end_date && new Date(p.end_date) < now && !TERMINAL_STATUSES.includes(p.status));
   const days_remaining = p.end_date ? Math.ceil((new Date(p.end_date) - now) / 86400000) : null;
 
-  const auto_progress = milestones.length > 0 ? Math.round((breakdown.completed / milestones.length) * 100) : 0;
-  const progress = p.progress_mode === 'AUTO' ? auto_progress : p.progress;
+  // Progress is always computed from milestone completion — MANUAL mode has
+  // been removed entirely (no code path accepts progress/progress_mode as
+  // input anymore; see create_project/update_project below). A project with
+  // zero milestones reads as 0%, not carried over from a stale stored value.
+  const progress = milestones.length > 0 ? Math.round((breakdown.completed / milestones.length) * 100) : 0;
 
   const devops = p.devops_access || null;
   const access_granted = devops ? ACCESS_SCORE_FIELDS.filter((f) => devops[f] === 'GRANTED').length : 0;
@@ -116,7 +120,14 @@ function normalize_project(p, { is_saved = false, portal = null } = {}) {
     - (Math.max(0, 100 - progress) * 0.2)
     - (Math.max(0, 100 - access_completion_score.percent) * 0.15);
   health_score = Math.max(0, Math.min(100, Math.round(health_score)));
-  const health_status = health_score >= 75 ? 'HEALTHY' : health_score >= 40 ? 'WARNING' : 'CRITICAL';
+  // 4-tier health indicator (Green/Yellow/Orange/Red) — was a 3-tier
+  // HEALTHY/WARNING/CRITICAL split; AT_RISK (yellow) now sits between
+  // HEALTHY and WARNING so "slightly behind" projects are distinguishable
+  // from genuinely at-risk ones instead of both reading as HEALTHY.
+  const health_status = health_score >= 80 ? 'HEALTHY'      // green
+    : health_score >= 60 ? 'AT_RISK'                          // yellow
+    : health_score >= 35 ? 'WARNING'                          // orange
+    : 'CRITICAL';                                             // red
 
   return {
     id: p.id,
@@ -125,7 +136,7 @@ function normalize_project(p, { is_saved = false, portal = null } = {}) {
     status: p.status,
     project_type: p.project_type,
     progress,
-    progress_mode: p.progress_mode,
+    progress_mode: 'AUTO', // fixed — MANUAL no longer exists as a settable state
     total_hours: p.total_hours,
     start_date: p.start_date,
     end_date: p.end_date,
@@ -142,6 +153,7 @@ function normalize_project(p, { is_saved = false, portal = null } = {}) {
     // to null despite being set correctly in the database).
     priority: p.priority,
     business_unit_id: p.business_unit_id,
+    business_unit: p.business_unit ? { id: p.business_unit.id, name: p.business_unit.name } : null,
     project_code: p.project_code,
     // Persisted correctly by create_project/update_project but previously
     // dropped here — the API returned no budget at all despite the DB
@@ -334,7 +346,10 @@ async function generate_project_code(tx) {
   return `PRJ-${String(count + 1).padStart(4, '0')}`;
 }
 
-export async function create_project({ title, description, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, progress_mode, project_type, priority, business_unit_id, budget, budget_currency, member_ids = [], members }) {
+// progress/progress_mode are deliberately not accepted here — even if a
+// caller sends them, they're simply absent from this destructuring and
+// never reach the insert. Progress is only ever computed on read.
+export async function create_project({ title, description, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, project_type, priority, business_unit_id, budget, budget_currency, member_ids = [], members }) {
   // NOTE: the final read must happen *after* the transaction commits — calling
   // find_project_by_id (which uses the outer `prisma` client) from inside the
   // transaction callback reads via a separate connection that can't see the
@@ -352,7 +367,6 @@ export async function create_project({ title, description, start_date, end_date,
         leader_id: leader_id || null,
         client_name: client_name || null,
         dev_status: dev_status || null,
-        progress_mode: progress_mode || 'MANUAL',
         project_type: project_type || 'CLIENT',
         priority: priority || undefined,
         business_unit_id: business_unit_id || null,
@@ -377,15 +391,16 @@ export async function create_project({ title, description, start_date, end_date,
   return find_project_by_id(project_id);
 }
 
-export async function update_project(id, { title, description, status, progress, progress_mode, project_type, priority, business_unit_id, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, budget, budget_currency, budget_spent, member_ids, members, confirm_remove_all_members }) {
+// progress/progress_mode are deliberately not accepted here (same as
+// create_project above) — MANUAL mode is gone, so there is no field left
+// for a client to set that would change how progress is computed.
+export async function update_project(id, { title, description, status, project_type, priority, business_unit_id, start_date, end_date, total_hours, owner_id, leader_id, client_name, dev_status, budget, budget_currency, budget_spent, member_ids, members, confirm_remove_all_members }) {
   // See create_project note above — read-after-write must happen post-commit.
   await prisma.$transaction(async (tx) => {
     const data = {};
     if (title !== undefined) data.title = title;
     if (description !== undefined) data.description = description;
     if (status !== undefined) data.status = status;
-    if (progress !== undefined) data.progress = progress;
-    if (progress_mode !== undefined) data.progress_mode = progress_mode;
     if (project_type !== undefined) data.project_type = project_type;
     if (priority !== undefined) data.priority = priority;
     if (business_unit_id !== undefined) data.business_unit_id = business_unit_id || null;
@@ -534,16 +549,23 @@ export async function get_dashboard_stats() {
     // Deliveries due within the next 7 days that aren't already overdue.
     upcoming_deliveries: active_projects.filter((p) => !p.is_overdue && p.end_date && new Date(p.end_date) >= now && new Date(p.end_date) <= in_7_days).length,
     at_risk: projects.filter((p) => p.health_status !== 'HEALTHY').length,
+    // 4-tier breakdown (Green/Yellow/Orange/Red) matching health_status above.
     health: {
       healthy: projects.filter((p) => p.health_status === 'HEALTHY').length,
+      at_risk: projects.filter((p) => p.health_status === 'AT_RISK').length,
       warning: projects.filter((p) => p.health_status === 'WARNING').length,
       critical: projects.filter((p) => p.health_status === 'CRITICAL').length,
     },
     // Milestone Health — distinct from overall Project Health above: how
-    // many active projects have any blocked or overdue milestone at all.
+    // exposed each active project is to blocked/overdue milestones. Also a
+    // 4-tier Green/Yellow/Orange/Red split now (was a 2-way healthy/at_risk
+    // split) — any blocked milestone is Red regardless of overdue count,
+    // since a block needs intervention before work can resume at all.
     milestone_health: {
       healthy: active_projects.filter((p) => p.milestone_breakdown.blocked === 0 && p.milestone_breakdown.overdue === 0).length,
-      at_risk: active_projects.filter((p) => p.milestone_breakdown.blocked > 0 || p.milestone_breakdown.overdue > 0).length,
+      at_risk: active_projects.filter((p) => p.milestone_breakdown.blocked === 0 && p.milestone_breakdown.overdue === 1).length,
+      warning: active_projects.filter((p) => p.milestone_breakdown.blocked === 0 && p.milestone_breakdown.overdue >= 2).length,
+      critical: active_projects.filter((p) => p.milestone_breakdown.blocked > 0).length,
     },
   };
 

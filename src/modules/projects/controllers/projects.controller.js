@@ -113,26 +113,22 @@ export async function update_project_ctrl(req, res, next) {
     const { valid, message } = validate_update_project(req.body);
     if (!valid) return res.status(400).json({ success: false, message });
 
-    const needs_before = req.body.status !== undefined || req.body.progress !== undefined
+    // progress is no longer part of `needs_before`/logging — it can't be set
+    // via this endpoint anymore (see update_project() in the repository),
+    // so there's nothing to diff or log for it here.
+    const needs_before = req.body.status !== undefined
       || Array.isArray(req.body.members) || Array.isArray(req.body.member_ids);
     const before = needs_before
       ? await prisma.projects.findUnique({
         where: { id: req.params.id },
         select: {
-          status: true, title: true, owner_id: true, leader_id: true, progress: true,
+          status: true, title: true, owner_id: true, leader_id: true,
           members: { select: { user_id: true, role: true, user: { select: { first_name: true, last_name: true, email: true } } } },
         },
       })
       : null;
 
     const updated = await update_existing_project(req.params.id, req.body, req.user.id);
-
-    if (before && req.body.progress !== undefined && +req.body.progress !== before.progress) {
-      log_activity({
-        user_id: req.user.id, action: 'UPDATE', entity_type: 'project', entity_id: req.params.id,
-        description: `Progress updated from ${before.progress}% to ${req.body.progress}%`,
-      }).catch(() => {});
-    }
 
     if (before && (Array.isArray(req.body.members) || Array.isArray(req.body.member_ids))) {
       log_member_changes({

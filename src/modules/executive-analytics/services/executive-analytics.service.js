@@ -273,6 +273,19 @@ export async function get_executive_dashboard({ month, year }) {
     root_cause,
     recommendations,
     executive_summary,
+    // Project Management overhaul — the five headline project metrics in one
+    // place, sourced directly from `project_dashboard` (already fetched
+    // above, zero extra queries). `at_risk`/`overdue`/`milestones_overdue`
+    // already existed; `upcoming_deliveries`/`milestones_missing`/
+    // `milestone_health` were added to get_dashboard_stats() alongside the
+    // Milestones rebuild but were never surfaced on this dashboard until now.
+    project_management_health: {
+      projects_at_risk: project_dashboard.at_risk,
+      delayed_projects: project_dashboard.overdue,
+      upcoming_deliveries: project_dashboard.upcoming_deliveries,
+      missing_milestones: project_dashboard.milestones_missing,
+      milestone_health: project_dashboard.milestone_health,
+    },
   };
 }
 
