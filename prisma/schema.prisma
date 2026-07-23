@@ -1840,7 +1840,8 @@ model candidates {
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
 
-  offers offers[]
+  offers          offers[]
+  employee_profile employee_profiles?
 }
 
 model offers {
@@ -2573,10 +2574,18 @@ model employee_profiles {
   pay_frequency              String?   @default("MONTHLY") // MONTHLY | BI_MONTHLY | WEEKLY
   // ── General ───────────────────────────────────────────────────────────
   notes                      String?
+  // Single Employee Master traceability: set once, when an accepted job
+  // offer converts a candidate into a real employee (see
+  // onboarding.service.js convert_candidate_to_employee()) — links the
+  // resulting employee back to the recruitment record that created them.
+  // Never set for employees added any other way (Add Employee, Quick
+  // Create), so stays null for the overwhelming majority of rows.
+  candidate_id               String?   @unique
   created_at                 DateTime  @default(now())
   updated_at                 DateTime  @updatedAt
 
-  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user      users      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  candidate candidates? @relation(fields: [candidate_id], references: [id], onDelete: SetNull)
 }
 
 // ─── Employee Documents ────────────────────────────────────────────────────────

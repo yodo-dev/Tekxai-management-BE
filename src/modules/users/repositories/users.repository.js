@@ -7,6 +7,7 @@ const USER_SELECT = {
   last_name: true,
   phone: true,
   avatar: true,
+  employee_id: true,
   department: true,
   position: true,
   designation: true,
@@ -33,6 +34,7 @@ function normalize_user(user) {
     last_name: user.last_name,
     phone: user.phone,
     avatar: user.avatar,
+    employee_id: user.employee_id,
     department: user.department,
     position: user.position,
     designation: user.designation,
@@ -162,9 +164,12 @@ export async function update_user(id, data) {
   // `status` is intentionally excluded — Employment Status has exactly one
   // write path (set_employment_status below), never a generic field patch,
   // so it can never drift from employee_profiles.employment_status.
+  // `employee_id` is stripped for the same reason as status: it is
+  // system-generated once at creation (Business Unit + Department derived)
+  // and must never be manually editable, even via a generic profile PUT.
   const {
     role_id, role, roles, permissions, user_permissions,
-    password, department, division, supervisor, status,
+    password, department, division, supervisor, status, employee_id,
     ...rest
   } = data;
 

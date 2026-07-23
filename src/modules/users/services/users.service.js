@@ -26,7 +26,12 @@ export async function get_user(id) {
   return user;
 }
 
-async function generate_employee_id() {
+// Legacy flat sequence — kept only as a fallback for employees whose
+// department has no Business Unit assigned yet (departments.business_unit_id
+// still needs a one-time admin backfill via /admin/departments for the
+// prefix scheme below to apply). Once every department is linked, this
+// path should stop firing.
+async function generate_legacy_employee_id() {
   const last = await prisma.users.findFirst({
     where: { employee_id: { startsWith: 'TXI-' } },
     orderBy: { employee_id: 'desc' },
@@ -34,6 +39,35 @@ async function generate_employee_id() {
   });
   const next = last?.employee_id ? parseInt(last.employee_id.replace('TXI-', ''), 10) + 1 : 1;
   return `TXI-${String(next).padStart(4, '0')}`;
+}
+
+// Employee ID = {BusinessUnitLetter}{DepartmentLetter}-{n}, e.g. Engineering
+// (code "ENG") + Operations (code "OPS") -> "EO-1", "EO-2", ... The sequence
+// is scoped to that exact prefix, not global, so each Business
+// Unit x Department combination gets its own counter starting at 1.
+// Requires the chosen department to have a business_unit_id (set via
+// /admin/departments) and both to have a `code` — falls back to the legacy
+// flat scheme otherwise rather than blocking employee creation on missing
+// org-chart setup.
+async function generate_employee_id(department_id) {
+  if (!department_id) return generate_legacy_employee_id();
+
+  const dept = await prisma.departments.findUnique({
+    where: { id: department_id },
+    select: { code: true, name: true, business_unit: { select: { code: true, name: true } } },
+  });
+  const bu_letter = (dept?.business_unit?.code || dept?.business_unit?.name || '').trim().charAt(0).toUpperCase();
+  const dept_letter = (dept?.code || dept?.name || '').trim().charAt(0).toUpperCase();
+  if (!bu_letter || !dept_letter) return generate_legacy_employee_id();
+
+  const prefix = `${bu_letter}${dept_letter}`;
+  const last = await prisma.users.findFirst({
+    where: { employee_id: { startsWith: `${prefix}-` } },
+    orderBy: { employee_id: 'desc' },
+    select: { employee_id: true },
+  });
+  const next = last?.employee_id ? parseInt(last.employee_id.slice(prefix.length + 1), 10) + 1 : 1;
+  return `${prefix}-${next}`;
 }
 
 export async function create_new_user(body, actor_user_id) {
@@ -44,12 +78,12 @@ export async function create_new_user(body, actor_user_id) {
   if (existing) throw field_error('Email already in use', 'email', 'DUPLICATE_EMAIL', 409);
 
   const password_hash = await bcrypt.hash(body.password || Math.random().toString(36), 12);
-  const { team_id, quick_create, ...rest } = body;
+  // employee_id is never accepted from the client, even if sent — it must
+  // not be manually editable, and is always derived from Business Unit +
+  // Department below.
+  const { team_id, quick_create, employee_id: _ignored_employee_id, ...rest } = body;
 
-  // Always generate employee_id server-side to avoid FE count-based collisions
-  if (!rest.employee_id) {
-    rest.employee_id = await generate_employee_id();
-  }
+  rest.employee_id = await generate_employee_id(rest.department_id);
 
   const user = await create_user({ ...rest, password_hash });
 

@@ -1,6 +1,7 @@
 import prisma from '../../../shared/database/client.js';
 import { send_invite_email } from '../../email/email.service.js';
 import { nanoid } from '../../../shared/utils/nanoid.js';
+import { convert_candidate_to_employee } from '../services/onboarding.service.js';
 
 function ok(res,p,m='OK',s=200){return res.status(s).json({success:true,message:m,payload:p});}
 function fail(res,m,s=400){return res.status(s).json({success:false,message:m});}
@@ -21,7 +22,14 @@ export async function create_offer(req,res,next){try{const{candidate_id,position
 export async function send_offer(req,res,next){try{const o=await prisma.offers.update({where:{id:req.params.id},data:{status:'SENT',sent_at:new Date()},include:{candidate:true}});if(o.candidate?.email){const portal_url=`${process.env.FRONTEND_URL||'http://localhost:5173'}/offer/${o.id}?token=${o.candidate.invite_token}`;send_invite_email(o.candidate.email,portal_url,'HR Team',o.position).catch(()=>{});}return ok(res,o,'Offer sent');}catch(e){next(e);}}
 
 // GET /onboarding/offers/:id/accept (candidate flow)
-export async function accept_offer(req,res,next){try{const o=await prisma.offers.update({where:{id:req.params.id},data:{status:'ACCEPTED',accepted_at:new Date()},include:{candidate:true}});await prisma.candidates.update({where:{id:o.candidate_id},data:{status:'ACCEPTED'}});return ok(res,o,'Offer accepted');}catch(e){next(e);}}
+export async function accept_offer(req,res,next){try{const o=await prisma.offers.update({where:{id:req.params.id},data:{status:'ACCEPTED',accepted_at:new Date()},include:{candidate:true}});await prisma.candidates.update({where:{id:o.candidate_id},data:{status:'ACCEPTED'}});
+  // Single Employee Master: this is the one place recruitment actually
+  // creates the employee (see onboarding.service.js) — don't let a failure
+  // here (e.g. duplicate email) block the offer from being recorded as
+  // accepted; HR can still link/create the employee manually if this ever
+  // needs a retry.
+  const employee=await convert_candidate_to_employee(o,req.user.id).catch(()=>null);
+  return ok(res,{...o,employee},'Offer accepted');}catch(e){next(e);}}
 
 // POST /onboarding/offers/:id/reject (candidate flow)
 export async function reject_offer(req,res,next){try{const o=await prisma.offers.update({where:{id:req.params.id},data:{status:'REJECTED',rejected_at:new Date(),rejection_reason:req.body.reason},include:{candidate:true}});await prisma.candidates.update({where:{id:o.candidate_id},data:{status:'REJECTED'}});return ok(res,o,'Offer rejected');}catch(e){next(e);}}
