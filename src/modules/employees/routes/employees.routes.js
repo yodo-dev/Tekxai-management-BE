@@ -115,9 +115,21 @@ router.get('/', ADMIN_HR, async (req, res, next) => {
       // backfilled) is not archived, so must not be excluded here — hence
       // the explicit "no profile OR not archived" OR, not a bare relation
       // filter (which would otherwise silently drop every profile-less user).
+      //
+      // `lifecycle_stage: { not: 'ARCHIVED' }` follows SQL NULL semantics
+      // (`col <> 'ARCHIVED'` is UNKNOWN, not TRUE, when col IS NULL) and so
+      // silently excludes every profile that HAS a row but never got its
+      // lifecycle_stage backfilled — the actual common case (confirmed: 40
+      // of 46 users), not just the "no profile row at all" case the OR
+      // already handled. Explicitly including `lifecycle_stage: null` fixes
+      // that without weakening the ARCHIVED exclusion.
       where.AND = [
         ...(where.AND || []),
-        { OR: [{ employee_profile: null }, { employee_profile: { lifecycle_stage: { not: 'ARCHIVED' } } }] },
+        { OR: [
+          { employee_profile: null },
+          { employee_profile: { lifecycle_stage: null } },
+          { employee_profile: { lifecycle_stage: { not: 'ARCHIVED' } } },
+        ] },
       ];
     }
     // Dedicated filters (distinct from the fuzzy `q` search below) — added
