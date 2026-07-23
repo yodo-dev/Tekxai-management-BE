@@ -4,6 +4,7 @@ import {
   get_onboarding_readiness_ctrl, get_offboarding_readiness_ctrl, get_probation_summary_ctrl,
   move_to_probation_ctrl, enter_notice_period_ctrl, move_to_exit_clearance_ctrl, archive_employee_ctrl,
   request_confirm_employee_ctrl, request_extend_probation_ctrl, request_terminate_probation_ctrl, request_archive_employee_ctrl,
+  set_stage_ctrl,
 } from '../controllers/employee-lifecycle.controller.js';
 
 const router = Router();
@@ -140,5 +141,23 @@ router.post('/:userId/request-terminate-probation', MANAGE, request_terminate_pr
  *     responses: { 201: { description: Approval request created }, 409: { description: Wrong current stage or already pending } }
  */
 router.post('/:userId/request-archive', MANAGE, request_archive_employee_ctrl);
+
+/**
+ * @swagger
+ * /employee-lifecycle/set-stage:
+ *   post:
+ *     summary: Direct admin override to set lifecycle stage for one or more employees (bypasses the approval-gated transitions above)
+ *     tags: [Employee Lifecycle]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               user_ids: { type: array, items: { type: string } }
+ *               lifecycle_stage: { type: string }
+ *     responses: { 200: { description: Employees updated } }
+ */
+router.post('/set-stage', MANAGE, set_stage_ctrl);
 
 export default router;

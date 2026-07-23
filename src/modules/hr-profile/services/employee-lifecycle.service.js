@@ -464,3 +464,20 @@ export async function approve_lifecycle_transition(approval_id, actor_user_id, d
 
   return { approval: updated_request, transition: transition_result };
 }
+
+// Direct admin override — bypasses the formal approval-gated transitions
+// above (move-to-probation, request-confirm, etc.) for cases those don't
+// cover, e.g. correcting a batch of employees stuck in ONBOARDING that
+// pre-date a default-stage fix. Still goes through the one write path
+// (set_lifecycle_stage) so validation and the frozen status-sync rule apply;
+// only the "must currently be in stage X" transition sequencing is skipped.
+export async function bulk_set_lifecycle_stage(user_ids, new_stage, actor_user_id) {
+  const results = await Promise.allSettled(
+    user_ids.map((user_id) => set_lifecycle_stage(user_id, new_stage, actor_user_id))
+  );
+  const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+  const failed = results
+    .map((r, i) => (r.status === 'rejected' ? { user_id: user_ids[i], message: r.reason?.message || 'Unknown error' } : null))
+    .filter(Boolean);
+  return { succeeded, failed };
+}

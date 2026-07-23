@@ -2,7 +2,9 @@ import {
   get_onboarding_readiness, get_offboarding_readiness, get_probation_summary,
   move_to_probation, enter_notice_period, move_to_exit_clearance, archive_employee,
   request_confirm_employee, request_extend_probation, request_terminate_probation, request_archive_employee,
+  bulk_set_lifecycle_stage,
 } from '../services/employee-lifecycle.service.js';
+import { validate_lifecycle_stage } from '../constants/employee-lifecycle.js';
 
 function ok(res, payload, message = 'OK', status = 200) {
   return res.status(status).json({ success: true, message, payload });
@@ -50,4 +52,26 @@ export async function request_terminate_probation_ctrl(req, res, next) {
 
 export async function request_archive_employee_ctrl(req, res, next) {
   try { return ok(res, await request_archive_employee(req.params.userId, req.user.id, req.body || {}), 'Archive approval requested', 201); } catch (err) { next(err); }
+}
+
+function app_error(message, status_code = 400) {
+  const e = new Error(message);
+  e.status_code = status_code;
+  return e;
+}
+
+// Direct override, single or bulk — see bulk_set_lifecycle_stage() for why
+// this exists alongside the approval-gated transitions above.
+export async function set_stage_ctrl(req, res, next) {
+  try {
+    const { user_ids, lifecycle_stage } = req.body || {};
+    if (!Array.isArray(user_ids) || user_ids.length === 0) {
+      throw app_error('user_ids array required', 422);
+    }
+    const check = validate_lifecycle_stage(lifecycle_stage);
+    if (!check.valid) throw app_error(check.message, 422);
+
+    const result = await bulk_set_lifecycle_stage(user_ids, lifecycle_stage, req.user.id);
+    return ok(res, result, `${result.succeeded} employee(s) updated`);
+  } catch (err) { next(err); }
 }
