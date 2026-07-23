@@ -31,6 +31,7 @@ import {
   build_week_rows,
   format_duration,
   get_week_start,
+  local_date_str,
 } from '../services/timesheets.service.js';
 
 function ok(res, payload, message = 'OK', status = 200) {
@@ -62,8 +63,8 @@ export async function weekly(req, res, next) {
     week_end.setDate(week_end.getDate() + 6);
 
     return ok(res, {
-      week_start: week_start.toISOString().split('T')[0],
-      week_end: week_end.toISOString().split('T')[0],
+      week_start: local_date_str(week_start),
+      week_end: local_date_str(week_end),
       week_label: `${week_start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${week_end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
       total_duration_seconds: total_sec,
       total_duration_label: format_duration(total_sec),

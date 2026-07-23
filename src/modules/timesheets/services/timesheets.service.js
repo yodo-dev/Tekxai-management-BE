@@ -19,17 +19,26 @@ export function format_time(dt) {
   return new Date(dt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
+// Calendar-date string from a Date's LOCAL components — not
+// `.toISOString().split('T')[0]`, which converts to UTC first and silently
+// shifts the date back a day on any positive-UTC-offset server timezone
+// (this app runs under Asia/Karachi, UTC+5) whenever the Date represents
+// local midnight, as `day_date` below always does.
+export function local_date_str(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 export function build_week_rows(entries, week_start) {
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   return days.map((label, i) => {
     const day_date = new Date(week_start);
     day_date.setDate(day_date.getDate() + i);
-    const iso = day_date.toISOString().split('T')[0];
+    const iso = local_date_str(day_date);
 
-    const entry = entries.find((e) => {
-      const d = new Date(e.check_in);
-      return d.toISOString().split('T')[0] === iso;
-    });
+    const entry = entries.find((e) => local_date_str(new Date(e.check_in)) === iso);
 
     if (!entry) {
       return {
