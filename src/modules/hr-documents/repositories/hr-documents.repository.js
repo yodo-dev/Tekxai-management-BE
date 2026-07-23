@@ -74,10 +74,10 @@ export async function list_template_versions(template_id) {
 }
 
 // Creates the template row AND its first version (version 1) atomically.
-export async function create_template({ category_id, type_id, name, content, placeholders, created_by }) {
+export async function create_template({ category_id, type_id, name, content, placeholders, created_by, requires_approval }) {
   return prisma.$transaction(async (tx) => {
     const template = await tx.hr_document_templates.create({
-      data: { category_id, type_id, name, created_by },
+      data: { category_id, type_id, name, created_by, requires_approval: !!requires_approval },
     });
     const version = await tx.hr_document_template_versions.create({
       data: { template_id: template.id, version: 1, content, placeholders: placeholders || [], created_by },
@@ -93,13 +93,14 @@ export async function create_template({ category_id, type_id, name, content, pla
 // Editing content NEVER mutates an existing version — it always creates a
 // new one and repoints current_version_id. Renaming/activating a template
 // (no content change) is a plain in-place update, no new version needed.
-export async function update_template(id, { name, is_active, content, placeholders, created_by }) {
+export async function update_template(id, { name, is_active, content, placeholders, created_by, requires_approval }) {
   const template = await prisma.hr_document_templates.findUnique({ where: { id } });
   if (!template) throw app_error('Template not found', 404);
 
   const meta_data = {};
   if (name !== undefined) meta_data.name = name;
   if (is_active !== undefined) meta_data.is_active = is_active;
+  if (requires_approval !== undefined) meta_data.requires_approval = !!requires_approval;
 
   if (content === undefined) {
     if (Object.keys(meta_data).length === 0) return get_template(id);
@@ -121,6 +122,33 @@ export async function update_template(id, { name, is_active, content, placeholde
       include: TEMPLATE_INCLUDE,
     });
   });
+}
+
+// A real copy — a new template row + its own fresh v1, seeded from the
+// source's current content. Deliberately NOT a new version of the source
+// (that's what update_template is for); this is for "start a variant without
+// touching the original."
+export async function duplicate_template(source_id, { name, created_by }) {
+  const source = await get_template(source_id);
+  if (!source.current_version) throw app_error('Source template has no content to copy', 422);
+  return create_template({
+    category_id: source.category_id,
+    type_id: source.type_id,
+    name: name || `${source.name} (Copy)`,
+    content: source.current_version.content,
+    placeholders: source.current_version.placeholders,
+    requires_approval: source.requires_approval,
+    created_by,
+  });
+}
+
+// hr_documents.template_id/template_version_id are onDelete: SetNull, so any
+// already-generated document that used this template keeps its (immutable)
+// content and just loses the back-reference — safe to hard-delete.
+export async function delete_template(id) {
+  const template = await prisma.hr_document_templates.findUnique({ where: { id } });
+  if (!template) throw app_error('Template not found', 404);
+  await prisma.hr_document_templates.delete({ where: { id } });
 }
 
 // ── Documents ────────────────────────────────────────────────────────────────

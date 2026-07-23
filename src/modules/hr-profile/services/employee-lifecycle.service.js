@@ -4,7 +4,7 @@ import { set_employment_status } from '../../users/repositories/users.repository
 import { get_lifecycle_stage, persist_lifecycle_stage } from '../repositories/employee-profiles.repository.js';
 import { validate_lifecycle_stage, NOTIFY_STAGES, LIFECYCLE_STAGE_LABELS } from '../constants/employee-lifecycle.js';
 import { create_notification } from '../../notifications/services/notifications.service.js';
-import { trigger_employee_confirmed } from '../../automation/services/automation.service.js';
+import { trigger_employee_confirmed, trigger_employee_exit_clearance } from '../../automation/services/automation.service.js';
 import { seed_default_offboarding_tasks } from '../../offboarding/services/offboarding.service.js';
 import { request_lifecycle_approval, get_lifecycle_approval } from '../../lifecycle-approvals/services/lifecycle-approvals.service.js';
 import { decide_approval_request } from '../../lifecycle-approvals/repositories/lifecycle-approvals.repository.js';
@@ -134,6 +134,13 @@ export async function set_lifecycle_stage(user_id, new_stage, actor_user_id) {
   // EXIT_CLEARANCE more than once.
   if (new_stage === 'EXIT_CLEARANCE') {
     await seed_default_offboarding_tasks(user_id, actor_user_id).catch(() => {});
+  }
+
+  // Automation Engine — Relieving Letter auto-generation. Same no-double-
+  // notify shape as trigger_employee_confirmed above; the NOTIFY_STAGES
+  // block already covers the supervisor notification for this stage.
+  if (new_stage === 'EXIT_CLEARANCE') {
+    await trigger_employee_exit_clearance(user_id, actor_user_id).catch(() => {});
   }
 
   return { lifecycle_stage: new_stage, changed: true };

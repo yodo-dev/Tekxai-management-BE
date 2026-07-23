@@ -3,6 +3,7 @@ import { render_document_for_user } from './placeholder-engine.service.js';
 import { create_notification } from '../../notifications/services/notifications.service.js';
 import { render_document_pdf, store_document_pdf } from './pdf.service.js';
 import { get_presigned_download_url } from '../../storage/storage.service.js';
+import { get_hr_profile, upsert_hr_profile } from '../../hr-profile/services/hr-profile.service.js';
 
 function app_error(message, status_code = 400) {
   const e = new Error(message);
@@ -23,6 +24,8 @@ export const get_template = repo.get_template;
 export const list_template_versions = repo.list_template_versions;
 export const create_template = repo.create_template;
 export const update_template = repo.update_template;
+export const duplicate_template = repo.duplicate_template;
+export const delete_template = repo.delete_template;
 
 // ── Preview / Render (no persistence — used by the New Document screen) ────
 
@@ -48,11 +51,13 @@ export async function generate_document({
 
   let content_source;
   let template_version_id = null;
+  let requires_approval = false;
   if (template_id) {
     const template = await repo.get_template(template_id);
     if (!template.current_version) throw app_error('Template has no content to render', 422);
     content_source = template.current_version.content;
     template_version_id = template.current_version.id;
+    requires_approval = !!template.requires_approval;
   } else {
     if (!raw_content) throw app_error('Either template_id or raw_content is required', 422);
     content_source = raw_content;
@@ -66,7 +71,7 @@ export async function generate_document({
     template_version_id,
     title: title || 'Untitled Document',
     content: rendered,
-    status: 'GENERATED',
+    status: requires_approval ? 'DRAFT' : 'GENERATED',
     valid_from: valid_from ? new Date(valid_from) : null,
     valid_until: valid_until ? new Date(valid_until) : null,
     previous_document_id: previous_document_id || null,
@@ -116,6 +121,24 @@ function assert_transition(from, to) {
   if (!(TRANSITIONS[from] || []).includes(to)) {
     throw app_error(`Cannot transition document from ${from} to ${to}`, 409);
   }
+}
+
+// Single-step approval gate: flips a template-flagged DRAFT to GENERATED so
+// it becomes sendable. Rejecting a DRAFT reuses cancel_document (DRAFT ->
+// CANCELLED is already a legal transition) — no separate reject path needed.
+export async function approve_draft_document(id, actor_id) {
+  const doc = await repo.get_document(id);
+  assert_transition(doc.status, 'GENERATED');
+  const updated = await repo.update_document_status(id, { status: 'GENERATED' });
+  if (updated.created_by) {
+    create_notification({
+      user_id: updated.created_by,
+      title: 'Document Approved',
+      message: `"${updated.title}" has been approved and is ready to send.`,
+      type: 'HR_DOCUMENT',
+    }).catch(() => null);
+  }
+  return updated;
 }
 
 export async function send_document(id, actor_id) {
@@ -177,12 +200,29 @@ export async function expire_overdue_documents() {
 // One row per (document, signer_role) — created on first sign, updated if
 // re-signed. When ALL required roles for a document have signed, the
 // document itself transitions to SIGNED.
-export async function sign_document(id, { signer_role, signer_user_id, signature_data, ip_address, required_roles }) {
+export async function sign_document(id, { signer_role, signer_user_id, signature_data, ip_address, required_roles, cnic }) {
   const doc = await repo.get_document(id);
   if (!['SENT', 'VIEWED'].includes(doc.status)) {
     throw app_error(`Document must be SENT or VIEWED to sign (currently ${doc.status})`, 409);
   }
   if (!signature_data) throw app_error('signature_data is required', 422);
+
+  // Employee identity confirmation: signing on your own behalf requires a
+  // CNIC on file — captured here (once) rather than via a separate profile
+  // edit, since this is the one moment identity actually matters for this
+  // flow. Reuses the same upsert_hr_profile write path as the HR-facing
+  // profile editor, so employee_profiles.cnic never has two writers.
+  if (signer_role === 'EMPLOYEE') {
+    const profile = await get_hr_profile(signer_user_id);
+    if (!profile?.cnic && !cnic) {
+      const e = app_error('CNIC confirmation is required before signing', 422);
+      e.code = 'CNIC_REQUIRED';
+      throw e;
+    }
+    if (!profile?.cnic && cnic) {
+      await upsert_hr_profile(signer_user_id, { cnic }, signer_user_id);
+    }
+  }
 
   let signature = await repo.find_signature(id, signer_role);
   if (!signature) {
@@ -197,7 +237,16 @@ export async function sign_document(id, { signer_role, signer_user_id, signature
   );
 
   if (all_signed) {
-    return repo.update_document_status(id, { status: 'SIGNED' });
+    const signed_doc = await repo.update_document_status(id, { status: 'SIGNED' });
+    if (signer_role === 'EMPLOYEE' && signed_doc.created_by) {
+      create_notification({
+        user_id: signed_doc.created_by,
+        title: 'Document Signed',
+        message: `${signed_doc.user?.first_name || 'The employee'} signed "${signed_doc.title}".`,
+        type: 'HR_DOCUMENT',
+      }).catch(() => null);
+    }
+    return signed_doc;
   }
   return refreshed;
 }

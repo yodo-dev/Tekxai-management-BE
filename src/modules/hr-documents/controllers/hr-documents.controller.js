@@ -1,4 +1,5 @@
 import * as service from '../services/hr-documents.service.js';
+import { render_document_docx } from '../services/docx.service.js';
 import { PLACEHOLDER_REGISTRY, DOCUMENT_STATUSES, SIGNER_ROLES } from '../constants/placeholders.js';
 import { validate_category, validate_type, validate_template, validate_generate } from '../validators/hr-documents.validation.js';
 
@@ -89,6 +90,19 @@ export async function update_template_ctrl(req, res, next) {
   } catch (e) { return next(e); }
 }
 
+export async function duplicate_template_ctrl(req, res, next) {
+  try {
+    return res.status(201).json({ success: true, payload: await service.duplicate_template(req.params.id, { name: req.body?.name, created_by: req.user.id }) });
+  } catch (e) { return next(e); }
+}
+
+export async function delete_template_ctrl(req, res, next) {
+  try {
+    await service.delete_template(req.params.id);
+    return res.json({ success: true, payload: null });
+  } catch (e) { return next(e); }
+}
+
 // ── Preview / Render (Phase 2) ───────────────────────────────────────────
 
 export async function preview_render_ctrl(req, res, next) {
@@ -146,6 +160,11 @@ export async function send_document_ctrl(req, res, next) {
   catch (e) { return next(e); }
 }
 
+export async function approve_draft_document_ctrl(req, res, next) {
+  try { return res.json({ success: true, payload: await service.approve_draft_document(req.params.id, req.user.id) }); }
+  catch (e) { return next(e); }
+}
+
 // Not gated by can_or_role (employees must reach these for their own
 // documents), so ownership is enforced here instead — the requesting user
 // must either own the document or hold an HR-ish role.
@@ -191,11 +210,25 @@ export async function download_document_pdf_ctrl(req, res, next) {
   } catch (e) { return next(e); }
 }
 
+// DOCX is rendered fresh on every download (not cached like the PDF — see
+// docx.service.js) and streamed directly, unlike every other endpoint here
+// which returns a JSON envelope.
+export async function download_document_docx_ctrl(req, res, next) {
+  try {
+    const doc = await assert_owns_or_hr(req, req.params.id);
+    const buffer = await render_document_docx(doc);
+    const filename = `${(doc.title || 'document').replace(/[^a-z0-9-_ ]/gi, '').trim() || 'document'}.docx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(buffer);
+  } catch (e) { return next(e); }
+}
+
 // ── Signatures ────────────────────────────────────────────────────────────
 
 export async function sign_document_ctrl(req, res, next) {
   try {
-    const { signer_role, signature_data, required_roles } = req.body;
+    const { signer_role, signature_data, required_roles, cnic } = req.body;
     if (!signer_role || !SIGNER_ROLES.includes(signer_role)) {
       return res.status(400).json({ success: false, message: `signer_role must be one of: ${SIGNER_ROLES.join(', ')}` });
     }
@@ -213,7 +246,7 @@ export async function sign_document_ctrl(req, res, next) {
       }
     }
     const payload = await service.sign_document(req.params.id, {
-      signer_role, signature_data, required_roles,
+      signer_role, signature_data, required_roles, cnic,
       signer_user_id: req.user.id,
       ip_address: req.ip,
     });

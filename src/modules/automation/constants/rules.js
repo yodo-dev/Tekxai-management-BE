@@ -28,4 +28,14 @@ export const RULES = {
     timeline_event: 'employee.confirmed',
     notify: 'supervisor',
   },
+  // Third rule wired up: HR-document-system lifecycle automation (auto-
+  // generate a Confirmation Letter on EMPLOYEE_CONFIRMED, a Relieving Letter
+  // here on exit clearance) — same supervisor-notify scoping rationale as
+  // the two rules above.
+  EMPLOYEE_EXIT_CLEARANCE: {
+    name: 'EMPLOYEE_EXIT_CLEARANCE',
+    trigger: 'Employee Lifecycle transitions to EXIT_CLEARANCE.',
+    timeline_event: 'employee.exit_clearance',
+    notify: 'supervisor',
+  },
 };

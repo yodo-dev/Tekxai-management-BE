@@ -30,6 +30,11 @@ model users {
   hire_date      DateTime?
   business_unit  String?   @default("ERP")
   supervisor_id  String?
+  // Chat-module audit found no online/last-seen signal anywhere in the app.
+  // Bumped by a throttled heartbeat in authenticate.js (see touch_last_active
+  // there) — not true push presence, since there's no WebSocket in this app;
+  // "online" is derived client-side as "within the last ~2 minutes".
+  last_active_at DateTime?
   created_at     DateTime  @default(now())
   updated_at     DateTime  @updatedAt
   deleted_at     DateTime?
@@ -2056,6 +2061,10 @@ model hr_document_templates {
   type_id            String
   name               String
   is_active          Boolean  @default(true)
+  // Single-step approval gate: when true, generate_document() creates the
+  // resulting document as DRAFT (pending HR approval) instead of GENERATED,
+  // so it can't be sent until an HR/admin approves it.
+  requires_approval  Boolean  @default(false)
   current_version_id String?  @unique
   created_by         String?
   created_at         DateTime @default(now())
