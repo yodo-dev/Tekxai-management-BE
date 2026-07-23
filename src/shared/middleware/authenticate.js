@@ -8,6 +8,23 @@ function app_error(message, status_code = 401) {
   return error;
 }
 
+// Online/last-seen heartbeat — chat-module audit found no presence signal
+// anywhere in the app. There's no WebSocket infra to push real presence, so
+// this bumps users.last_active_at on any authenticated request instead
+// ("online" = active within ~2min, derived client-side). Throttled via an
+// in-process Map so it's one UPDATE per user per 60s, not one per request —
+// this process is the only backend instance (no Redis/shared cache in this
+// app), so an in-memory throttle is consistent with everything else here.
+const LAST_TOUCH = new Map();
+const TOUCH_THROTTLE_MS = 60_000;
+function touch_last_active(user_id) {
+  const now = Date.now();
+  const last = LAST_TOUCH.get(user_id) || 0;
+  if (now - last < TOUCH_THROTTLE_MS) return;
+  LAST_TOUCH.set(user_id, now);
+  prisma.users.update({ where: { id: user_id }, data: { last_active_at: new Date() } }).catch(() => {});
+}
+
 export async function authenticate(req, res, next) {
   const header = req.headers['authorization'] || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -27,6 +44,7 @@ export async function authenticate(req, res, next) {
     }
 
     req.user = { id: decoded.sub, email: decoded.email, roles: decoded.roles || [] };
+    touch_last_active(decoded.sub);
     return next();
   } catch (err) {
     if (err.status_code) return next(err);

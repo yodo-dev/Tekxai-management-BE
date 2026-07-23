@@ -2,6 +2,11 @@ import prisma from '../../../shared/database/client.js';
 function ok(res,p,m='OK',s=200){return res.status(s).json({success:true,message:m,payload:p});}
 function fail(res,m,s=400){return res.status(s).json({success:false,message:m});}
 function is_global_admin(req){return req.user.roles?.some(r=>['SUPER_ADMIN','ADMIN'].includes(r));}
+// 'DM' is deliberately excluded — it's only ever created by get_or_create_dm's
+// dedup-by-pair lookup; letting create_channel/update_channel set type:'DM'
+// would produce a DM-typed channel that lookup can never find (audit found
+// `type` had zero validation at all — any string was accepted and written).
+const CHANNEL_TYPES=['PUBLIC','PRIVATE','GROUP'];
 
 // Shared membership gate for non-PUBLIC channels — used by every action that
 // reads or writes channel content (messages, threads, member list, channel
@@ -13,11 +18,22 @@ function is_global_admin(req){return req.user.roles?.some(r=>['SUPER_ADMIN','ADM
 async function assert_channel_access(channel_id,userId,req){
   const ch=await prisma.channels.findUnique({where:{id:channel_id}});
   if(!ch) return {ch:null};
-  if(ch.type!=='PUBLIC'){
-    const isMember=await prisma.channel_members.findUnique({where:{channel_id_user_id:{channel_id,user_id:userId}}});
-    if(!isMember&&!is_global_admin(req)) return {ch,denied:true};
-  }
-  return {ch};
+  if(ch.type==='PUBLIC') return {ch,isMember:true};
+  const isMember=!!(await prisma.channel_members.findUnique({where:{channel_id_user_id:{channel_id,user_id:userId}}}));
+  if(!isMember&&!is_global_admin(req)) return {ch,denied:true,isMember:false};
+  return {ch,isMember};
+}
+
+// Same gate as assert_channel_access, but for actions keyed by message id
+// (reactions) rather than channel id — audit found add_reaction/remove_reaction
+// had NO membership check at all (authenticate-only), so a non-member of a
+// PRIVATE/GROUP/DM channel could react to a message there if they had (or
+// guessed) its id.
+async function assert_message_access(message_id,userId,req){
+  const msg=await prisma.messages.findUnique({where:{id:message_id},select:{channel_id:true}});
+  if(!msg) return {msg:null};
+  const{denied}=await assert_channel_access(msg.channel_id,userId,req);
+  return {msg,denied};
 }
 
 // ─── Channels ────────────────────────────────────────────────────────────────
@@ -25,19 +41,30 @@ async function assert_channel_access(channel_id,userId,req){
 export async function list_channels(req,res,next){
   try{
     const userId = req.user.id;
+    // Global admins see every non-archived channel (matching the
+    // is_global_admin bypass already used by get_channel/list_members/
+    // archive_channel/delete_channel) — without this they could never even
+    // discover a PRIVATE/GROUP/DM channel's id to act on it, regardless of
+    // any admin bypass inside those endpoints.
+    const where = is_global_admin(req)
+      ? {is_archived:false}
+      : {is_archived:false, OR:[{type:'PUBLIC'},{members:{some:{user_id:userId}}}]};
     const channels = await prisma.channels.findMany({
-      where:{
-        is_archived:false,
-        OR:[
-          {type:'PUBLIC'},
-          {members:{some:{user_id:userId}}},
-        ],
-      },
+      where,
       include:{
         _count:{select:{messages:true,members:true}},
+        // Audit found this was `where:{user_id:userId}` — i.e. only the
+        // *caller's own* membership row, never anyone else's. That's why a
+        // DM always rendered as "Direct Message": get_other_member() looks
+        // for a member row that isn't the caller, and there was never one
+        // present here to find. Fetching every member (with their user
+        // object) fixes the DM name/avatar/online-dot in the sidebar, not
+        // just inside an opened channel.
         members:{
-          where:{user_id:userId},
-          select:{last_read_at:true,user_id:true},
+          select:{
+            user_id:true,role:true,last_read_at:true,
+            user:{select:{id:true,first_name:true,last_name:true,avatar:true,last_active_at:true}},
+          },
         },
         messages:{
           where:{deleted_at:null},
@@ -48,7 +75,45 @@ export async function list_channels(req,res,next){
       },
       orderBy:{updated_at:'desc'},
     });
-    return ok(res,{records:channels,total:channels.length});
+    // Unread count — audit found `last_read_at` was written (get_messages/
+    // send_message upsert it) but nothing ever read it back against message
+    // timestamps to derive a count; the sidebar's unread dot was purely
+    // cosmetic and never cleared. Opening a channel (get_messages) already
+    // bumps last_read_at, so that alone now doubles as "mark as read" once
+    // this count is exposed — no separate mark-read endpoint needed. Own
+    // messages don't count as unread for yourself. Channel count per user is
+    // small (their own channel list), so per-channel queries here are fine —
+    // same tradeoff other dashboard aggregates in this codebase already make.
+    const withUnread = await Promise.all(channels.map(async(ch)=>{
+      const mine=ch.members.find((m)=>m.user_id===userId);
+      const since=mine?.last_read_at||new Date(0);
+      const unread_count=await prisma.messages.count({
+        where:{channel_id:ch.id,deleted_at:null,user_id:{not:userId},created_at:{gt:since}},
+      });
+      return{...ch,unread_count};
+    }));
+    return ok(res,{records:withUnread,total:withUnread.length});
+  }catch(e){next(e);}
+}
+
+// Lightweight total-unread-across-all-channels — for the sidebar/nav badge,
+// which shouldn't have to fetch the full channel list (with last messages,
+// member counts, etc.) just to show a number. Same last_read_at-vs-messages
+// logic as list_channels, just summed instead of per-channel.
+export async function get_unread_count(req,res,next){
+  try{
+    const userId=req.user.id;
+    const memberships=await prisma.channel_members.findMany({
+      where:{user_id:userId,channel:{is_archived:false}},
+      select:{channel_id:true,last_read_at:true},
+    });
+    const counts=await Promise.all(memberships.map(m=>
+      prisma.messages.count({
+        where:{channel_id:m.channel_id,deleted_at:null,user_id:{not:userId},created_at:{gt:m.last_read_at||new Date(0)}},
+      })
+    ));
+    const total=counts.reduce((sum,c)=>sum+c,0);
+    return ok(res,{total});
   }catch(e){next(e);}
 }
 
@@ -59,7 +124,7 @@ export async function get_channel(req,res,next){
       where:{id:req.params.id},
       include:{
         members:{
-          include:{user:{select:{id:true,first_name:true,last_name:true,avatar:true,designation:true}}},
+          include:{user:{select:{id:true,first_name:true,last_name:true,avatar:true,designation:true,last_active_at:true}}},
           orderBy:{joined_at:'asc'},
         },
         _count:{select:{messages:true,members:true}},
@@ -79,6 +144,7 @@ export async function create_channel(req,res,next){
   try{
     const{name,description,type,entity_type,entity_id}=req.body;
     if(!name)return fail(res,'name required');
+    if(type&&!CHANNEL_TYPES.includes(type))return fail(res,`type must be one of ${CHANNEL_TYPES.join(', ')}`);
     const ch=await prisma.channels.create({
       data:{name,description,type:type||'PUBLIC',entity_type,entity_id,created_by:req.user.id},
       include:{_count:{select:{messages:true,members:true}}},
@@ -92,8 +158,10 @@ export async function update_channel(req,res,next){
   try{
     const userId=req.user.id;
     const{name,description,type}=req.body;
+    if(type&&!CHANNEL_TYPES.includes(type))return fail(res,`type must be one of ${CHANNEL_TYPES.join(', ')}`);
     const ch=await prisma.channels.findUnique({where:{id:req.params.id},include:{members:{where:{user_id:userId}}}});
     if(!ch) return fail(res,'Not found',404);
+    if(ch.type==='DM') return fail(res,'DM channels cannot be renamed or retyped',403);
     const myRole=ch.members[0]?.role;
     const isAdmin=req.user.roles?.some(r=>['SUPER_ADMIN','ADMIN'].includes(r));
     if(!isAdmin&&!['OWNER','ADMIN'].includes(myRole)) return fail(res,'Only channel admin/owner can update',403);
@@ -136,6 +204,38 @@ export async function delete_channel(req,res,next){
   }catch(e){next(e);}
 }
 
+// Leave — previously only reachable as a side effect of remove_member's
+// self-removal bypass (memberId===userId), with no dedicated semantics: no
+// ownership handoff, no cleanup of a channel left with zero members, and no
+// frontend button at all. DM channels and PROJECT-linked channels are
+// excluded — a DM has no "leave" concept, and a project channel's membership
+// is owned by the project's team roster (project-chat.repository.js), so
+// unilaterally leaving would just fight that sync on the next project update.
+export async function leave_channel(req,res,next){
+  try{
+    const userId=req.user.id;
+    const ch=await prisma.channels.findUnique({where:{id:req.params.id}});
+    if(!ch) return fail(res,'Not found',404);
+    if(ch.type==='DM') return fail(res,'DM conversations cannot be left',403);
+    if(ch.entity_type==='PROJECT') return fail(res,'This channel follows project team membership — ask a project owner to remove you from the project instead',403);
+    const membership=await prisma.channel_members.findUnique({where:{channel_id_user_id:{channel_id:req.params.id,user_id:userId}}});
+    if(!membership) return fail(res,'Not a member of this channel',404);
+
+    const remaining=await prisma.channel_members.findMany({where:{channel_id:req.params.id,user_id:{not:userId}},orderBy:{joined_at:'asc'}});
+    if(remaining.length===0){
+      // Last member leaving — delete rather than leave an empty, ownerless
+      // shell behind (no orphan channel/data).
+      await prisma.channels.delete({where:{id:req.params.id}});
+      return ok(res,{deleted:true},'Left channel — it had no other members and was deleted');
+    }
+    await prisma.channel_members.delete({where:{channel_id_user_id:{channel_id:req.params.id,user_id:userId}}});
+    if(membership.role==='OWNER'&&!remaining.some(m=>m.role==='OWNER')){
+      await prisma.channel_members.update({where:{channel_id_user_id:{channel_id:req.params.id,user_id:remaining[0].user_id}},data:{role:'OWNER'}});
+    }
+    return ok(res,null,'Left channel');
+  }catch(e){next(e);}
+}
+
 export async function join_channel(req,res,next){
   try{
     // Previously had no gate at all — any authenticated user could self-add
@@ -168,7 +268,7 @@ export async function list_members(req,res,next){
     }
     const members=await prisma.channel_members.findMany({
       where:{channel_id:req.params.id},
-      include:{user:{select:{id:true,first_name:true,last_name:true,avatar:true,designation:true,email:true}}},
+      include:{user:{select:{id:true,first_name:true,last_name:true,avatar:true,designation:true,email:true,last_active_at:true}}},
       orderBy:{joined_at:'asc'},
       take:500,
     });
@@ -190,7 +290,7 @@ export async function add_member(req,res,next){
       where:{channel_id_user_id:{channel_id:req.params.id,user_id}},
       update:{role},
       create:{channel_id:req.params.id,user_id,role},
-      include:{user:{select:{id:true,first_name:true,last_name:true,avatar:true,designation:true}}},
+      include:{user:{select:{id:true,first_name:true,last_name:true,avatar:true,designation:true,last_active_at:true}}},
     });
     return ok(res,member,'Member added',201);
   }catch(e){next(e);}
@@ -204,7 +304,11 @@ export async function remove_member(req,res,next){
     if(!ch) return fail(res,'Not found',404);
     const myRole=ch.members[0]?.role;
     const isAdmin=req.user.roles?.some(r=>['SUPER_ADMIN','ADMIN'].includes(r));
-    if(memberId!==userId&&!isAdmin&&!['OWNER','ADMIN'].includes(myRole)) return fail(res,'Only channel admin/owner can remove members',403);
+    // Self-removal now goes through leave_channel (POST /:id/leave), which
+    // handles ownership handoff and deleting an emptied channel — this
+    // endpoint is admin/owner-removing-someone-else only.
+    if(memberId===userId) return fail(res,'Use the leave-channel action to remove yourself',400);
+    if(!isAdmin&&!['OWNER','ADMIN'].includes(myRole)) return fail(res,'Only channel admin/owner can remove members',403);
     await prisma.channel_members.deleteMany({where:{channel_id:req.params.id,user_id:memberId}});
     return ok(res,null,'Member removed');
   }catch(e){next(e);}
@@ -244,7 +348,7 @@ export async function get_or_create_dm(req,res,next){
         ],
       },
       include:{
-        members:{include:{user:{select:{id:true,first_name:true,last_name:true,avatar:true,designation:true}}}},
+        members:{include:{user:{select:{id:true,first_name:true,last_name:true,avatar:true,designation:true,last_active_at:true}}}},
         messages:{where:{deleted_at:null},orderBy:{created_at:'desc'},take:1,include:{user:{select:{id:true,first_name:true,last_name:true}}}},
       },
     });
@@ -264,7 +368,7 @@ export async function get_or_create_dm(req,res,next){
       return tx.channels.findUnique({
         where:{id:ch.id},
         include:{
-          members:{include:{user:{select:{id:true,first_name:true,last_name:true,avatar:true,designation:true}}}},
+          members:{include:{user:{select:{id:true,first_name:true,last_name:true,avatar:true,designation:true,last_active_at:true}}}},
           messages:{where:{deleted_at:null},orderBy:{created_at:'desc'},take:1,include:{user:{select:{id:true,first_name:true,last_name:true}}}},
         },
       });
@@ -287,7 +391,7 @@ export async function create_group(req,res,next){
       return tx.channels.findUnique({
         where:{id:ch.id},
         include:{
-          members:{include:{user:{select:{id:true,first_name:true,last_name:true,avatar:true}}}},
+          members:{include:{user:{select:{id:true,first_name:true,last_name:true,avatar:true,last_active_at:true}}}},
           messages:{where:{deleted_at:null},orderBy:{created_at:'desc'},take:1},
         },
       });
@@ -312,7 +416,7 @@ export async function create_private_channel(req,res,next){
       return tx.channels.findUnique({
         where:{id:ch.id},
         include:{
-          members:{include:{user:{select:{id:true,first_name:true,last_name:true,avatar:true}}}},
+          members:{include:{user:{select:{id:true,first_name:true,last_name:true,avatar:true,last_active_at:true}}}},
           _count:{select:{messages:true,members:true}},
         },
       });
@@ -325,7 +429,7 @@ export async function create_private_channel(req,res,next){
 
 export async function get_messages(req,res,next){
   try{
-    const{ch,denied}=await assert_channel_access(req.params.id,req.user.id,req);
+    const{ch,denied,isMember}=await assert_channel_access(req.params.id,req.user.id,req);
     if(!ch) return fail(res,'Not found',404);
     if(denied) return fail(res,'Access denied',403);
     const{page=1,limit=50}=req.query;
@@ -341,21 +445,28 @@ export async function get_messages(req,res,next){
         _count:{select:{replies:true}},
       },
     });
-    await prisma.channel_members.upsert({
-      where:{channel_id_user_id:{channel_id:req.params.id,user_id:req.user.id}},
-      update:{last_read_at:new Date()},
-      create:{channel_id:req.params.id,user_id:req.user.id,last_read_at:new Date()},
-    }).catch(()=>{});
+    // Only touch/create a membership row when the user is genuinely a member
+    // (or the channel is PUBLIC). A global admin merely viewing a private/
+    // group/DM channel via the admin bypass must NOT be silently enrolled as
+    // a real member — that was creating phantom memberships (see delete/leave
+    // channel visibility audit).
+    if(isMember){
+      await prisma.channel_members.upsert({
+        where:{channel_id_user_id:{channel_id:req.params.id,user_id:req.user.id}},
+        update:{last_read_at:new Date()},
+        create:{channel_id:req.params.id,user_id:req.user.id,last_read_at:new Date()},
+      }).catch(()=>{});
+    }
     return ok(res,{records:msgs.reverse(),total:msgs.length,page:+page});
   }catch(e){next(e);}
 }
 
 export async function send_message(req,res,next){
   try{
-    const{ch,denied}=await assert_channel_access(req.params.id,req.user.id,req);
+    const{ch,denied,isMember}=await assert_channel_access(req.params.id,req.user.id,req);
     if(!ch) return fail(res,'Not found',404);
     if(denied) return fail(res,'Access denied',403);
-    const{content,parent_id,file_url,file_name,file_size,mime_type}=req.body;
+    const{content,parent_id,file_url,file_key,file_name,file_size,mime_type}=req.body;
     if(!content?.trim()&&!file_url) return fail(res,'content or file_url required');
     const msg=await prisma.messages.create({
       data:{
@@ -364,6 +475,7 @@ export async function send_message(req,res,next){
         content:content?.trim()||'',
         parent_id:parent_id||null,
         file_url:file_url||null,
+        file_key:file_key||null,
         file_name:file_name||null,
         file_size:file_size||null,
         mime_type:mime_type||null,
@@ -374,11 +486,15 @@ export async function send_message(req,res,next){
         _count:{select:{replies:true}},
       },
     });
-    await prisma.channel_members.upsert({
-      where:{channel_id_user_id:{channel_id:req.params.id,user_id:req.user.id}},
-      update:{last_read_at:new Date()},
-      create:{channel_id:req.params.id,user_id:req.user.id,last_read_at:new Date()},
-    }).catch(()=>{});
+    // See get_messages — never silently enroll a global admin as a real
+    // member just because they used the admin bypass to act on a channel.
+    if(isMember){
+      await prisma.channel_members.upsert({
+        where:{channel_id_user_id:{channel_id:req.params.id,user_id:req.user.id}},
+        update:{last_read_at:new Date()},
+        create:{channel_id:req.params.id,user_id:req.user.id,last_read_at:new Date()},
+      }).catch(()=>{});
+    }
     await prisma.channels.update({where:{id:req.params.id},data:{updated_at:new Date()}}).catch(()=>{});
     return ok(res,msg,'Message sent',201);
   }catch(e){next(e);}
@@ -456,6 +572,9 @@ export async function add_reaction(req,res,next){
   try{
     const{emoji}=req.body;
     if(!emoji)return fail(res,'emoji required');
+    const{msg,denied}=await assert_message_access(req.params.msgId,req.user.id,req);
+    if(!msg) return fail(res,'Not found',404);
+    if(denied) return fail(res,'Access denied',403);
     const r=await prisma.message_reactions.upsert({
       where:{message_id_user_id_emoji:{message_id:req.params.msgId,user_id:req.user.id,emoji}},
       update:{},
@@ -467,8 +586,62 @@ export async function add_reaction(req,res,next){
 
 export async function remove_reaction(req,res,next){
   try{
+    const{msg,denied}=await assert_message_access(req.params.msgId,req.user.id,req);
+    if(!msg) return fail(res,'Not found',404);
+    if(denied) return fail(res,'Access denied',403);
     await prisma.message_reactions.deleteMany({where:{message_id:req.params.msgId,user_id:req.user.id,emoji:req.body.emoji}});
     return ok(res,null,'Reaction removed');
+  }catch(e){next(e);}
+}
+
+// ─── Search ──────────────────────────────────────────────────────────────────
+
+// Covers message content, channel name, author, attachment-presence, and date
+// range in one endpoint — chat-module audit found no search of any kind
+// existed beyond the user picker (list_users_for_chat). Scoped to the same
+// channels the user could otherwise see (PUBLIC + their memberships, or all
+// for a global admin) so this can't be used to read into a private/DM/group
+// channel you're not in.
+export async function search_chat(req,res,next){
+  try{
+    const userId=req.user.id;
+    const{q,user_id,has_attachment,date_from,date_to}=req.query;
+    if(!q?.trim()&&!user_id&&!has_attachment) return fail(res,'q, user_id, or has_attachment required');
+    const isAdmin=is_global_admin(req);
+    // Channels the *searcher* can see — PUBLIC or a member. Deliberately
+    // named apart from the `user_id` query param (search-by-author filter
+    // below) so the two never get crossed.
+    const visibleChannels={OR:[{type:'PUBLIC'},{members:{some:{user_id:userId}}}]};
+
+    const channels=q?.trim()?await prisma.channels.findMany({
+      where:{...(isAdmin?{}:visibleChannels),name:{contains:q.trim(),mode:'insensitive'}},
+      take:20,
+      select:{id:true,name:true,type:true,is_archived:true,entity_type:true},
+    }):[];
+
+    const messageWhere={
+      deleted_at:null,
+      channel:isAdmin?undefined:visibleChannels,
+      ...(q?.trim()?{content:{contains:q.trim(),mode:'insensitive'}}:{}),
+      ...(user_id?{user_id}:{}),
+      ...(has_attachment==='true'?{file_url:{not:null}}:{}),
+    };
+    if(date_from||date_to){
+      messageWhere.created_at={};
+      if(date_from) messageWhere.created_at.gte=new Date(date_from);
+      if(date_to) messageWhere.created_at.lte=new Date(date_to);
+    }
+    const messages=await prisma.messages.findMany({
+      where:messageWhere,
+      take:30,
+      orderBy:{created_at:'desc'},
+      include:{
+        user:{select:{id:true,first_name:true,last_name:true,avatar:true}},
+        channel:{select:{id:true,name:true,type:true}},
+      },
+    });
+
+    return ok(res,{channels,messages});
   }catch(e){next(e);}
 }
 
@@ -487,7 +660,7 @@ export async function list_users_for_chat(req,res,next){
     }
     const users=await prisma.users.findMany({
       where,
-      select:{id:true,first_name:true,last_name:true,email:true,avatar:true,designation:true},
+      select:{id:true,first_name:true,last_name:true,email:true,avatar:true,designation:true,last_active_at:true},
       take:20,
       orderBy:{first_name:'asc'},
     });

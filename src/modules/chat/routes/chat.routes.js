@@ -5,7 +5,7 @@ import {
   delete_message, edit_message, get_channel, get_messages, get_or_create_dm,
   get_thread, join_channel, list_channels, list_members, list_users_for_chat,
   add_member, remove_member, update_member_role, update_channel, archive_channel,
-  delete_channel, remove_reaction, send_message,
+  delete_channel, get_unread_count, leave_channel, remove_reaction, search_chat, send_message,
 } from '../controllers/chat.controller.js';
 
 const router = Router();
@@ -38,6 +38,52 @@ router.get('/users', list_users_for_chat);
  *         description: Unauthorized
  */
 router.get('/channels', list_channels);
+
+/**
+ * @swagger
+ * /chat/unread-count:
+ *   get:
+ *     summary: Total unread message count across all of the current user's channels
+ *     tags: [Chat]
+ *     responses:
+ *       200:
+ *         description: Unread total
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/unread-count', get_unread_count);
+
+/**
+ * @swagger
+ * /chat/search:
+ *   get:
+ *     summary: Search messages/channels by text, author, attachment presence, and date range
+ *     tags: [Chat]
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema: { type: string }
+ *       - in: query
+ *         name: user_id
+ *         schema: { type: string }
+ *       - in: query
+ *         name: has_attachment
+ *         schema: { type: string, enum: ['true'] }
+ *       - in: query
+ *         name: date_from
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: date_to
+ *         schema: { type: string, format: date }
+ *     responses:
+ *       200:
+ *         description: Matching channels and messages
+ *       400:
+ *         description: At least one filter required
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/search', search_chat);
 
 /**
  * @swagger
@@ -212,6 +258,27 @@ router.post('/channels/:id/archive', archive_channel);
  *         description: Not found
  */
 router.delete('/channels/:id', delete_channel);
+
+/**
+ * @swagger
+ * /chat/channels/{id}/leave:
+ *   post:
+ *     summary: Leave a channel (self only — not available for DM or project-linked channels)
+ *     tags: [Chat]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Left channel (channel is deleted if that was the last member)
+ *       403:
+ *         description: DM or project-linked channel
+ *       404:
+ *         description: Not found or not a member
+ */
+router.post('/channels/:id/leave', leave_channel);
 
 /**
  * @swagger
