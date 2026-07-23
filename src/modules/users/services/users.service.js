@@ -44,7 +44,7 @@ export async function create_new_user(body, actor_user_id) {
   if (existing) throw field_error('Email already in use', 'email', 'DUPLICATE_EMAIL', 409);
 
   const password_hash = await bcrypt.hash(body.password || Math.random().toString(36), 12);
-  const { team_id, ...rest } = body;
+  const { team_id, quick_create, ...rest } = body;
 
   // Always generate employee_id server-side to avoid FE count-based collisions
   if (!rest.employee_id) {
@@ -53,11 +53,14 @@ export async function create_new_user(body, actor_user_id) {
 
   const user = await create_user({ ...rest, password_hash });
 
-  // Every new hire starts at ONBOARDING. This is the one place Lifecycle's
-  // frozen ONBOARDING->ACTIVE sync rule fires, which is also what
-  // establishes employee_profiles.employment_status alongside users.status
-  // — no separate direct set_employment_status call needed here.
-  await set_lifecycle_stage(user.id, 'ONBOARDING', actor_user_id || user.id);
+  // Every new hire starts at ONBOARDING, EXCEPT users added via Quick Create
+  // — that flow is for admins adding someone already actively working (not
+  // a formal new-hire onboarding), so it skips straight to ACTIVE_EMPLOYMENT.
+  // This is the one place Lifecycle's frozen stage->status sync rule fires,
+  // which is also what establishes employee_profiles.employment_status
+  // alongside users.status — no separate direct set_employment_status call
+  // needed here either way.
+  await set_lifecycle_stage(user.id, quick_create ? 'ACTIVE_EMPLOYMENT' : 'ONBOARDING', actor_user_id || user.id);
 
   // Automation Engine seed — Rulebook Section A #1 "Employee Created".
   // Fires once the user and their ONBOARDING lifecycle stage are both
